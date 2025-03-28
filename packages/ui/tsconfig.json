@@ -1,0 +1,13 @@
+{
+  "extends": "@extension/tsconfig/base",
+  "compilerOptions": {
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "noEmit": false,
+    "declaration": true
+  },
+  "include": ["index.ts", "lib"]
+}

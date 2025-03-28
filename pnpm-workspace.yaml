@@ -1,0 +1,6 @@
+packages:
+  - 'chrome-extension'
+  - 'pages/*'
+  # - 'pages/content/*'
+  - 'packages/*'
+  - 'tests/*'

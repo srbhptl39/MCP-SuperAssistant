@@ -1,0 +1,56 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "globalEnv": ["CEB_*", "CLI_CEB_*"],
+  "globalDependencies": [".env"],
+  "daemon": false,
+  "tasks": {
+    "ready": {
+      "dependsOn": ["^ready"],
+      "outputs": ["../../dist/**", "dist/**"],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["ready"],
+      "outputs": ["../../dist/**", "dist/**"],
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["ready", "^build"],
+      "outputs": ["../../dist/**", "dist/**"],
+      "cache": false
+    },
+    "e2e": {
+      "cache": false
+    },
+    "type-check": {
+      "cache": false
+    },
+    "lint": {
+      "cache": false
+    },
+    "lint:fix": {
+      "cache": false
+    },
+    "prettier": {
+      "cache": false
+    },
+    "clean:node_modules": {
+      "dependsOn": ["^clean:node_modules"],
+      "cache": false
+    },
+    "clean:turbo": {
+      "dependsOn": ["^clean:turbo"],
+      "cache": false
+    },
+    "clean:bundle": {
+      "dependsOn": ["^clean:bundle"],
+      "cache": false
+    },
+    "clean": {
+      "dependsOn": ["^clean"],
+      "cache": false
+    }
+  }
+}

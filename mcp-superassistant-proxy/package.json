@@ -1,0 +1,38 @@
+{
+  "name": "@srbhptl39/mcp-superassistant-proxy",
+  "version": "0.0.3",
+  "description": "Run MCP SuperAssistant over SSE or visa versa",
+  "keywords": [
+    "mcp",
+    "stdio",
+    "sse",
+    "gateway",
+    "proxy",
+    "bridge"
+  ],
+  "type": "module",
+  "bin": {
+    "@srbhptl39/mcp-superassistant-proxy": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.1",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.0",
+    "@types/yargs": "^17.0.33",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
