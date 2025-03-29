@@ -1,5 +1,6 @@
 import { logMessage } from './helpers';
-import { ToolCallCallback, ConnectionStatusCallback, ToolCallRequest, Primitive } from '../types/mcp';
+import type { ToolCallCallback, ConnectionStatusCallback, ToolCallRequest } from '../types/mcp';
+import { Primitive } from '../types/mcp';
 
 /**
  * Class that handles communication with the background script for MCP tool calls
@@ -49,10 +50,10 @@ class McpHandler {
 
     // Start periodic connection check
     this.startConnectionCheck();
-    
+
     // Start the heartbeat to keep the connection alive
     this.startHeartbeat();
-    
+
     // Start cleanup of stale requests
     this.startStaleRequestCleanup();
 
@@ -107,7 +108,9 @@ class McpHandler {
           try {
             request.callback(null, 'Request timed out');
           } catch (error) {
-            logMessage(`[MCP Handler] Error in timeout callback for ${requestId}: ${error instanceof Error ? error.message : String(error)}`);
+            logMessage(
+              `[MCP Handler] Error in timeout callback for ${requestId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
 
           // Delete the request
@@ -142,13 +145,10 @@ class McpHandler {
       }
 
       // Calculate time since last heartbeat response
-      const timeSinceLastHeartbeat = this.lastHeartbeatResponse > 0 
-        ? Date.now() - this.lastHeartbeatResponse 
-        : 0;
+      const timeSinceLastHeartbeat = this.lastHeartbeatResponse > 0 ? Date.now() - this.lastHeartbeatResponse : 0;
 
       // If we haven't received a heartbeat response in too long, reconnect
-      if (this.lastHeartbeatResponse > 0 && 
-          timeSinceLastHeartbeat > this.heartbeatTimeoutThreshold) {
+      if (this.lastHeartbeatResponse > 0 && timeSinceLastHeartbeat > this.heartbeatTimeoutThreshold) {
         logMessage(`[MCP Handler] Heartbeat timeout: No response in ${timeSinceLastHeartbeat}ms, reconnecting`);
         this.disconnect(false);
         this.connect();
@@ -295,11 +295,13 @@ class McpHandler {
         this.lastConnectionCheck = Date.now();
       } catch (error) {
         // If we get an error sending a message, the port is dead
-        logMessage(`[MCP Handler] Error sending connection check: ${error instanceof Error ? error.message : String(error)}`);
+        logMessage(
+          `[MCP Handler] Error sending connection check: ${error instanceof Error ? error.message : String(error)}`,
+        );
         this.port = null;
         this.isConnected = false;
         this.notifyConnectionStatus();
-        
+
         // Schedule a reconnect
         if (!this.isReconnecting) {
           this.scheduleReconnect();
@@ -325,7 +327,7 @@ class McpHandler {
       case 'HEARTBEAT_RESPONSE':
         // Just a heartbeat response, no need to do anything other than update lastHeartbeatResponse
         break;
-        
+
       case 'CONNECTION_STATUS':
         this.isConnected = message.isConnected;
         this.notifyConnectionStatus();

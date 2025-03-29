@@ -31,8 +31,6 @@ export {
   THINK_TYPE,
 } from '@src/components/common/markdownHandler';
 
-
-
 // Export all functions from the aistudio module
 export * from './chatInputHandler';
 export * from './markdownHandler';

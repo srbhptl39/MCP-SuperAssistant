@@ -108,46 +108,46 @@ export const insertTextToChatInput = (text: string): boolean => {
     if (chatInput.tagName === 'TEXTAREA') {
       const textarea = chatInput as HTMLTextAreaElement;
       const currentText = textarea.value;
-      
+
       // For textareas, we can just use the \n character directly
       const formattedText = currentText ? `${currentText}\n\n${text}` : text;
       textarea.value = formattedText;
-      
+
       // Position cursor at the end
       textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-      
+
       // Trigger input event
       const inputEvent = new InputEvent('input', { bubbles: true });
       textarea.dispatchEvent(inputEvent);
-      
+
       // Focus the textarea
       textarea.focus();
-      
+
       logMessage('Appended text to textarea with preserved newlines');
       return true;
-    } 
+    }
     // Check if it's a contenteditable div
     else if (chatInput.getAttribute('contenteditable') === 'true') {
       // More reliable approach for contenteditable elements using Selection and Range
       // This preserves the current content and adds the new text at the end
       // with proper newline handling
-      
+
       // First, focus the element and move cursor to the end
       chatInput.focus();
-      
+
       // Get current content
       const currentText = chatInput.textContent || '';
-      
+
       // Create a text node with the new content
-      let textToInsert = text;
-      
+      const textToInsert = text;
+
       // If there's existing content, add newlines before the new text
       if (currentText && currentText.trim() !== '') {
         // Ensure the element has some content at the end to place cursor after
         if (!chatInput.lastChild || chatInput.lastChild.nodeType !== Node.TEXT_NODE) {
           chatInput.appendChild(document.createTextNode(''));
         }
-        
+
         // Move cursor to the end
         const selection = window.getSelection();
         const range = document.createRange();
@@ -155,53 +155,53 @@ export const insertTextToChatInput = (text: string): boolean => {
         range.collapse(false); // collapse to end
         selection?.removeAllRanges();
         selection?.addRange(range);
-        
+
         // Insert two newlines before the text
         document.execCommand('insertText', false, '\n\n');
       }
-      
+
       // Use execCommand to insert text, which properly handles newlines
       document.execCommand('insertText', false, textToInsert);
-      
+
       // Trigger input event for contenteditable
       const inputEvent = new InputEvent('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
-      
+
       logMessage('Appended text to contenteditable with preserved newlines using execCommand');
       return true;
     }
     // Fallback for other element types
     else {
       logMessage('Using fallback method for unknown element type');
-      
+
       // Try using value property first (for input-like elements)
       if ('value' in chatInput) {
         const inputElement = chatInput as HTMLInputElement;
         const currentValue = inputElement.value;
         inputElement.value = currentValue ? `${currentValue}\n\n${text}` : text;
-        
+
         // Trigger input event
         const inputEvent = new InputEvent('input', { bubbles: true });
         inputElement.dispatchEvent(inputEvent);
-        
+
         // Focus the element
         inputElement.focus();
-        
+
         logMessage('Appended text to input element via value property');
         return true;
       }
-      
+
       // Last resort: use textContent
       const currentText = chatInput.textContent || '';
       chatInput.textContent = currentText ? `${currentText}\n\n${text}` : text;
-      
+
       // Trigger input event
       const inputEvent = new InputEvent('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
-      
+
       // Focus the element
       chatInput.focus();
-      
+
       logMessage('Appended text using textContent (fallback method)');
       return true;
     }
@@ -291,20 +291,20 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
  * @returns True if submission was successful, false otherwise
  */
 export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     try {
       // Try to use the cached input element first, then fall back to finding it again
       const chatInput = lastFoundInputElement || findChatInputElement();
-      
+
       if (!chatInput) {
         logMessage('Could not find chat input to submit');
         resolve(false);
         return;
       }
-      
+
       // Define a function to find the submit button
       const findSubmitButton = (): HTMLButtonElement | null => {
-        const submitButton = 
+        const submitButton =
           document.querySelector('button[aria-label="Send message"]') ||
           document.querySelector('button[data-testid="send-button"]') ||
           document.querySelector('button[aria-label="Send prompt"]') ||
@@ -314,16 +314,16 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           // Look for any button near the input area that looks like a submit button
           chatInput.closest('form')?.querySelector('button[type="submit"]') ||
           chatInput.closest('div')?.querySelector('button:last-child');
-        
+
         return submitButton as HTMLButtonElement | null;
       };
-      
+
       // Try to find and check the submit button
       const submitButton = findSubmitButton();
-      
+
       if (submitButton) {
         logMessage(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
-        
+
         // Function to check if button is enabled and click it
         const tryClickingButton = () => {
           const button = findSubmitButton();
@@ -332,14 +332,14 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
             resolve(false);
             return;
           }
-          
+
           // Check if the button is disabled
-          const isDisabled = 
-            button.disabled || 
+          const isDisabled =
+            button.disabled ||
             button.getAttribute('disabled') !== null ||
             button.getAttribute('aria-disabled') === 'true' ||
             button.classList.contains('disabled');
-          
+
           if (!isDisabled) {
             logMessage('Submit button is enabled, clicking it');
             button.click();
@@ -348,21 +348,21 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
             logMessage('Submit button is disabled, waiting...');
           }
         };
-        
+
         // Set up a timer to periodically check if the button becomes enabled
         let elapsedTime = 0;
         const checkInterval = 200; // Check every 200ms
-        
+
         const intervalId = setInterval(() => {
           elapsedTime += checkInterval;
-          
+
           tryClickingButton();
-          
+
           // If we've waited too long, try alternative methods
           if (elapsedTime >= maxWaitTime) {
             clearInterval(intervalId);
             logMessage(`Button remained disabled for ${maxWaitTime}ms, trying alternative methods`);
-            
+
             // Method 2: Look for the form and submit it directly
             const form = chatInput.closest('form');
             if (form) {
@@ -372,13 +372,13 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               resolve(true);
               return;
             }
-            
+
             // Method 3: Simulate Enter key press
             logMessage('Simulating Enter key press as fallback');
-            
+
             // Focus the textarea first
             chatInput.focus();
-            
+
             // Create and dispatch keydown event (Enter key)
             const keydownEvent = new KeyboardEvent('keydown', {
               key: 'Enter',
@@ -387,9 +387,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               which: 13,
               bubbles: true,
               cancelable: true,
-              composed: true  // This enables the event to cross the shadow DOM boundary
+              composed: true, // This enables the event to cross the shadow DOM boundary
             });
-            
+
             // Create and dispatch keypress event
             const keypressEvent = new KeyboardEvent('keypress', {
               key: 'Enter',
@@ -398,9 +398,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               which: 13,
               bubbles: true,
               cancelable: true,
-              composed: true
+              composed: true,
             });
-            
+
             // Create and dispatch keyup event
             const keyupEvent = new KeyboardEvent('keyup', {
               key: 'Enter',
@@ -409,22 +409,24 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               which: 13,
               bubbles: true,
               cancelable: true,
-              composed: true
+              composed: true,
             });
-            
+
             // Dispatch all events in sequence
             const keydownResult = chatInput.dispatchEvent(keydownEvent);
             const keypressResult = chatInput.dispatchEvent(keypressEvent);
             const keyupResult = chatInput.dispatchEvent(keyupEvent);
-            
-            logMessage(`Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`);
+
+            logMessage(
+              `Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`,
+            );
             resolve(true);
           }
         }, checkInterval);
-        
+
         // Initial check - maybe it's already enabled
         tryClickingButton();
-        
+
         // If the button is already enabled and clicked, clear the interval
         if (submitButton && !submitButton.disabled) {
           clearInterval(intervalId);
@@ -432,7 +434,7 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
       } else {
         // If no button found, proceed with alternative methods immediately
         logMessage('No submit button found, trying alternative methods');
-        
+
         // Method 2: Look for the form and submit it directly
         const form = chatInput.closest('form');
         if (form) {
@@ -442,13 +444,13 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           resolve(true);
           return;
         }
-        
+
         // Method 3: Simulate Enter key press
         logMessage('Simulating Enter key press as fallback');
-        
+
         // Focus the textarea first
         chatInput.focus();
-        
+
         // Create and dispatch keydown event (Enter key)
         const keydownEvent = new KeyboardEvent('keydown', {
           key: 'Enter',
@@ -457,9 +459,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           which: 13,
           bubbles: true,
           cancelable: true,
-          composed: true
+          composed: true,
         });
-        
+
         // Create and dispatch keypress event
         const keypressEvent = new KeyboardEvent('keypress', {
           key: 'Enter',
@@ -468,9 +470,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           which: 13,
           bubbles: true,
           cancelable: true,
-          composed: true
+          composed: true,
         });
-        
+
         // Create and dispatch keyup event
         const keyupEvent = new KeyboardEvent('keyup', {
           key: 'Enter',
@@ -479,15 +481,17 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           which: 13,
           bubbles: true,
           cancelable: true,
-          composed: true
+          composed: true,
         });
-        
+
         // Dispatch all events in sequence
         const keydownResult = chatInput.dispatchEvent(keydownEvent);
         const keypressResult = chatInput.dispatchEvent(keypressEvent);
         const keyupResult = chatInput.dispatchEvent(keyupEvent);
-        
-        logMessage(`Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`);
+
+        logMessage(
+          `Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`,
+        );
         resolve(true);
       }
     } catch (error: unknown) {

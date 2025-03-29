@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type React from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSiteAdapter } from '@src/adapters/adapterRegistry';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
@@ -10,7 +11,8 @@ import { logMessage, debugShadowDomStyles } from '@src/utils/helpers';
 import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } from './ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
-import { getSidebarPreferences, saveSidebarPreferences, SidebarPreferences } from '@src/utils/storage';
+import type { SidebarPreferences } from '@src/utils/storage';
+import { getSidebarPreferences, saveSidebarPreferences } from '@src/utils/storage';
 
 // Define interface for detected tools
 interface DetectedTool {
@@ -81,7 +83,7 @@ const Sidebar: React.FC = () => {
       try {
         const preferences = await getSidebarPreferences();
         logMessage(`[Sidebar] Loaded preferences: ${JSON.stringify(preferences)}`);
-        
+
         // Apply stored settings
         setIsPushMode(preferences.isPushMode);
         setSidebarWidth(preferences.sidebarWidth);
@@ -94,7 +96,7 @@ const Sidebar: React.FC = () => {
         isInitialLoadRef.current = false;
       }
     };
-    
+
     loadPreferences();
   }, []);
 
@@ -102,7 +104,7 @@ const Sidebar: React.FC = () => {
   useEffect(() => {
     // Skip saving on initial load when we're just restoring from storage
     if (isInitialLoadRef.current) return;
-    
+
     // Use debounce for width changes to avoid excessive writes
     const saveTimeout = setTimeout(() => {
       saveSidebarPreferences({
@@ -115,28 +117,26 @@ const Sidebar: React.FC = () => {
         logMessage(`[Sidebar] Error saving preferences: ${error instanceof Error ? error.message : String(error)}`);
       });
     }, 300);
-    
+
     return () => clearTimeout(saveTimeout);
   }, [isPushMode, sidebarWidth, isCollapsed, autoSubmit, theme]);
 
   useEffect(() => {
     const toolDetector = adapter.getToolDetector();
-    
+
     // Use functional state update to properly handle existing tools
     toolDetector.onDetect((newTools: DetectedTool[]) => {
       setDetectedTools(prevTools => {
         // Create a map of existing tools by ID for quick lookup
-        const existingToolsMap = new Map(
-          prevTools.map(tool => [tool.id, tool])
-        );
-        
+        const existingToolsMap = new Map(prevTools.map(tool => [tool.id, tool]));
+
         // Add new tools that don't already exist
         newTools.forEach(tool => {
           if (!existingToolsMap.has(tool.id)) {
             existingToolsMap.set(tool.id, tool);
           }
         });
-        
+
         // Convert map back to array
         return Array.from(existingToolsMap.values());
       });
@@ -208,7 +208,9 @@ const Sidebar: React.FC = () => {
           document.documentElement.style.setProperty('--sidebar-width', `${width}px`);
         }
       } catch (error) {
-        logMessage(`[Sidebar] Error updating push mode styles: ${error instanceof Error ? error.message : String(error)}`);
+        logMessage(
+          `[Sidebar] Error updating push mode styles: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -232,7 +234,7 @@ const Sidebar: React.FC = () => {
 
   const handlePushModeToggle = (checked: boolean) => {
     setIsPushMode(checked);
-    
+
     // The useEffect hook will take care of calling the sidebar manager's setPushContentMode method
     logMessage(`[Sidebar] Push mode ${checked ? 'enabled' : 'disabled'}`);
   };
@@ -277,16 +279,20 @@ const Sidebar: React.FC = () => {
   const formattedTools = availableTools.map(tool => ({
     name: tool.name,
     schema: tool.schema,
-    description: tool.description || '' // Ensure description is always a string
+    description: tool.description || '', // Ensure description is always a string
   }));
 
   // Helper to get the current theme icon name
   const getCurrentThemeIcon = (): 'sun' | 'moon' | 'laptop' => {
     switch (theme) {
-      case 'light': return 'sun';
-      case 'dark': return 'moon';
-      case 'system': return 'laptop';
-      default: return 'laptop'; // Default to system
+      case 'light':
+        return 'sun';
+      case 'dark':
+        return 'moon';
+      case 'system':
+        return 'laptop';
+      default:
+        return 'laptop'; // Default to system
     }
   };
 
@@ -328,9 +334,12 @@ const Sidebar: React.FC = () => {
                 size="icon"
                 onClick={handleThemeToggle}
                 aria-label={`Toggle theme (current: ${theme})`}
-                className="hover:bg-slate-100 dark:hover:bg-slate-700"
-              >
-                <Icon name={getCurrentThemeIcon()} size="sm" className="transition-all text-slate-700 dark:text-slate-300" />
+                className="hover:bg-slate-100 dark:hover:bg-slate-700">
+                <Icon
+                  name={getCurrentThemeIcon()}
+                  size="sm"
+                  className="transition-all text-slate-700 dark:text-slate-300"
+                />
                 <span className="sr-only">Toggle theme</span>
               </Button>
 
@@ -339,8 +348,7 @@ const Sidebar: React.FC = () => {
                 size="icon"
                 onClick={toggleCollapse}
                 aria-label="Collapse sidebar"
-                className="hover:bg-slate-100 dark:hover:bg-slate-700"
-              >
+                className="hover:bg-slate-100 dark:hover:bg-slate-700">
                 <Icon name="chevron-right" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
               </Button>
             </div>
@@ -351,8 +359,7 @@ const Sidebar: React.FC = () => {
             size="icon"
             onClick={toggleCollapse}
             aria-label="Expand sidebar"
-            className="mx-auto hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
+            className="mx-auto hover:bg-slate-100 dark:hover:bg-slate-700">
             <Icon name="chevron-left" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
           </Button>
         )}
@@ -369,23 +376,37 @@ const Sidebar: React.FC = () => {
             <Card className="sidebar-card border-slate-200 dark:border-slate-700 dark:bg-slate-800">
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">Push Content Mode</Typography>
+                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">
+                    Push Content Mode
+                  </Typography>
                   <ToggleWithoutLabel label="Push Content Mode" checked={isPushMode} onChange={handlePushModeToggle} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">Auto Submit Tool Results</Typography>
-                  <ToggleWithoutLabel label="Auto Submit Tool Results" checked={autoSubmit} onChange={handleAutoSubmitToggle} />
+                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">
+                    Auto Submit Tool Results
+                  </Typography>
+                  <ToggleWithoutLabel
+                    label="Auto Submit Tool Results"
+                    checked={autoSubmit}
+                    onChange={handleAutoSubmitToggle}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">Auto Execute Detected Tools</Typography>
-                  <ToggleWithoutLabel label="Auto Execute Detected Tools" checked={autoExecute} onChange={handleAutoExecuteToggle} />
+                  <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300">
+                    Auto Execute Detected Tools
+                  </Typography>
+                  <ToggleWithoutLabel
+                    label="Auto Execute Detected Tools"
+                    checked={autoExecute}
+                    onChange={handleAutoExecuteToggle}
+                  />
                 </div>
-                
+
                 {/* DEBUG BUTTON - ONLY FOR DEVELOPMENT - REMOVE IN PRODUCTION */}
                 {process.env.NODE_ENV === 'development' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="w-full mt-2 border-slate-200 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
                     onClick={() => {
                       const shadowHost = (window as any).activeSidebarManager?.getShadowHost();
@@ -395,8 +416,7 @@ const Sidebar: React.FC = () => {
                       } else {
                         logMessage('Cannot debug: Shadow DOM not found');
                       }
-                    }}
-                  >
+                    }}>
                     Debug Styles
                   </Button>
                 )}
@@ -408,35 +428,32 @@ const Sidebar: React.FC = () => {
               <div className="flex">
                 <button
                   className={cn(
-                    "py-2 px-4 font-medium text-sm",
+                    'py-2 px-4 font-medium text-sm',
                     activeTab === 'detectedTools'
-                      ? "border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                      ? 'border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300',
                   )}
-                  onClick={() => setActiveTab('detectedTools')}
-                >
+                  onClick={() => setActiveTab('detectedTools')}>
                   Detected Tools
                 </button>
                 <button
                   className={cn(
-                    "py-2 px-4 font-medium text-sm",
+                    'py-2 px-4 font-medium text-sm',
                     activeTab === 'availableTools'
-                      ? "border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                      ? 'border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300',
                   )}
-                  onClick={() => setActiveTab('availableTools')}
-                >
+                  onClick={() => setActiveTab('availableTools')}>
                   Available Tools
                 </button>
                 <button
                   className={cn(
-                    "py-2 px-4 font-medium text-sm",
+                    'py-2 px-4 font-medium text-sm',
                     activeTab === 'instructions'
-                      ? "border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                      ? 'border-b-2 border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300',
                   )}
-                  onClick={() => setActiveTab('instructions')}
-                >
+                  onClick={() => setActiveTab('instructions')}>
                   Instructions
                 </button>
               </div>
@@ -458,15 +475,15 @@ const Sidebar: React.FC = () => {
                   </Card>
                 </div>
               )}
-              
+
               {activeTab === 'detectedTools' && (
                 <div className="flex flex-col gap-4">
                   <Card className="border-slate-200 dark:border-slate-700 dark:bg-slate-800">
                     <CardContent className="p-0">
-                      <DetectedTools 
-                        tools={detectedTools} 
-                        onExecute={sendMessage} 
-                        onInsert={adapter.insertTextIntoInput} 
+                      <DetectedTools
+                        tools={detectedTools}
+                        onExecute={sendMessage}
+                        onInsert={adapter.insertTextIntoInput}
                         onAttachAsFile={adapter.attachFile}
                         autoSubmit={autoSubmit}
                         autoExecute={autoExecute}
@@ -477,7 +494,7 @@ const Sidebar: React.FC = () => {
                   </Card>
                 </div>
               )}
-              
+
               {activeTab === 'instructions' && (
                 <div className="p-0">
                   <Card className="border-slate-200 dark:border-slate-700 dark:bg-slate-800">

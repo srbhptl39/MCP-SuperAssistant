@@ -6,6 +6,7 @@
 
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
+import type { GrokPatternUnifiedObserver } from '../components/websites/grok';
 import {
   clearProcessedToolOutputs,
   getProcessedToolOutputs,
@@ -14,30 +15,30 @@ import {
   insertToolResultToChatInput,
   attachFileToChatInput,
   submitChatInput,
-  GrokPatternUnifiedObserver,
   createGrokPatternObserver,
 } from '../components/websites/grok';
 import { clearProcessedMarkdownContents } from '../components/common/markdownHandler';
-import { SidebarManager, ToolOutputHandler } from '../components/sidebar';
-import { DetectedTool } from '../utils/toolDetector';
+import type { ToolOutputHandler } from '../components/sidebar';
+import { SidebarManager } from '../components/sidebar';
+import type { DetectedTool } from '../utils/toolDetector';
 
 // Declare custom event types to fix type issues
 declare global {
   interface WindowEventMap {
-    'mcpToolsUpdated': CustomEvent;
-    'mcpToolDetected': CustomEvent<{tool: DetectedTool; domPosition?: number}>;
+    mcpToolsUpdated: CustomEvent;
+    mcpToolDetected: CustomEvent<{ tool: DetectedTool; domPosition?: number }>;
   }
 }
 
 export class GrokAdapter extends BaseAdapter {
   name = 'Grok';
-  hostname = ['x.com', 'grok.com'];  // Support both x.com and grok.com
+  hostname = ['x.com', 'grok.com']; // Support both x.com and grok.com
   // URL patterns to only activate on specific paths
   urlPatterns = [
-    /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/i\/grok/,  // x.com/i/grok path
-    /https?:\/\/(?:www\.)?grok\.com/  // Any grok.com URL
+    /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/i\/grok/, // x.com/i/grok path
+    /https?:\/\/(?:www\.)?grok\.com/, // Any grok.com URL
   ];
-  
+
   private patternObserver: GrokPatternUnifiedObserver | null = null;
   // Properties to track navigation
   private lastUrl: string = '';
@@ -63,18 +64,19 @@ export class GrokAdapter extends BaseAdapter {
   getToolCommandElements(root: Element = document.body): Element[] {
     // logMessage(`getToolCommandElements: Getting tool command elements for Grok ${root}`);
     const toolCommandElements: Element[] = [];
-    
+
     // Find assistant message containers - try multiple selectors to be robust to DOM changes
-    const messageContainers = Array.from(root.querySelectorAll('div.message, div.assistant-message, div.ai-message, div[dir="auto"].message-bubble'));
+    const messageContainers = Array.from(
+      root.querySelectorAll('div.message, div.assistant-message, div.ai-message, div[dir="auto"].message-bubble'),
+    );
     // const preContainers = Array.from(root.querySelectorAll('pre'));
     // logMessage(`getToolCommandElements: Found ${preContainers.length} pre containers`);
     // logMessage(`getToolCommandElements: Found ${messageContainers.length} message containers`);
-    
+
     toolCommandElements.push(...messageContainers);
 
-    
     // Combine containers from both selectors
-    const allContainers = [...new Set([...messageContainers, ])];
+    const allContainers = [...new Set([...messageContainers])];
     // const allContainers = [...new Set([...messageContainers, ...preContainers])];
 
     // Process each container
@@ -84,7 +86,6 @@ export class GrokAdapter extends BaseAdapter {
       toolCommandElements.push(...preElements);
     }
 
-    
     // Also check for any pre elements in the document that might contain tool commands
     // This helps catch cases where Grok changes its DOM structure
     if (root === document.body) {
@@ -95,7 +96,7 @@ export class GrokAdapter extends BaseAdapter {
           toolCommandElements.push(preElement);
         }
       }
-      
+
       // Look for markdown or response blocks that might contain tool commands
       const markdownBlocks = Array.from(root.querySelectorAll('.markdown, .prose, .response-content'));
       for (const block of markdownBlocks) {
@@ -117,14 +118,14 @@ export class GrokAdapter extends BaseAdapter {
 
   protected initializeObserver(forceReset: boolean = false): void {
     // Initialize the pattern-based observer
-    
+
     // Clean up existing observer if force reset is requested
     if (forceReset && this.patternObserver) {
       this.patternObserver.cleanup();
       this.patternObserver = null;
       logMessage('Forced reset of pattern-based observer for Grok');
     }
-    
+
     // Create the pattern-based observer if it doesn't exist
     if (!this.patternObserver) {
       const grokToolOutputHandler: ToolOutputHandler = {
@@ -132,23 +133,23 @@ export class GrokAdapter extends BaseAdapter {
         getMcpToolContents,
         insertToolResultToChatInput,
       };
-      
+
       this.patternObserver = createGrokPatternObserver(this, grokToolOutputHandler);
       logMessage('Created new pattern-based observer for Grok');
     }
-    
+
     // Start observing with the pattern-based observer
     this.patternObserver.observeAllElements();
     logMessage('Pattern-based observer started for Grok');
- 
+
     // Set up event listener for MCP tools detection
     window.removeEventListener('mcpToolsUpdated', this.handleMcpToolsUpdated.bind(this));
     window.addEventListener('mcpToolsUpdated', this.handleMcpToolsUpdated.bind(this));
-    
+
     // Set up event listener for mcpToolDetected event
     window.removeEventListener('mcpToolDetected', this.handleMcpToolDetected.bind(this));
     window.addEventListener('mcpToolDetected', this.handleMcpToolDetected.bind(this));
-    
+
     // Set up navigation detection
     this.setupNavigationCheck();
   }
@@ -160,10 +161,10 @@ export class GrokAdapter extends BaseAdapter {
   private setupNavigationCheck(): void {
     // Store current URL
     this.lastUrl = window.location.href;
-    
+
     // Listen for popstate which happens on back/forward navigation
     window.addEventListener('popstate', this.handlePopState);
-    
+
     // Set up a periodic URL check to detect SPA navigation
     this.urlCheckInterval = window.setInterval(() => {
       const currentUrl = window.location.href;
@@ -171,8 +172,8 @@ export class GrokAdapter extends BaseAdapter {
         this.lastUrl = currentUrl;
         logMessage('Detected URL change in Grok, re-initializing observer');
         this.initializeObserver(true);
-        
-        // After a short delay, run a full scan to catch any elements 
+
+        // After a short delay, run a full scan to catch any elements
         // that might have been added during the page transition
         setTimeout(() => {
           this.forceFullScan();
@@ -180,7 +181,7 @@ export class GrokAdapter extends BaseAdapter {
       }
     }, 1000); // Check every second
   }
-  
+
   // Handler for popstate events
   private handlePopState = (): void => {
     const currentUrl = window.location.href;
@@ -207,7 +208,7 @@ export class GrokAdapter extends BaseAdapter {
 
     // Update the tool detector with the detected tools
     this.toolDetector.updateTools(detectedTools);
-    
+
     // Update the sidebar with the latest tool outputs
     if (this.sidebarManager) {
       this.sidebarManager.refreshContent();
@@ -219,14 +220,14 @@ export class GrokAdapter extends BaseAdapter {
    * This is triggered when a tool is detected by the pattern observer
    * @param event The custom event containing the detected tool
    */
-  private handleMcpToolDetected = (event: CustomEvent<{tool: DetectedTool; domPosition?: number}>): void => {
+  private handleMcpToolDetected = (event: CustomEvent<{ tool: DetectedTool; domPosition?: number }>): void => {
     const { tool, domPosition } = event.detail;
-    
+
     logMessage(`Handling MCP tool detected event for tool: ${tool.name}`);
-    
+
     // Update the tool detector with the detected tool
     this.toolDetector.updateTools([tool]);
-    
+
     // Update the sidebar with the latest tool outputs
     if (this.sidebarManager) {
       this.sidebarManager.refreshContent();
@@ -239,11 +240,11 @@ export class GrokAdapter extends BaseAdapter {
    */
   private forceFullScan(): void {
     logMessage('Forcing full scan of Grok page');
-    
+
     if (this.patternObserver) {
       this.patternObserver.observeAllElements();
     }
-    
+
     // Update the sidebar with the latest tool outputs
     if (this.sidebarManager) {
       this.sidebarManager.refreshContent();
@@ -255,24 +256,24 @@ export class GrokAdapter extends BaseAdapter {
    */
   cleanup(): void {
     logMessage('Cleaning up Grok adapter');
-    
+
     // Clear interval for URL checking
     if (this.urlCheckInterval) {
       window.clearInterval(this.urlCheckInterval);
       this.urlCheckInterval = null;
     }
-    
+
     // Remove event listeners
     window.removeEventListener('popstate', this.handlePopState);
     window.removeEventListener('mcpToolsUpdated', this.handleMcpToolsUpdated.bind(this));
     window.removeEventListener('mcpToolDetected', this.handleMcpToolDetected);
-    
+
     // Clean up the pattern observer
     if (this.patternObserver) {
       this.patternObserver.cleanup();
       this.patternObserver = null;
     }
-    
+
     // Call the parent cleanup method
     super.cleanup();
   }

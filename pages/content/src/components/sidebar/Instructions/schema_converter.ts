@@ -105,367 +105,364 @@
 //     * Notation: o {p {name:s} ap f}
 //     * Meaning: An object with only a name property, rejecting extras, e.g., { "name": "John" } is valid, but { "name": "John", "age": 30 } is not.
 
-
-
-
 const typeMapping: Record<string, string> = {
-    string: 's',
-    integer: 'i',
-    number: 'n',
-    boolean: 'b',
-    object: 'o',
-    array: 'a'
-  };
-  
-  const reverseTypeMapping: Record<string, string> = {
-    s: 'string',
-    i: 'integer',
-    n: 'number',
-    b: 'boolean',
-    o: 'object',
-    a: 'array'
-  };
+  string: 's',
+  integer: 'i',
+  number: 'n',
+  boolean: 'b',
+  object: 'o',
+  array: 'a',
+};
 
+const reverseTypeMapping: Record<string, string> = {
+  s: 'string',
+  i: 'integer',
+  n: 'number',
+  b: 'boolean',
+  o: 'object',
+  a: 'array',
+};
 
-  interface JsonSchema {
-    type?: string;
-    properties?: Record<string, JsonSchema>;
-    required?: string[];
-    additionalProperties?: boolean;
-    items?: JsonSchema;
-    enum?: any[];
-    const?: any;
-    anyOf?: JsonSchema[];
-    minLength?: number;
-    maxLength?: number;
-    pattern?: string;
-    minimum?: number;
-    maximum?: number;
-    exclusiveMinimum?: number;
-    exclusiveMaximum?: number;
-    default?: any;
-    [key: string]: any;
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+  items?: JsonSchema;
+  enum?: any[];
+  const?: any;
+  anyOf?: JsonSchema[];
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  default?: any;
+  [key: string]: any;
+}
+
+export function jsonSchemaToCsn(schema: JsonSchema): string {
+  if (!schema || typeof schema !== 'object') {
+    throw new Error('Invalid JSON Schema: must be an object');
   }
-  
-  export function jsonSchemaToCsn(schema: JsonSchema): string {
-    if (!schema || typeof schema !== 'object') {
-      throw new Error('Invalid JSON Schema: must be an object');
-    }
-  
-    // Enum
-    if (schema.enum) {
-      return `e[${schema.enum.map(val => JSON.stringify(val)).join(', ')}]`;
-    }
-  
-    // Literal (const)
-    if ('const' in schema) {
-      return `lit[${JSON.stringify(schema.const)}]`;
-    }
-  
-    // Union (anyOf)
-    if (schema.anyOf) {
-      return `u[${schema.anyOf.map(subSchema => jsonSchemaToCsn(subSchema)).join(', ')}]`;
-    }
-  
-    // Array
-    if (schema.type === 'array') {
-      const itemType = schema.items ? jsonSchemaToCsn(schema.items) : 'any';
-      return `a[${itemType}]`;
-    }
-  
-    // Object
-    if (schema.type === 'object') {
-      const properties = schema.properties || {};
-      const required = new Set(schema.required || []);
-      const propStrings = Object.entries(properties).map(([name, propSchema]) => {
+
+  // Enum
+  if (schema.enum) {
+    return `e[${schema.enum.map(val => JSON.stringify(val)).join(', ')}]`;
+  }
+
+  // Literal (const)
+  if ('const' in schema) {
+    return `lit[${JSON.stringify(schema.const)}]`;
+  }
+
+  // Union (anyOf)
+  if (schema.anyOf) {
+    return `u[${schema.anyOf.map(subSchema => jsonSchemaToCsn(subSchema)).join(', ')}]`;
+  }
+
+  // Array
+  if (schema.type === 'array') {
+    const itemType = schema.items ? jsonSchemaToCsn(schema.items) : 'any';
+    return `a[${itemType}]`;
+  }
+
+  // Object
+  if (schema.type === 'object') {
+    const properties = schema.properties || {};
+    const required = new Set(schema.required || []);
+    const propStrings = Object.entries(properties)
+      .map(([name, propSchema]) => {
         const propCsn = jsonSchemaToCsn(propSchema);
         const requiredFlag = required.has(name) ? ' r' : '';
         const defaultFlag = 'default' in propSchema ? ` d=${JSON.stringify(propSchema.default)}` : '';
         return `${name}:${propCsn}${requiredFlag}${defaultFlag}`;
-      }).join('; ');
-      const additionalProps = schema.additionalProperties === false ? ' ap f' : '';
-      return `o {p {${propStrings}}${additionalProps}}`;
-    }
-  
-    // Basic types with constraints
-    const baseType = typeMapping[schema.type!] || schema.type!;
-    const constraints = [];
-    if (schema.type === 'string') {
-      if (schema.minLength !== undefined) constraints.push(`minLength=${schema.minLength}`);
-      if (schema.maxLength !== undefined) constraints.push(`maxLength=${schema.maxLength}`);
-      if (schema.pattern) constraints.push(`pattern="${schema.pattern}"`);
-    } else if (schema.type === 'number' || schema.type === 'integer') {
-      if (schema.minimum !== undefined) constraints.push(`min=${schema.minimum}`);
-      if (schema.maximum !== undefined) constraints.push(`max=${schema.maximum}`);
-      if (schema.exclusiveMinimum !== undefined) constraints.push(`exclusiveMin=${schema.exclusiveMinimum}`);
-      if (schema.exclusiveMaximum !== undefined) constraints.push(`exclusiveMax=${schema.exclusiveMaximum}`);
-    }
-    const constraintStr = constraints.length > 0 ? `(${constraints.join(', ')})` : '';
-    const defaultFlag = 'default' in schema ? ` d=${JSON.stringify(schema.default)}` : '';
-    return `${baseType}${constraintStr}${defaultFlag}`;
+      })
+      .join('; ');
+    const additionalProps = schema.additionalProperties === false ? ' ap f' : '';
+    return `o {p {${propStrings}}${additionalProps}}`;
   }
 
-
-  export function csnToJsonSchema(csn: string): JsonSchema {
-    if (typeof csn !== 'string' || !csn.trim()) {
-      throw new Error('Invalid CSN: must be a non-empty string');
-    }
-    return parseCsnType(csn);
+  // Basic types with constraints
+  const baseType = typeMapping[schema.type!] || schema.type!;
+  const constraints = [];
+  if (schema.type === 'string') {
+    if (schema.minLength !== undefined) constraints.push(`minLength=${schema.minLength}`);
+    if (schema.maxLength !== undefined) constraints.push(`maxLength=${schema.maxLength}`);
+    if (schema.pattern) constraints.push(`pattern="${schema.pattern}"`);
+  } else if (schema.type === 'number' || schema.type === 'integer') {
+    if (schema.minimum !== undefined) constraints.push(`min=${schema.minimum}`);
+    if (schema.maximum !== undefined) constraints.push(`max=${schema.maximum}`);
+    if (schema.exclusiveMinimum !== undefined) constraints.push(`exclusiveMin=${schema.exclusiveMinimum}`);
+    if (schema.exclusiveMaximum !== undefined) constraints.push(`exclusiveMax=${schema.exclusiveMaximum}`);
   }
-  
-  function parseCsnType(typeStr: string): JsonSchema {
-    typeStr = typeStr.trim();
-  
-    // Enum
-    if (typeStr.startsWith('e[')) {
-      const valuesStr = typeStr.slice(2, -1);
-      try {
-        const enumValues = valuesStr.split(',').map(val => JSON.parse(val.trim()));
-        return { enum: enumValues };
-      } catch {
-        throw new Error(`Invalid enum values: ${valuesStr}`);
-      }
+  const constraintStr = constraints.length > 0 ? `(${constraints.join(', ')})` : '';
+  const defaultFlag = 'default' in schema ? ` d=${JSON.stringify(schema.default)}` : '';
+  return `${baseType}${constraintStr}${defaultFlag}`;
+}
+
+export function csnToJsonSchema(csn: string): JsonSchema {
+  if (typeof csn !== 'string' || !csn.trim()) {
+    throw new Error('Invalid CSN: must be a non-empty string');
+  }
+  return parseCsnType(csn);
+}
+
+function parseCsnType(typeStr: string): JsonSchema {
+  typeStr = typeStr.trim();
+
+  // Enum
+  if (typeStr.startsWith('e[')) {
+    const valuesStr = typeStr.slice(2, -1);
+    try {
+      const enumValues = valuesStr.split(',').map(val => JSON.parse(val.trim()));
+      return { enum: enumValues };
+    } catch {
+      throw new Error(`Invalid enum values: ${valuesStr}`);
     }
-  
-    // Literal (const)
-    if (typeStr.startsWith('lit[')) {
-      const valueStr = typeStr.slice(4, -1);
-      try {
-        return { const: JSON.parse(valueStr) };
-      } catch {
-        throw new Error(`Invalid literal value: ${valueStr}`);
-      }
+  }
+
+  // Literal (const)
+  if (typeStr.startsWith('lit[')) {
+    const valueStr = typeStr.slice(4, -1);
+    try {
+      return { const: JSON.parse(valueStr) };
+    } catch {
+      throw new Error(`Invalid literal value: ${valueStr}`);
     }
-  
-    // Union (anyOf)
-    if (typeStr.startsWith('u[')) {
-      const typesStr = typeStr.slice(2, -1);
-      const types = splitTopLevel(typesStr, ',');
-      return { anyOf: types.map(t => parseCsnType(t)) };
-    }
-  
-    // Array
-    if (typeStr.startsWith('a[')) {
-      const itemTypeStr = typeStr.slice(2, -1);
-      return { type: 'array', items: parseCsnType(itemTypeStr) };
-    }
-  
-    // Object
-    if (typeStr.startsWith('o {')) {
-      const content = typeStr.slice(3, -1).trim();
-      // Extract the properties block with proper brace balancing
-      let propertiesBlock = null;
-      const pIndex = content.indexOf("p {");
-      if (pIndex !== -1) {
-        let braceStart = content.indexOf("{", pIndex);
-        if (braceStart !== -1) {
-          let depth = 1;
-          let i = braceStart + 1;
-          for (; i < content.length; i++) {
-            const char = content[i];
-            if (char === '{') depth++;
-            else if (char === '}') {
-              depth--;
-              if (depth === 0) break;
-            }
+  }
+
+  // Union (anyOf)
+  if (typeStr.startsWith('u[')) {
+    const typesStr = typeStr.slice(2, -1);
+    const types = splitTopLevel(typesStr, ',');
+    return { anyOf: types.map(t => parseCsnType(t)) };
+  }
+
+  // Array
+  if (typeStr.startsWith('a[')) {
+    const itemTypeStr = typeStr.slice(2, -1);
+    return { type: 'array', items: parseCsnType(itemTypeStr) };
+  }
+
+  // Object
+  if (typeStr.startsWith('o {')) {
+    const content = typeStr.slice(3, -1).trim();
+    // Extract the properties block with proper brace balancing
+    let propertiesBlock = null;
+    const pIndex = content.indexOf('p {');
+    if (pIndex !== -1) {
+      const braceStart = content.indexOf('{', pIndex);
+      if (braceStart !== -1) {
+        let depth = 1;
+        let i = braceStart + 1;
+        for (; i < content.length; i++) {
+          const char = content[i];
+          if (char === '{') depth++;
+          else if (char === '}') {
+            depth--;
+            if (depth === 0) break;
           }
-          propertiesBlock = content.substring(braceStart + 1, i);
         }
+        propertiesBlock = content.substring(braceStart + 1, i);
       }
-      
-      const hasAdditionalProps = content.includes('ap f');
-      const schema: JsonSchema = { type: 'object', properties: {}, required: [] };
-      if (hasAdditionalProps) schema.additionalProperties = false;
-      
-      if (propertiesBlock) {
-        const properties = splitTopLevel(propertiesBlock, ';').filter(Boolean);
-        
-        for (const prop of properties) {
-          const colonIndex = prop.indexOf(':');
-          if (colonIndex === -1) continue;
-          
-          const name = prop.substring(0, colonIndex).trim();
-          const typeInfo = prop.substring(colonIndex + 1).trim();
-          
-          // Process type info, handling nested objects and type modifiers
-          let propTypeCore = '';
-          let propTypeModifiers = '';
-          let i = 0;
-          
-          // Special handling for nested objects
-          if (typeInfo.startsWith('o {')) {
-            // Find the matching closing brace for the object definition
-            let objDepth = 0;
-            let inObj = false;
-            for (; i < typeInfo.length; i++) {
-              const char = typeInfo[i];
-              propTypeCore += char;
-              
-              if (char === '{') {
-                objDepth++;
-                inObj = true;
-              } else if (char === '}') {
-                objDepth--;
-                if (objDepth === 0 && inObj) {
-                  i++; // Move past the closing brace
-                  break;
-                }
-              }
-            }
-          } else {
-            // Regular extraction for non-object types
-            let depth = 0;
-            for (; i < typeInfo.length; i++) {
-              const char = typeInfo[i];
-              if (char === '{' || char === '[') depth++;
-              else if (char === '}' || char === ']') depth--;
-              
-              propTypeCore += char;
-              
-              // If we've reached the end of the core type, break
-              if (depth === 0 && i < typeInfo.length - 1 && /\s/.test(typeInfo[i + 1])) {
-                i++;  // Skip the space
+    }
+
+    const hasAdditionalProps = content.includes('ap f');
+    const schema: JsonSchema = { type: 'object', properties: {}, required: [] };
+    if (hasAdditionalProps) schema.additionalProperties = false;
+
+    if (propertiesBlock) {
+      const properties = splitTopLevel(propertiesBlock, ';').filter(Boolean);
+
+      for (const prop of properties) {
+        const colonIndex = prop.indexOf(':');
+        if (colonIndex === -1) continue;
+
+        const name = prop.substring(0, colonIndex).trim();
+        const typeInfo = prop.substring(colonIndex + 1).trim();
+
+        // Process type info, handling nested objects and type modifiers
+        let propTypeCore = '';
+        let propTypeModifiers = '';
+        let i = 0;
+
+        // Special handling for nested objects
+        if (typeInfo.startsWith('o {')) {
+          // Find the matching closing brace for the object definition
+          let objDepth = 0;
+          let inObj = false;
+          for (; i < typeInfo.length; i++) {
+            const char = typeInfo[i];
+            propTypeCore += char;
+
+            if (char === '{') {
+              objDepth++;
+              inObj = true;
+            } else if (char === '}') {
+              objDepth--;
+              if (objDepth === 0 && inObj) {
+                i++; // Move past the closing brace
                 break;
               }
             }
           }
-          
-          // Get the modifiers (r, d=..., etc.)
-          propTypeModifiers = typeInfo.substring(i).trim();
-          
-          // Parse the type
-          const propSchema = parseCsnType(propTypeCore);
-          
-          // Apply modifiers
-          if (propTypeModifiers.includes('r')) {
-            schema.required!.push(name);
-          }
-          
-          const defaultMatch = propTypeModifiers.split(/\s+/).find(part => part.startsWith('d='));
-          if (defaultMatch) {
-            try {
-              propSchema.default = JSON.parse(defaultMatch.slice(2));
-            } catch {
-              throw new Error(`Invalid default value: ${defaultMatch.slice(2)}`);
+        } else {
+          // Regular extraction for non-object types
+          let depth = 0;
+          for (; i < typeInfo.length; i++) {
+            const char = typeInfo[i];
+            if (char === '{' || char === '[') depth++;
+            else if (char === '}' || char === ']') depth--;
+
+            propTypeCore += char;
+
+            // If we've reached the end of the core type, break
+            if (depth === 0 && i < typeInfo.length - 1 && /\s/.test(typeInfo[i + 1])) {
+              i++; // Skip the space
+              break;
             }
           }
-          
-          // Add to properties
-          schema.properties![name] = propSchema;
         }
-      }
-      
-      if (schema.required!.length === 0) delete schema.required;
-      return schema;
-    }
-  
-    // Constrained type
-    const constrainedMatch = typeStr.match(/^([a-z]+)\((.*)\)$/);
-    if (constrainedMatch) {
-      const baseType = constrainedMatch[1];
-      const constraintsStr = constrainedMatch[2];
-      const constraints = splitTopLevel(constraintsStr, ',');
-      const schema: JsonSchema = { type: reverseTypeMapping[baseType] || baseType };
-      constraints.forEach(constraint => {
-        const [key, valueStr] = constraint.split('=');
-        const value = valueStr.startsWith('"') ? valueStr.slice(1, -1) : Number(valueStr);
-        if (key === 'minLength') schema.minLength = value as number;
-        else if (key === 'maxLength') schema.maxLength = value as number;
-        else if (key === 'pattern') schema.pattern = value as string;
-        else if (key === 'min') schema.minimum = value as number;
-        else if (key === 'max') schema.maximum = value as number;
-        else if (key === 'exclusiveMin') schema.exclusiveMinimum = value as number;
-        else if (key === 'exclusiveMax') schema.exclusiveMaximum = value as number;
-      });
-      return schema;
-    }
-  
-    // Basic type with possible default
-    const parts = splitTopLevel(typeStr, ' ');
-    const baseType = parts[0];
-    const defaultMatch = parts.find(part => part.startsWith('d='));
-    const schema: JsonSchema = { type: reverseTypeMapping[baseType] || baseType };
-    if (defaultMatch) {
-      try {
-        schema.default = JSON.parse(defaultMatch.slice(2));
-      } catch {
-        throw new Error(`Invalid default value: ${defaultMatch.slice(2)}`);
+
+        // Get the modifiers (r, d=..., etc.)
+        propTypeModifiers = typeInfo.substring(i).trim();
+
+        // Parse the type
+        const propSchema = parseCsnType(propTypeCore);
+
+        // Apply modifiers
+        if (propTypeModifiers.includes('r')) {
+          schema.required!.push(name);
+        }
+
+        const defaultMatch = propTypeModifiers.split(/\s+/).find(part => part.startsWith('d='));
+        if (defaultMatch) {
+          try {
+            propSchema.default = JSON.parse(defaultMatch.slice(2));
+          } catch {
+            throw new Error(`Invalid default value: ${defaultMatch.slice(2)}`);
+          }
+        }
+
+        // Add to properties
+        schema.properties![name] = propSchema;
       }
     }
+
+    if (schema.required!.length === 0) delete schema.required;
     return schema;
   }
-  
-  // --- New helper function added ---
-  function extractCoreAndFlags(typeInfo: string): { core: string, flags: string[] } {
-    typeInfo = typeInfo.trim();
-    let core = "";
-    let flags: string[] = [];
-    let depth = 0;
-    let i = 0;
-    for (; i < typeInfo.length; i++) {
-      const char = typeInfo[i];
-      if (char === '{' || char === '[') {
-        depth++;
-      } else if (char === '}' || char === ']') {
-        depth--;
-      }
-      core += char;
-      if (depth === 0 && i < typeInfo.length - 1 && /\s/.test(typeInfo[i + 1])) {
-        i++; // skip the whitespace after the core expression
-        break;
-      }
-    }
-    const remaining = typeInfo.slice(i).trim();
-    if (remaining) {
-      flags = remaining.split(/\s+/);
-    }
-    return { core, flags };
+
+  // Constrained type
+  const constrainedMatch = typeStr.match(/^([a-z]+)\((.*)\)$/);
+  if (constrainedMatch) {
+    const baseType = constrainedMatch[1];
+    const constraintsStr = constrainedMatch[2];
+    const constraints = splitTopLevel(constraintsStr, ',');
+    const schema: JsonSchema = { type: reverseTypeMapping[baseType] || baseType };
+    constraints.forEach(constraint => {
+      const [key, valueStr] = constraint.split('=');
+      const value = valueStr.startsWith('"') ? valueStr.slice(1, -1) : Number(valueStr);
+      if (key === 'minLength') schema.minLength = value as number;
+      else if (key === 'maxLength') schema.maxLength = value as number;
+      else if (key === 'pattern') schema.pattern = value as string;
+      else if (key === 'min') schema.minimum = value as number;
+      else if (key === 'max') schema.maximum = value as number;
+      else if (key === 'exclusiveMin') schema.exclusiveMinimum = value as number;
+      else if (key === 'exclusiveMax') schema.exclusiveMaximum = value as number;
+    });
+    return schema;
   }
 
-  // --- New helper function added ---
-  function extractPropertiesBlock(content: string): string | null {
-    const pIndex = content.indexOf("p {");
-    if (pIndex === -1) return null;
-    const braceStart = content.indexOf("{", pIndex);
-    if (braceStart === -1) return null;
-    let depth = 0;
-    for (let i = braceStart; i < content.length; i++) {
-      const char = content[i];
-      if (char === '{') depth++;
-      else if (char === '}') {
-        depth--;
-        if (depth === 0) {
-          return content.substring(braceStart + 1, i).trim();
-        }
+  // Basic type with possible default
+  const parts = splitTopLevel(typeStr, ' ');
+  const baseType = parts[0];
+  const defaultMatch = parts.find(part => part.startsWith('d='));
+  const schema: JsonSchema = { type: reverseTypeMapping[baseType] || baseType };
+  if (defaultMatch) {
+    try {
+      schema.default = JSON.parse(defaultMatch.slice(2));
+    } catch {
+      throw new Error(`Invalid default value: ${defaultMatch.slice(2)}`);
+    }
+  }
+  return schema;
+}
+
+// --- New helper function added ---
+function extractCoreAndFlags(typeInfo: string): { core: string; flags: string[] } {
+  typeInfo = typeInfo.trim();
+  let core = '';
+  let flags: string[] = [];
+  let depth = 0;
+  let i = 0;
+  for (; i < typeInfo.length; i++) {
+    const char = typeInfo[i];
+    if (char === '{' || char === '[') {
+      depth++;
+    } else if (char === '}' || char === ']') {
+      depth--;
+    }
+    core += char;
+    if (depth === 0 && i < typeInfo.length - 1 && /\s/.test(typeInfo[i + 1])) {
+      i++; // skip the whitespace after the core expression
+      break;
+    }
+  }
+  const remaining = typeInfo.slice(i).trim();
+  if (remaining) {
+    flags = remaining.split(/\s+/);
+  }
+  return { core, flags };
+}
+
+// --- New helper function added ---
+function extractPropertiesBlock(content: string): string | null {
+  const pIndex = content.indexOf('p {');
+  if (pIndex === -1) return null;
+  const braceStart = content.indexOf('{', pIndex);
+  if (braceStart === -1) return null;
+  let depth = 0;
+  for (let i = braceStart; i < content.length; i++) {
+    const char = content[i];
+    if (char === '{') depth++;
+    else if (char === '}') {
+      depth--;
+      if (depth === 0) {
+        return content.substring(braceStart + 1, i).trim();
       }
     }
-    return null;
   }
+  return null;
+}
 
-  // Helper to split top-level items, respecting nested brackets
-  function splitTopLevel(str: string, delimiter: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let depth = 0;
-    for (const char of str) {
-      if (char === '[' || char === '{') depth++;
-      else if (char === ']' || char === '}') depth--;
-      else if (char === delimiter && depth === 0) {
-        result.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += char;
+// Helper to split top-level items, respecting nested brackets
+function splitTopLevel(str: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let depth = 0;
+  for (const char of str) {
+    if (char === '[' || char === '{') depth++;
+    else if (char === ']' || char === '}') depth--;
+    else if (char === delimiter && depth === 0) {
+      result.push(current.trim());
+      current = '';
+      continue;
     }
-    if (current.trim()) result.push(current.trim());
-    return result;
+    current += char;
   }
+  if (current.trim()) result.push(current.trim());
+  return result;
+}
 
-  // Export the JsonSchema interface
-  export type { JsonSchema };
+// Export the JsonSchema interface
+export type { JsonSchema };
 
-  // Remove or comment out the test code for production use
-  /*
+// Remove or comment out the test code for production use
+/*
   let jsonschematest1 = {
       "type": "object",
       "properties": {

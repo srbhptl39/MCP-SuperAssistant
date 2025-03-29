@@ -72,49 +72,49 @@ const getElementPositionInfo = (element: Element): string => {
     const parent = current.parentElement;
     const children = Array.from(parent.children);
     const index = children.indexOf(current as Element);
-    
+
     // Add the index and tag name to the paths
     path.unshift(index);
     tagPath.unshift(current.tagName.toLowerCase());
-    
+
     // Get information about siblings to help distinguish position
     const siblingInfo = children.length > 1 ? `-${children.length}` : '';
     tagPath[0] += siblingInfo;
-    
+
     current = parent;
   }
 
   // Create a more detailed position signature that includes tag names and sibling counts
   const detailedPath = tagPath.join('>');
-  
+
   // Include nearest ancestor with an ID if available, which helps with distinguishing
   // elements in different conversation parts
   let idAncestor = element;
   let ancestorWithId = '';
-  
+
   // Look for up to 5 levels up for an ancestor with an ID
   for (let i = 0; i < 5; i++) {
     if (!idAncestor.parentElement) break;
     idAncestor = idAncestor.parentElement;
-    
+
     const id = idAncestor.id;
     if (id) {
       ancestorWithId = id;
       break;
     }
-    
+
     // Also check for data attributes that might help identify the conversation container
     const dataAttrs = Array.from(idAncestor.attributes)
       .filter(attr => attr.name.startsWith('data-'))
       .map(attr => `${attr.name}=${attr.value}`)
       .join('|');
-      
+
     if (dataAttrs) {
       ancestorWithId = dataAttrs;
       break;
     }
   }
-  
+
   // Combine all information for a robust position signature
   return `${path.join('-')}:${detailedPath}${ancestorWithId ? `:${ancestorWithId}` : ''}`;
 };
@@ -126,11 +126,9 @@ const getElementPositionInfo = (element: Element): string => {
  */
 export const markElement = (element: Element, type: 'tool-output' | 'mcp-tool' | 'tool-command'): string => {
   // Get the appropriate attribute based on type
-  const attr = 
-    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : 
-    type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : 
-    TOOL_COMMAND_ID_ATTR;
-    
+  const attr =
+    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : TOOL_COMMAND_ID_ATTR;
+
   // Check if element is already marked
   const existingId = element.getAttribute(attr);
   if (existingId) {
@@ -144,12 +142,12 @@ export const markElement = (element: Element, type: 'tool-output' | 'mcp-tool' |
   // Generate and assign a new ID
   const id = generateElementId(element);
   element.setAttribute(attr, id);
-  
+
   // Store content for change detection
   const content = element.textContent || '';
   element.setAttribute(ELEMENT_CONTENT_ATTR, content);
   elementContents.set(id, content);
-  
+
   trackedElements.set(id, element);
 
   return id;
@@ -163,14 +161,12 @@ export const markElement = (element: Element, type: 'tool-output' | 'mcp-tool' |
 export const isElementMarked = (element: Element, type: 'tool-output' | 'mcp-tool' | 'tool-command'): boolean => {
   // Get the appropriate attribute based on type
   // logMessage(`isElementMarked: Checking if element is marked: ${element.textContent}`);
-  const attr = 
-    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : 
-    type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : 
-    TOOL_COMMAND_ID_ATTR;
+  const attr =
+    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : TOOL_COMMAND_ID_ATTR;
 
-    let isMarked = element.hasAttribute(attr);
-    logMessage(`isElementMarked: Element is marked: ${isMarked}`);
-    
+  const isMarked = element.hasAttribute(attr);
+  logMessage(`isElementMarked: Element is marked: ${isMarked}`);
+
   return isMarked;
 };
 
@@ -180,18 +176,19 @@ export const isElementMarked = (element: Element, type: 'tool-output' | 'mcp-too
  * @param type The type of processing marker
  * @returns Boolean indicating if the content has changed
  */
-export const hasElementContentChanged = (element: Element, type: 'tool-output' | 'mcp-tool' | 'tool-command'): boolean => {
-  const attr = 
-    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : 
-    type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : 
-    TOOL_COMMAND_ID_ATTR;
-    
+export const hasElementContentChanged = (
+  element: Element,
+  type: 'tool-output' | 'mcp-tool' | 'tool-command',
+): boolean => {
+  const attr =
+    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : TOOL_COMMAND_ID_ATTR;
+
   const id = element.getAttribute(attr);
   if (!id) return false; // Not marked yet
-  
+
   const lastContent = elementContents.get(id) || element.getAttribute(ELEMENT_CONTENT_ATTR) || '';
   const currentContent = element.textContent || '';
-  
+
   // Return true if content has changed and is longer (indicating new content was streamed)
   return currentContent !== lastContent && currentContent.length > lastContent.length;
 };
@@ -202,18 +199,16 @@ export const hasElementContentChanged = (element: Element, type: 'tool-output' |
  * @param type The type of processing marker
  */
 export const unmarkElement = (element: Element, type: 'tool-output' | 'mcp-tool' | 'tool-command'): void => {
-  const attr = 
-    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : 
-    type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : 
-    TOOL_COMMAND_ID_ATTR;
-    
+  const attr =
+    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : TOOL_COMMAND_ID_ATTR;
+
   const id = element.getAttribute(attr);
   if (id) {
     element.removeAttribute(attr);
     elementContents.delete(id);
     trackedElements.delete(id);
   }
-  
+
   // Also remove the content tracking attribute
   element.removeAttribute(ELEMENT_CONTENT_ATTR);
 };
@@ -225,11 +220,9 @@ export const unmarkElement = (element: Element, type: 'tool-output' | 'mcp-tool'
  */
 export const getElementId = (element: Element, type: 'tool-output' | 'mcp-tool' | 'tool-command'): string | null => {
   // Get the appropriate attribute based on type
-  const attr = 
-    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : 
-    type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : 
-    TOOL_COMMAND_ID_ATTR;
-    
+  const attr =
+    type === 'tool-output' ? TOOL_OUTPUT_ID_ATTR : type === 'mcp-tool' ? MCP_TOOL_ID_ATTR : TOOL_COMMAND_ID_ATTR;
+
   return element.getAttribute(attr);
 };
 

@@ -28,7 +28,7 @@ export const findChatInputElement = (): HTMLElement | null => {
 
   // Fallback: Try to find the input element using common chat input patterns
   logMessage('Primary selector failed, trying fallback method');
-  
+
   // Try to find by common class names or attributes used in chat interfaces
   const possibleInputSelectors = [
     'textarea.chat-input',
@@ -37,9 +37,9 @@ export const findChatInputElement = (): HTMLElement | null => {
     'textarea[data-testid="chat-input"]',
     'div[contenteditable="true"]',
     'textarea.message-input',
-    'textarea[aria-label="Ask Grok anything"]'
+    'textarea[aria-label="Ask Grok anything"]',
   ];
-  
+
   for (const selector of possibleInputSelectors) {
     const element = document.querySelector(selector);
     if (element) {
@@ -96,46 +96,46 @@ export const insertTextToChatInput = (text: string): boolean => {
     if (chatInput.tagName === 'TEXTAREA') {
       const textarea = chatInput as HTMLTextAreaElement;
       const currentText = textarea.value;
-      
+
       // For textareas, we can just use the \n character directly
       const formattedText = currentText ? `${currentText}\n\n${text}` : text;
       textarea.value = formattedText;
-      
+
       // Position cursor at the end
       textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-      
+
       // Trigger input event
       const inputEvent = new InputEvent('input', { bubbles: true });
       textarea.dispatchEvent(inputEvent);
-      
+
       // Focus the textarea
       textarea.focus();
-      
+
       logMessage('Appended text to textarea with preserved newlines');
       return true;
-    } 
+    }
     // Check if it's a contenteditable div
     else if (chatInput.getAttribute('contenteditable') === 'true') {
       // More reliable approach for contenteditable elements using Selection and Range
       // This preserves the current content and adds the new text at the end
       // with proper newline handling
-      
+
       // First, focus the element and move cursor to the end
       chatInput.focus();
-      
+
       // Get current content
       const currentText = chatInput.textContent || '';
-      
+
       // Create a text node with the new content
-      let textToInsert = text;
-      
+      const textToInsert = text;
+
       // If there's existing content, add newlines before the new text
       if (currentText && currentText.trim() !== '') {
         // Ensure the element has some content at the end to place cursor after
         if (!chatInput.lastChild || chatInput.lastChild.nodeType !== Node.TEXT_NODE) {
           chatInput.appendChild(document.createTextNode(''));
         }
-        
+
         // Move cursor to the end
         const selection = window.getSelection();
         const range = document.createRange();
@@ -143,53 +143,53 @@ export const insertTextToChatInput = (text: string): boolean => {
         range.collapse(false); // collapse to end
         selection?.removeAllRanges();
         selection?.addRange(range);
-        
+
         // Insert two newlines before the text
         document.execCommand('insertText', false, '\n\n');
       }
-      
+
       // Use execCommand to insert text, which properly handles newlines
       document.execCommand('insertText', false, textToInsert);
-      
+
       // Trigger input event for contenteditable
       const inputEvent = new InputEvent('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
-      
+
       logMessage('Appended text to contenteditable with preserved newlines using execCommand');
       return true;
     }
     // Fallback for other element types
     else {
       logMessage('Using fallback method for unknown element type');
-      
+
       // Try using value property first (for input-like elements)
       if ('value' in chatInput) {
         const inputElement = chatInput as HTMLInputElement;
         const currentValue = inputElement.value;
         inputElement.value = currentValue ? `${currentValue}\n\n${text}` : text;
-        
+
         // Trigger input event
         const inputEvent = new InputEvent('input', { bubbles: true });
         inputElement.dispatchEvent(inputEvent);
-        
+
         // Focus the element
         inputElement.focus();
-        
+
         logMessage('Appended text to input element via value property');
         return true;
       }
-      
+
       // Last resort: use textContent
       const currentText = chatInput.textContent || '';
       chatInput.textContent = currentText ? `${currentText}\n\n${text}` : text;
-      
+
       // Trigger input event
       const inputEvent = new InputEvent('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
-      
+
       // Focus the element
       chatInput.focus();
-      
+
       logMessage('Appended text to element via textContent property');
       return true;
     }
@@ -221,22 +221,22 @@ export const attachFileToChatInput = (file: File): boolean => {
   try {
     // Find file input element
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    
+
     if (!fileInput) {
       logMessage('Could not find file input element in Grok');
       return false;
     }
-    
+
     // Create a DataTransfer object to simulate a file drop
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
     fileInput.files = dataTransfer.files;
-    
+
     // Trigger change event
     const changeEvent = new Event('change', { bubbles: true });
     fileInput.dispatchEvent(changeEvent);
-    
-    logMessage(`Successfully attached file: ${file.name}`); 
+
+    logMessage(`Successfully attached file: ${file.name}`);
     return true;
   } catch (error) {
     logMessage(`Error attaching file to Grok chat: ${error}`);
@@ -253,12 +253,12 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
   try {
     // Find the chat input element
     const chatInput = findChatInputElement();
-    
+
     if (!chatInput) {
       logMessage('Could not find Grok input element for submission');
       return false;
     }
-    
+
     // First try to find a submit button
     const submitButtonSelectors = [
       // 'button[type="submit"]',
@@ -268,11 +268,11 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
       'button.chat-submit',
       'button[data-testid="send-button"]',
       'svg.send-icon',
-      'button.submit-button'
+      'button.submit-button',
     ];
-    
+
     let submitButton: HTMLElement | null = null;
-    
+
     for (const selector of submitButtonSelectors) {
       const button = document.querySelector(selector);
       if (button && button instanceof HTMLElement) {
@@ -281,16 +281,16 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
         break;
       }
     }
-    
+
     if (submitButton) {
       logMessage('Found submit button, clicking it');
       submitButton.click();
       return true;
     }
-    
+
     // If no submit button found, try to simulate Enter key press
     logMessage('No submit button found, simulating Enter key press');
-    
+
     // Create and dispatch keydown event
     const enterKeyEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
@@ -298,14 +298,14 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
       keyCode: 13,
       which: 13,
       bubbles: true,
-      cancelable: true
+      cancelable: true,
     });
-    
+
     chatInput.dispatchEvent(enterKeyEvent);
-    
+
     // If the keydown event didn't trigger submission (it was prevented),
     // try to find and click a submit button again after a short delay
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       setTimeout(() => {
         // Check if any new submit buttons appeared
         for (const selector of submitButtonSelectors) {
@@ -317,7 +317,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
             return;
           }
         }
-        
+
         // If still no submit button, try one more approach: form submission
         const form = chatInput.closest('form');
         if (form) {
@@ -326,7 +326,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
           resolve(true);
           return;
         }
-        
+
         logMessage('Could not find a way to submit the Grok chat input');
         resolve(false);
       }, 500);

@@ -1,16 +1,17 @@
 /**
  * Grok Pattern-based Unified Observer
- * 
+ *
  * This file implements a pattern-based unified observer for Grok that
  * extends the base unified observer to detect tool commands based on
  * text patterns rather than CSS selectors.
  */
 
 import { logMessage } from '@src/utils/helpers';
-import { BaseUnifiedObserver, DetectedToolCommand } from '@src/components/common/unifiedPatternObserver';
-import { SiteAdapter } from '@src/utils/siteAdapter';
-import { ToolOutputHandler } from '@src/components/sidebar';
-import { DetectedTool } from '@src/utils/toolDetector';
+import type { DetectedToolCommand } from '@src/components/common/unifiedPatternObserver';
+import { BaseUnifiedObserver } from '@src/components/common/unifiedPatternObserver';
+import type { SiteAdapter } from '@src/utils/siteAdapter';
+import type { ToolOutputHandler } from '@src/components/sidebar';
+import type { DetectedTool } from '@src/utils/toolDetector';
 
 /**
  * Grok Pattern-based Unified Observer class
@@ -32,27 +33,27 @@ export class GrokPatternUnifiedObserver extends BaseUnifiedObserver {
    */
   protected handleDetectedTool(toolCommand: DetectedToolCommand): void {
     logMessage(`Detected tool: ${toolCommand.toolName} on server ${toolCommand.serverName}`);
-    
+
     // Create a DetectedTool object to update the tool detector
     const detectedTool: DetectedTool = {
       id: `tool-${toolCommand.id}`,
       name: toolCommand.toolName,
       args: toolCommand.arguments || {},
     };
-    
+
     // Directly dispatch events instead of using onDetect which creates a memory leak
     // by adding a new listener every time a tool is detected
-    
+
     // Dispatch event for specific tool detection
     window.dispatchEvent(
-      new CustomEvent<{tool: DetectedTool; domPosition: number}>('mcpToolDetected', {
+      new CustomEvent<{ tool: DetectedTool; domPosition: number }>('mcpToolDetected', {
         detail: {
           tool: detectedTool,
-          domPosition: toolCommand.domIndex
+          domPosition: toolCommand.domIndex,
         },
-      })
+      }),
     );
-    
+
     // Dispatch event for general tool updates
     window.dispatchEvent(
       new CustomEvent('mcpToolsUpdated', {
@@ -61,7 +62,7 @@ export class GrokPatternUnifiedObserver extends BaseUnifiedObserver {
           serverName: toolCommand.serverName,
           arguments: toolCommand.arguments,
         },
-      })
+      }),
     );
   }
 }
@@ -74,7 +75,7 @@ export class GrokPatternUnifiedObserver extends BaseUnifiedObserver {
  */
 export const createGrokPatternObserver = (
   adapter: SiteAdapter,
-  toolOutputHandler: ToolOutputHandler
+  toolOutputHandler: ToolOutputHandler,
 ): GrokPatternUnifiedObserver => {
   return new GrokPatternUnifiedObserver(adapter, toolOutputHandler);
 };

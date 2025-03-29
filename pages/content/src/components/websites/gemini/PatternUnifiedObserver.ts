@@ -5,10 +5,11 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
-import { BaseUnifiedObserver, DetectedToolCommand } from '@src/components/common/unifiedPatternObserver';
+import type { DetectedToolCommand } from '@src/components/common/unifiedPatternObserver';
+import { BaseUnifiedObserver } from '@src/components/common/unifiedPatternObserver';
 import type { SiteAdapter } from '@src/utils/siteAdapter';
 import type { ToolOutputHandler } from '@src/components/sidebar';
-import { DetectedTool } from '@src/utils/toolDetector';
+import type { DetectedTool } from '@src/utils/toolDetector';
 
 /**
  * Gemini Pattern-based Unified Observer class
@@ -30,7 +31,7 @@ export class GeminiPatternUnifiedObserver extends BaseUnifiedObserver {
    */
   protected handleDetectedTool(toolCommand: DetectedToolCommand): void {
     logMessage(`Detected tool command in Gemini: ${toolCommand.toolName}`);
-    
+
     // Convert to DetectedTool format
     const detectedTool: DetectedTool = {
       id: toolCommand.id,
@@ -38,7 +39,7 @@ export class GeminiPatternUnifiedObserver extends BaseUnifiedObserver {
       args: toolCommand.arguments,
       domPosition: toolCommand.domIndex,
     };
-    
+
     // Create custom event
     const event = new CustomEvent('mcpToolDetected', {
       detail: {
@@ -47,7 +48,7 @@ export class GeminiPatternUnifiedObserver extends BaseUnifiedObserver {
       },
       bubbles: true,
     });
-    
+
     // Dispatch event
     window.dispatchEvent(event);
   }
@@ -61,7 +62,7 @@ export class GeminiPatternUnifiedObserver extends BaseUnifiedObserver {
  */
 export const createGeminiPatternObserver = (
   adapter: SiteAdapter,
-  toolOutputHandler: ToolOutputHandler
+  toolOutputHandler: ToolOutputHandler,
 ): GeminiPatternUnifiedObserver => {
   return new GeminiPatternUnifiedObserver(adapter, toolOutputHandler);
-}; 
+};

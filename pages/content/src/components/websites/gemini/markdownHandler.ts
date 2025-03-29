@@ -6,14 +6,12 @@
 
 import { logMessage } from '@src/utils/helpers';
 import { markElement } from '@src/utils/elementTracker';
+import { MarkdownHandler } from '@src/components/common/markdownHandler';
 import {
-  MarkdownHandler,
-} from '@src/components/common/markdownHandler';
-import { 
-  extractMcpToolContents, 
+  extractMcpToolContents,
   extractMarkdownContent,
   type MarkdownExtractedContent,
-  type McpToolContent 
+  type McpToolContent,
 } from '@src/components/common/markdownParser';
 
 /**
@@ -35,8 +33,8 @@ export class GeminiMarkdownHandler extends MarkdownHandler {
  */
 export function processMarkdownElement(element: Element, domIndex: number): void {
   logMessage(`Processing markdown element in Gemini at index ${domIndex}`);
-  
+
   // Use the MarkdownHandler from common to process this element
   const handler = MarkdownHandler.getHandlerForCurrentSite();
   handler.processMarkdownElement(element, domIndex);
-} 
+}

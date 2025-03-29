@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type React from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateInstructions } from './instructionGenerator';
 import { Typography, Icon } from '../ui';
 import { cn } from '@src/lib/utils';
@@ -29,7 +30,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
       const newInstructions = generateInstructions(tools);
       setInstructions(newInstructions);
     }
-    
+
     // Cleanup function to prevent memory leaks
     return () => {
       logMessage('Cleaning up instruction generator effect');
@@ -39,7 +40,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   // Memoize handlers to prevent recreation on each render
   const handleInsertInChat = useCallback(async () => {
     if (!instructions) return;
-    
+
     setIsInserting(true);
     try {
       logMessage('Inserting instructions into chat');
@@ -54,7 +55,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   const handleCopyToClipboard = useCallback(async () => {
     if (!instructions) return;
-    
+
     setIsCopying(true);
     try {
       logMessage('Copying instructions to clipboard');
@@ -68,15 +69,15 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   const handleAttachAsFile = useCallback(async () => {
     if (!instructions || !adapter.supportsFileUpload()) return;
-    
+
     setIsAttaching(true);
     try {
       // Determine file type based on adapter
       const isPerplexity = adapter.name === 'Perplexity';
       const isGemini = adapter.name === 'Gemini';
       // Use text/plain for both Perplexity and Gemini
-      const fileType = (isPerplexity || isGemini) ? 'text/plain' : 'text/markdown';
-      const fileExtension = (isPerplexity || isGemini) ? '.txt' : '.md';
+      const fileType = isPerplexity || isGemini ? 'text/plain' : 'text/markdown';
+      const fileExtension = isPerplexity || isGemini ? '.txt' : '.md';
       const fileName = `instructions${fileExtension}`;
 
       logMessage(`Attaching instructions as ${fileName}`);

@@ -30,16 +30,16 @@ const manifest = {
   version: packageJson.version,
   description: 'MCP SuperAssistant',
   host_permissions: [
-    '<all_urls>', 
-    'http://localhost:3006/*', 
-    '*://*.perplexity.ai/*', 
+    '<all_urls>',
+    'http://localhost:3006/*',
+    '*://*.perplexity.ai/*',
     '*://*.chat.openai.com/*',
-    '*://*.chatgpt.com/*', 
-    '*://*.grok.com/*', 
+    '*://*.chatgpt.com/*',
+    '*://*.grok.com/*',
     '*://*.x.com/*',
     '*://*.twitter.com/*',
     '*://*.gemini.google.com/*',
-    '*://*.aistudio.google.com/*'
+    '*://*.aistudio.google.com/*',
   ],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'webRequest', 'clipboardWrite'],
   // options_page: 'options/index.html',
@@ -82,12 +82,7 @@ const manifest = {
     },
     // Specific content script for x.com and twitter.com tool call parsing (Grok integration)
     {
-      matches: [
-        '*://*.x.com/*', 
-        '*://*.twitter.com/*',
-        '*://*.x.com/i/grok*',
-        '*://*.twitter.com/i/grok*'
-      ],
+      matches: ['*://*.x.com/*', '*://*.twitter.com/*', '*://*.x.com/i/grok*', '*://*.twitter.com/i/grok*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

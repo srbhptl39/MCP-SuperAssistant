@@ -14,15 +14,15 @@ export function registerGeminiAdapter() {
   try {
     logMessage('Attempting to register Gemini adapter...');
     const geminiAdapter = new GeminiAdapter();
-    
+
     // Log detailed information
     logMessage(`Creating Gemini adapter with name: ${geminiAdapter.name}`);
     logMessage(`Gemini adapter hostname: ${JSON.stringify(geminiAdapter.hostname)}`);
-    
+
     // Register with both systems
     registerSiteAdapter(geminiAdapter);
     adapterRegistry.registerAdapter(geminiAdapter);
-    
+
     logMessage('Gemini adapter registered successfully!');
     return geminiAdapter;
   } catch (error) {
@@ -30,4 +30,4 @@ export function registerGeminiAdapter() {
     console.error('Error registering Gemini adapter:', error);
     return null;
   }
-} 
+}

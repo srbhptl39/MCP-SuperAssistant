@@ -5,7 +5,7 @@
  * to access the appropriate adapter based on the current hostname.
  */
 
-import { SiteAdapter } from '../utils/siteAdapter';
+import type { SiteAdapter } from '../utils/siteAdapter';
 import { logMessage } from '../utils/helpers';
 
 // Interface for the adapter registry
@@ -20,12 +20,12 @@ class AdapterRegistryImpl implements AdapterRegistry {
   // Register a new adapter
   registerAdapter(adapter: SiteAdapter): void {
     const hostnames = Array.isArray(adapter.hostname) ? adapter.hostname : [adapter.hostname];
-    
+
     for (const hostname of hostnames) {
       logMessage(`Registering adapter for hostname: ${hostname}`);
       this.adapters.set(hostname, adapter);
     }
-    
+
     logMessage(`Current registered adapters: ${Array.from(this.adapters.keys()).join(', ')}`);
   }
 
@@ -38,8 +38,8 @@ class AdapterRegistryImpl implements AdapterRegistry {
     // if (hostname.includes('gemini.google.com')) {
     //   logMessage('Special case: gemini.google.com detected');
     //   for (const [adapterHostname, adapterInstance] of this.adapters.entries()) {
-    //     if (adapterHostname === 'gemini.google.com' || 
-    //         (Array.isArray(adapterInstance.hostname) && 
+    //     if (adapterHostname === 'gemini.google.com' ||
+    //         (Array.isArray(adapterInstance.hostname) &&
     //          adapterInstance.hostname.includes('gemini.google.com'))) {
     //       logMessage(`Found Gemini adapter for hostname: ${hostname}`);
     //       return adapterInstance;
@@ -49,7 +49,7 @@ class AdapterRegistryImpl implements AdapterRegistry {
 
     // First try direct match
     let adapter = this.adapters.get(hostname);
-    
+
     if (adapter) {
       logMessage(`Found direct match for hostname: ${hostname}`);
     }
@@ -75,7 +75,7 @@ class AdapterRegistryImpl implements AdapterRegistry {
           hostnameNoWww.includes(adapterHostnameNoWww)
         ) {
           logMessage(`Hostname match found: ${hostname} matches ${adapterHostname}`);
-          
+
           // Check URL patterns if they exist
           if (adapterInstance.urlPatterns && adapterInstance.urlPatterns.length > 0) {
             const matchesUrlPattern = adapterInstance.urlPatterns.some(pattern => pattern.test(url));
@@ -85,7 +85,7 @@ class AdapterRegistryImpl implements AdapterRegistry {
             }
             logMessage(`URL pattern matched for ${adapterHostname}`);
           }
-          
+
           adapter = adapterInstance;
           logMessage(`Found adapter for hostname: ${hostname} using flexible matching with ${adapterHostname}`);
           break;
