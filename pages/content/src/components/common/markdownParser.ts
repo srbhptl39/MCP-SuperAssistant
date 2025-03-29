@@ -93,18 +93,18 @@ export const parseXmlArguments = (xmlContent: string): any => {
       isArray: (name: string, jpath: string) => {
         // Handle arrays if needed
         return false;
-      }
+      },
     };
 
     // Create parser instance
     const parser = new XMLParser(options);
-    
+
     // Parse the XML content
     const result = parser.parse(`<root>${xmlContent}</root>`);
 
     logMessage(`Parsed XML arguments non json: ${result}`);
     logMessage(`Parsed XML arguments: ${JSON.stringify(result)}`);
-    
+
     // Return the parsed content (removing the root wrapper)
     return result.root || {};
   } catch (error) {
@@ -160,7 +160,7 @@ export const extractMcpToolContents = (content: string): McpToolContent[] | unde
         // Create a unique key based on the most stable properties
         // Using a more structured approach to make sure the key is consistent
         const toolKey = `${extractedTool.serverName}::${extractedTool.toolName}::${extractedTool.rawArguments.trim()}`;
-        
+
         // Only add if we haven't seen this exact tool before
         if (!uniqueTools.has(toolKey)) {
           uniqueTools.set(toolKey, extractedTool);
@@ -181,7 +181,7 @@ export const extractMcpToolContents = (content: string): McpToolContent[] | unde
 
     // Convert the unique tools map to an array
     const uniqueResults = Array.from(uniqueTools.values());
-    
+
     if (uniqueResults.length > 0) {
       logMessage(`Found ${uniqueResults.length} unique MCP tool blocks`);
       return uniqueResults;

@@ -32,7 +32,7 @@ function streamFileToZip(
   zip.add(data);
 
   createReadStream(absPath)
-    .on('data', (chunk) => {
+    .on('data', chunk => {
       const uint8Chunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       data.push(uint8Chunk, false);
     })

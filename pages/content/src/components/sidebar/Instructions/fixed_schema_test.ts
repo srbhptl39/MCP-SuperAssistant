@@ -16,7 +16,7 @@ const reverseTypeMapping: Record<string, string> = {
   n: 'number',
   b: 'boolean',
   o: 'object',
-  a: 'array'
+  a: 'array',
 };
 
 function parseCsnType(typeStr: string): JsonSchema {
@@ -62,9 +62,9 @@ function parseCsnType(typeStr: string): JsonSchema {
     console.log(`Processing object: ${typeStr}`);
     // Extract the properties block with proper brace balancing
     let propertiesBlock = null;
-    const pIndex = content.indexOf("p {");
+    const pIndex = content.indexOf('p {');
     if (pIndex !== -1) {
-      let braceStart = content.indexOf("{", pIndex);
+      const braceStart = content.indexOf('{', pIndex);
       if (braceStart !== -1) {
         let depth = 1;
         let i = braceStart + 1;
@@ -79,32 +79,32 @@ function parseCsnType(typeStr: string): JsonSchema {
         propertiesBlock = content.substring(braceStart + 1, i);
       }
     }
-    
+
     console.log(`Properties block: ${propertiesBlock}`);
-    
+
     const hasAdditionalProps = content.includes('ap f');
     const schema: JsonSchema = { type: 'object', properties: {}, required: [] };
     if (hasAdditionalProps) schema.additionalProperties = false;
-    
+
     if (propertiesBlock) {
       const properties = splitTopLevel(propertiesBlock, ';').filter(Boolean);
       console.log(`Properties: ${JSON.stringify(properties)}`);
-      
+
       for (const prop of properties) {
         const colonIndex = prop.indexOf(':');
         if (colonIndex === -1) continue;
-        
+
         const name = prop.substring(0, colonIndex).trim();
         const typeInfo = prop.substring(colonIndex + 1).trim();
-        
+
         console.log(`Processing property: ${name} with type info: ${typeInfo}`);
-        
+
         // Process type info, handling nested objects and type modifiers
         let propTypeCore = '';
         let propTypeModifiers = '';
         let depth = 0;
         let i = 0;
-        
+
         // Special handling for nested objects
         if (typeInfo.startsWith('o {')) {
           // Find the matching closing brace for the object definition
@@ -113,7 +113,7 @@ function parseCsnType(typeStr: string): JsonSchema {
           for (; i < typeInfo.length; i++) {
             const char = typeInfo[i];
             propTypeCore += char;
-            
+
             if (char === '{') {
               objDepth++;
               inObj = true;
@@ -131,32 +131,32 @@ function parseCsnType(typeStr: string): JsonSchema {
             const char = typeInfo[i];
             if (char === '{' || char === '[') depth++;
             else if (char === '}' || char === ']') depth--;
-            
+
             propTypeCore += char;
-            
+
             // If we've reached the end of the core type, break
             if (depth === 0 && i < typeInfo.length - 1 && /\s/.test(typeInfo[i + 1])) {
-              i++;  // Skip the space
+              i++; // Skip the space
               break;
             }
           }
         }
-        
+
         // Get the modifiers (r, d=..., etc.)
         propTypeModifiers = typeInfo.substring(i).trim();
-        
+
         console.log(`Property ${name} core type: ${propTypeCore}, modifiers: ${propTypeModifiers}`);
-        
+
         // Parse the type
         const propSchema = parseCsnType(propTypeCore);
-        
+
         console.log(`Property ${name} schema: ${JSON.stringify(propSchema)}`);
-        
+
         // Apply modifiers
         if (propTypeModifiers.includes('r')) {
           schema.required!.push(name);
         }
-        
+
         const defaultMatch = propTypeModifiers.split(/\s+/).find(part => part.startsWith('d='));
         if (defaultMatch) {
           try {
@@ -165,12 +165,12 @@ function parseCsnType(typeStr: string): JsonSchema {
             throw new Error(`Invalid default value: ${defaultMatch.slice(2)}`);
           }
         }
-        
+
         // Add to properties
         schema.properties![name] = propSchema;
       }
     }
-    
+
     if (schema.required!.length === 0) delete schema.required;
     console.log(`Final schema: ${JSON.stringify(schema)}`);
     return schema;
@@ -232,7 +232,8 @@ function splitTopLevel(str: string, delimiter: string): string[] {
 }
 
 // Test case
-const testCsn = 'o {p {params:o {p {user_id:s; recipient_email:s r; cc:a[s]; bcc:a[s]; subject:s r; body:s r; is_html:b; attachment:u[o {p {name:s r; mimetype:s r; s3key:s r} ap f}, null]} ap f} r} ap f}';
+const testCsn =
+  'o {p {params:o {p {user_id:s; recipient_email:s r; cc:a[s]; bcc:a[s]; subject:s r; body:s r; is_html:b; attachment:u[o {p {name:s r; mimetype:s r; s3key:s r} ap f}, null]} ap f} r} ap f}';
 
 const result = fixedCsnToJsonSchema(testCsn);
-console.log(JSON.stringify(result, null, 2)); 
+console.log(JSON.stringify(result, null, 2));

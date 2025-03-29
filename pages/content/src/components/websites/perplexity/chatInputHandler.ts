@@ -190,35 +190,36 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
  * @returns True if submission was successful, false otherwise
  */
 export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     try {
       const chatInput = findChatInputElement();
-      
+
       if (!chatInput) {
         logMessage('Could not find chat input to submit');
         resolve(false);
         return;
       }
-      
+
       // Define a function to find the submit button
       const findSubmitButton = (): HTMLButtonElement | null => {
-        const submitButton = document.querySelector('button[aria-label="Submit"]') || 
-                            document.querySelector('button[aria-label="Send"]') ||
-                            document.querySelector('button[type="submit"]') ||
-                            // Look for a button next to the textarea
-                            chatInput.parentElement?.querySelector('button') ||
-                            // Common pattern: button with paper plane icon
-                            document.querySelector('button svg[stroke="currentColor"]')?.closest('button');
-        
+        const submitButton =
+          document.querySelector('button[aria-label="Submit"]') ||
+          document.querySelector('button[aria-label="Send"]') ||
+          document.querySelector('button[type="submit"]') ||
+          // Look for a button next to the textarea
+          chatInput.parentElement?.querySelector('button') ||
+          // Common pattern: button with paper plane icon
+          document.querySelector('button svg[stroke="currentColor"]')?.closest('button');
+
         return submitButton as HTMLButtonElement | null;
       };
-      
+
       // Try to find and check the submit button
       const submitButton = findSubmitButton();
-      
+
       if (submitButton) {
         logMessage(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
-        
+
         // Function to check if button is enabled and click it
         const tryClickingButton = () => {
           const button = findSubmitButton();
@@ -227,14 +228,14 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
             resolve(false);
             return;
           }
-          
+
           // Check if the button is disabled
-          const isDisabled = 
-            button.disabled || 
+          const isDisabled =
+            button.disabled ||
             button.getAttribute('disabled') !== null ||
             button.getAttribute('aria-disabled') === 'true' ||
             button.classList.contains('disabled');
-          
+
           if (!isDisabled) {
             logMessage('Submit button is enabled, clicking it');
             button.click();
@@ -243,27 +244,27 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
             logMessage('Submit button is disabled, waiting...');
           }
         };
-        
+
         // Set up a timer to periodically check if the button becomes enabled
         let elapsedTime = 0;
         const checkInterval = 200; // Check every 200ms
-        
+
         const intervalId = setInterval(() => {
           elapsedTime += checkInterval;
-          
+
           tryClickingButton();
-          
+
           // If we've waited too long, try alternative methods
           if (elapsedTime >= maxWaitTime) {
             clearInterval(intervalId);
             logMessage(`Button remained disabled for ${maxWaitTime}ms, trying alternative methods`);
-            
+
             // Method 2: Simulate Enter key press
             logMessage('Simulating Enter key press as fallback');
-            
+
             // Focus the textarea first
             chatInput.focus();
-            
+
             // Create and dispatch keydown event (Enter key)
             const keydownEvent = new KeyboardEvent('keydown', {
               key: 'Enter',
@@ -271,9 +272,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               keyCode: 13,
               which: 13,
               bubbles: true,
-              cancelable: true
+              cancelable: true,
             });
-            
+
             // Create and dispatch keypress event
             const keypressEvent = new KeyboardEvent('keypress', {
               key: 'Enter',
@@ -281,9 +282,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               keyCode: 13,
               which: 13,
               bubbles: true,
-              cancelable: true
+              cancelable: true,
             });
-            
+
             // Create and dispatch keyup event
             const keyupEvent = new KeyboardEvent('keyup', {
               key: 'Enter',
@@ -291,29 +292,29 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
               keyCode: 13,
               which: 13,
               bubbles: true,
-              cancelable: true
+              cancelable: true,
             });
-            
+
             // Dispatch all events in sequence
             chatInput.dispatchEvent(keydownEvent);
             chatInput.dispatchEvent(keypressEvent);
             chatInput.dispatchEvent(keyupEvent);
-            
+
             // Try to find and submit a form as a last resort
             const form = chatInput.closest('form');
             if (form) {
               logMessage('Found form element, submitting it');
               form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
             }
-            
+
             logMessage('Attempted all fallback methods to submit chat input');
             resolve(true);
           }
         }, checkInterval);
-        
+
         // Initial check - maybe it's already enabled
         tryClickingButton();
-        
+
         // If the button is already enabled and clicked, clear the interval
         if (submitButton && !submitButton.disabled) {
           clearInterval(intervalId);
@@ -321,13 +322,13 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
       } else {
         // If no button found, proceed with alternative methods immediately
         logMessage('No submit button found, trying alternative methods');
-        
+
         // Method 2: Simulate Enter key press
         logMessage('Simulating Enter key press as fallback');
-        
+
         // Focus the textarea first
         chatInput.focus();
-        
+
         // Create and dispatch keydown event (Enter key)
         const keydownEvent = new KeyboardEvent('keydown', {
           key: 'Enter',
@@ -335,9 +336,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           keyCode: 13,
           which: 13,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
-        
+
         // Create and dispatch keypress event
         const keypressEvent = new KeyboardEvent('keypress', {
           key: 'Enter',
@@ -345,9 +346,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           keyCode: 13,
           which: 13,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
-        
+
         // Create and dispatch keyup event
         const keyupEvent = new KeyboardEvent('keyup', {
           key: 'Enter',
@@ -355,9 +356,9 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           keyCode: 13,
           which: 13,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
-        
+
         // Dispatch all events in sequence
         chatInput.dispatchEvent(keydownEvent);
         chatInput.dispatchEvent(keypressEvent);
@@ -369,7 +370,7 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
           logMessage('Found form element, submitting it');
           form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
         }
-        
+
         logMessage('Attempted all methods to submit chat input');
         resolve(true);
       }

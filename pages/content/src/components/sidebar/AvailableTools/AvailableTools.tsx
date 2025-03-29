@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Tool } from '@src/types/mcp';
+import type React from 'react';
+import { useState } from 'react';
+import type { Tool } from '@src/types/mcp';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
@@ -63,15 +64,10 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
             <Icon
               name="chevron-right"
               size="sm"
-              className={cn(
-                'text-slate-600 dark:text-slate-300 transition-transform',
-                isExpanded ? 'rotate-90' : '',
-              )}
+              className={cn('text-slate-600 dark:text-slate-300 transition-transform', isExpanded ? 'rotate-90' : '')}
             />
           </button>
-          <Typography variant="h3">
-            Available Tools
-          </Typography>
+          <Typography variant="h3">Available Tools</Typography>
         </div>
         <Button
           onClick={handleRefresh}

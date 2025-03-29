@@ -98,8 +98,10 @@ class McpInterface {
         const inactiveTime = now - lastActivity;
 
         if (inactiveTime > this.connectionTimeoutThreshold) {
-          console.log(`[MCP Interface] Connection ${connectionId} is stale (inactive for ${inactiveTime}ms), cleaning up`);
-          
+          console.log(
+            `[MCP Interface] Connection ${connectionId} is stale (inactive for ${inactiveTime}ms), cleaning up`,
+          );
+
           try {
             // Attempt to notify the content script before disconnecting
             port.postMessage({
@@ -107,13 +109,13 @@ class McpInterface {
               isConnected: false,
               reason: 'TIMEOUT',
             });
-            
+
             // Then disconnect
             port.disconnect();
           } catch (error) {
             // Ignore errors during disconnect
           }
-          
+
           // Remove from our maps
           this.connections.delete(connectionId);
           this.connectionLastActiveTimestamps.delete(connectionId);
@@ -146,7 +148,7 @@ class McpInterface {
    */
   private handleMessage(connectionId: string, message: any): void {
     console.log(`[MCP Interface] Received message from ${connectionId}:`, message.type);
-    
+
     // Update the last active timestamp for this connection
     this.connectionLastActiveTimestamps.set(connectionId, Date.now());
 
@@ -239,7 +241,6 @@ class McpInterface {
       // Ensure args is a proper object before passing it
       let processedArgs = typeof args === 'object' && args !== null ? args : {};
 
-
       // Send a status update that we're processing
       port.postMessage({
         type: 'TOOL_CALL_STATUS',
@@ -253,21 +254,16 @@ class McpInterface {
         // First convert to string and back to strip any non-serializable properties
         const argsString = JSON.stringify(processedArgs);
         sanitizedArgs = JSON.parse(argsString);
-        
+
         // Log the sanitized args for debugging
         console.log(`[MCP Interface] Sanitized args:`, sanitizedArgs);
       } catch (error) {
         console.error(`[MCP Interface] Error sanitizing args:`, error);
         // If JSON serialization fails, fall back to an empty object
         sanitizedArgs = {};
-        this.sendError(
-          connectionId,
-          'INVALID_ARGS',
-          'Arguments could not be properly serialized to JSON',
-          requestId
-        );
+        this.sendError(connectionId, 'INVALID_ARGS', 'Arguments could not be properly serialized to JSON', requestId);
       }
-      
+
       // Replace the processed args with the sanitized version
       processedArgs = sanitizedArgs;
 
@@ -555,7 +551,7 @@ class McpInterface {
         // Ignore errors during disconnect
       }
     });
-    
+
     this.connections.clear();
     this.connectionLastActiveTimestamps.clear();
   }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { mcpHandler } from '@src/utils/mcpHandler';
-import { Primitive, Tool, BackgroundCommunication, ServerConfig } from '@src/types/mcp';
+import type { Primitive, Tool, BackgroundCommunication, ServerConfig } from '@src/types/mcp';
 import { logMessage } from '@src/utils/helpers';
 
 /**

@@ -39,4 +39,4 @@ export { GeminiPatternUnifiedObserver, createGeminiPatternObserver } from './Pat
 // Register the Gemini markdown handler
 const geminiMarkdownHandler = new GeminiMarkdownHandler();
 MarkdownHandler.registerHandler('gemini', geminiMarkdownHandler);
-logMessage('Registered markdown handler for gemini'); 
+logMessage('Registered markdown handler for gemini');

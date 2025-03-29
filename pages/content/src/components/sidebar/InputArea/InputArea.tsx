@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import type React from 'react';
+import { useState } from 'react';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
@@ -20,13 +21,13 @@ const InputArea: React.FC<InputAreaProps> = ({ onSubmit }) => {
       setIsSubmitting(true);
       try {
         let processedText = inputText;
-        
+
         if (mode === 'Command') {
           processedText = `<command>\n${inputText}\n</command>`;
         } else if (mode === 'Ask') {
           processedText = `<Ask>\n${inputText}\n</Ask>`;
         }
-        
+
         // Wait 200ms before submitting
         await new Promise(resolve => setTimeout(resolve, 300));
         onSubmit(processedText);
@@ -51,15 +52,16 @@ const InputArea: React.FC<InputAreaProps> = ({ onSubmit }) => {
       <CardContent className="p-3 bg-white dark:bg-slate-900">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="mb-2">
-            <label htmlFor="mode-select" className="block text-sm font-medium bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="mode-select"
+              className="block text-sm font-medium bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-1">
               Mode
             </label>
             <select
               id="mode-select"
               value={mode}
-              onChange={(e) => setMode(e.target.value as InputMode)}
-              className="w-full px-3 py-2 text-sm border text-slate-900 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400 dark:focus:ring-slate-500 focus:border-slate-400 dark:focus:border-slate-500  dark:text-slate-200"
-            >
+              onChange={e => setMode(e.target.value as InputMode)}
+              className="w-full px-3 py-2 text-sm border text-slate-900 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400 dark:focus:ring-slate-500 focus:border-slate-400 dark:focus:border-slate-500  dark:text-slate-200">
               <option value="Command">Command</option>
               <option value="Ask">Ask</option>
               <option value="None">None</option>
@@ -77,12 +79,8 @@ const InputArea: React.FC<InputAreaProps> = ({ onSubmit }) => {
           <Button
             type="submit"
             disabled={isSubmitting || !inputText.trim()}
-            className={cn(
-              'px-4 py-2 h-9',
-              isSubmitting || !inputText.trim() ? 'opacity-50' : ''
-            )}
-            variant={isSubmitting || !inputText.trim() ? "outline" : "default"}
-          >
+            className={cn('px-4 py-2 h-9', isSubmitting || !inputText.trim() ? 'opacity-50' : '')}
+            variant={isSubmitting || !inputText.trim() ? 'outline' : 'default'}>
             {isSubmitting ? (
               <>
                 <Icon name="refresh" size="sm" className="animate-spin mr-2" />

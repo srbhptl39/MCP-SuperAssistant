@@ -9,9 +9,6 @@ export * from './toolcallParser';
 export * from './markdownParser';
 export { SidebarManager } from '../sidebar';
 export { BaseUnifiedObserver } from './unifiedPatternObserver';
-export { 
-  BaseUnifiedObserver as BasePatternUnifiedObserver, 
-  TOOL_COMMAND_TYPE 
-} from './unifiedPatternObserver';
+export { BaseUnifiedObserver as BasePatternUnifiedObserver, TOOL_COMMAND_TYPE } from './unifiedPatternObserver';
 export type { DetectedToolCommand } from './unifiedPatternObserver';
 // export type { SiteSelectors, SiteHandlers } from './unifiedPatternObserver';

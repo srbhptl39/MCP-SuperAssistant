@@ -8,7 +8,8 @@
 import type { SiteAdapter, ToolDetector } from '../../utils/siteAdapter';
 import { logMessage } from '../../utils/helpers';
 import { clearTrackedElements, getTrackedElementCount } from '../../utils/elementTracker';
-import { SimpleToolDetector, createToolDetector } from '../../utils/toolDetector';
+import type { SimpleToolDetector } from '../../utils/toolDetector';
+import { createToolDetector } from '../../utils/toolDetector';
 import { SidebarManager } from '../../components/sidebar';
 
 export abstract class BaseAdapter implements SiteAdapter {
@@ -35,15 +36,15 @@ export abstract class BaseAdapter implements SiteAdapter {
     // Default implementation looks for pre and code elements which often contain tool commands
     const preElements = Array.from(root.querySelectorAll('pre'));
     const codeElements = Array.from(root.querySelectorAll('code'));
-    
+
     // Combine and return unique elements
     const elements = [...preElements, ...codeElements];
-    
+
     // Log the found elements
     if (elements.length > 0) {
       logMessage(`Default getToolCommandElements found ${elements.length} potential elements in ${this.name}`);
     }
-    
+
     return elements;
   }
 

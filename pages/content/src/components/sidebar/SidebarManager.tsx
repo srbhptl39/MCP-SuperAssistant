@@ -1,5 +1,6 @@
-import React from 'react';
-import { BaseSidebarManager, SiteType, ToolOutputHandler } from './base/BaseSidebarManager';
+import type React from 'react';
+import type { SiteType, ToolOutputHandler } from './base/BaseSidebarManager';
+import { BaseSidebarManager } from './base/BaseSidebarManager';
 import { logMessage } from '@src/utils/helpers';
 import Sidebar from './Sidebar';
 
@@ -144,7 +145,7 @@ export class SidebarManager extends BaseSidebarManager {
     if (window.activeSidebarManager === this) {
       window.activeSidebarManager = undefined;
     }
-    
+
     // Call the parent destroy method
     super.destroy();
   }

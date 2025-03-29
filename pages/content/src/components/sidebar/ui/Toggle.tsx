@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { cn } from '@src/lib/utils';
 
 interface ToggleProps {
@@ -46,7 +46,9 @@ const Toggle: React.FC<ToggleProps> = ({ label, checked, onChange, className, si
           className={cn(
             'pointer-events-none inline-block transform rounded-full shadow ring-0 transition duration-200 ease-in-out',
             toggleSize[size].circle,
-            checked ? `${toggleSize[size].translate} bg-white dark:bg-slate-900` : 'translate-x-0 bg-white dark:bg-slate-900',
+            checked
+              ? `${toggleSize[size].translate} bg-white dark:bg-slate-900`
+              : 'translate-x-0 bg-white dark:bg-slate-900',
           )}
         />
       </button>

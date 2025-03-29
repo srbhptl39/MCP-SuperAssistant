@@ -6,7 +6,7 @@
  */
 
 import { logMessage } from './helpers';
-import { ToolDetector } from './siteAdapter';
+import type { ToolDetector } from './siteAdapter';
 
 // Define interface for detected tools
 export interface DetectedTool {

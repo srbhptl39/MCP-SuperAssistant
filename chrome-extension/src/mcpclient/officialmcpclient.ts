@@ -245,7 +245,7 @@ class PersistentMcpClient {
       }
 
       // Call the tool
-      console.log("Args: ", args);
+      console.log('Args: ', args);
       const result = await client.callTool({ name: toolName, arguments: args });
       spinner.success(`Tool ${toolName} called successfully`);
       prettyPrint(result);

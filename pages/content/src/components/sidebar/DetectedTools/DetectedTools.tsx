@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import type React from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
@@ -21,27 +22,27 @@ interface DetectedToolsProps {
   onClearTools?: () => void;
 }
 
-const DetectedTools: React.FC<DetectedToolsProps> = ({ 
-  tools, 
-  onExecute, 
-  onInsert, 
+const DetectedTools: React.FC<DetectedToolsProps> = ({
+  tools,
+  onExecute,
+  onInsert,
   onAttachAsFile,
   autoSubmit = false,
   autoExecute = false,
   triggerSubmission,
-  onClearTools
+  onClearTools,
 }) => {
   const [results, setResults] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [attaching, setAttaching] = useState<{ [key: string]: boolean }>({});
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [autoExecutedTools, setAutoExecutedTools] = useState<Set<string>>(new Set());
-  
+
   // Queue system for tool execution
   const [toolQueue, setToolQueue] = useState<Tool[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [invalidJsonTools, setInvalidJsonTools] = useState<Set<string>>(new Set());
-  
+
   // Store tool IDs that were present when auto-execute was enabled
   const existingToolsRef = useRef<Set<string>>(new Set());
   const previousAutoExecuteRef = useRef(autoExecute);
@@ -49,17 +50,17 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
   // Deduplicate tools with the same name and arguments
   const uniqueTools = useMemo(() => {
     const toolMap = new Map<string, Tool>();
-    
+
     tools.forEach(tool => {
       // Create a unique key based on tool name and stringified arguments
       const toolKey = `${tool.name}-${JSON.stringify(tool.args)}`;
-      
+
       // Only add the tool if it's not already in the map
       if (!toolMap.has(toolKey)) {
         toolMap.set(toolKey, tool);
       }
     });
-    
+
     // Return the array of unique tools
     return Array.from(toolMap.values());
   }, [tools]);
@@ -67,7 +68,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
   // Validate JSON arguments for each tool
   useEffect(() => {
     const newInvalidTools = new Set<string>(invalidJsonTools);
-    
+
     uniqueTools.forEach(tool => {
       try {
         // Check if args is valid JSON
@@ -77,32 +78,32 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
           } catch (e) {
             newInvalidTools.add(tool.id);
             if (!results[tool.id]) {
-              setResults(prev => ({ 
-                ...prev, 
-                [tool.id]: `Error: Invalid JSON arguments` 
+              setResults(prev => ({
+                ...prev,
+                [tool.id]: `Error: Invalid JSON arguments`,
               }));
             }
           }
         } else if (tool.args !== null && typeof tool.args !== 'object') {
           newInvalidTools.add(tool.id);
           if (!results[tool.id]) {
-            setResults(prev => ({ 
-              ...prev, 
-              [tool.id]: `Error: Arguments must be a valid JSON object or array` 
+            setResults(prev => ({
+              ...prev,
+              [tool.id]: `Error: Arguments must be a valid JSON object or array`,
             }));
           }
         }
       } catch (error) {
         newInvalidTools.add(tool.id);
         if (!results[tool.id]) {
-          setResults(prev => ({ 
-            ...prev, 
-            [tool.id]: `Error validating arguments: ${error}` 
+          setResults(prev => ({
+            ...prev,
+            [tool.id]: `Error validating arguments: ${error}`,
           }));
         }
       }
     });
-    
+
     setInvalidJsonTools(newInvalidTools);
   }, [uniqueTools]);
 
@@ -114,7 +115,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
       existingToolsRef.current = currentToolIds;
       logMessage(`[DetectedTools] Auto-execute enabled. Marked ${currentToolIds.size} existing tools to be ignored.`);
     }
-    
+
     previousAutoExecuteRef.current = autoExecute;
   }, [autoExecute, uniqueTools]);
 
@@ -126,12 +127,11 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
     // 1. Haven't been auto-executed yet
     // 2. Weren't present when auto-execute was enabled
     // 3. Don't have invalid JSON arguments
-    const toolsToExecute = uniqueTools.filter(tool => 
-      !autoExecutedTools.has(tool.id) && 
-      !existingToolsRef.current.has(tool.id) &&
-      !invalidJsonTools.has(tool.id)
+    const toolsToExecute = uniqueTools.filter(
+      tool =>
+        !autoExecutedTools.has(tool.id) && !existingToolsRef.current.has(tool.id) && !invalidJsonTools.has(tool.id),
     );
-    
+
     if (toolsToExecute.length > 0) {
       // Add tools to the auto-executed set
       const newAutoExecutedTools = new Set(autoExecutedTools);
@@ -149,12 +149,12 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
   useEffect(() => {
     const processQueue = async () => {
       if (toolQueue.length === 0 || isProcessingQueue) return;
-      
+
       setIsProcessingQueue(true);
-      
+
       const tool = toolQueue[0];
       logMessage(`[DetectedTools] Processing tool from queue: ${tool.name}`);
-      
+
       try {
         // Skip execution if the tool has invalid JSON
         if (invalidJsonTools.has(tool.id)) {
@@ -181,10 +181,10 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
         setResults(prev => ({ ...prev, [tool.id]: `Error: ${error}` }));
       } finally {
         setLoading(prev => ({ ...prev, [tool.id]: false }));
-        
+
         // Remove the processed tool from the queue
         setToolQueue(prev => prev.slice(1));
-        
+
         // Wait for 1 second before processing the next tool
         setTimeout(() => {
           setIsProcessingQueue(false);
@@ -206,7 +206,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
       logMessage(`[DetectedTools] Cannot queue tool with invalid JSON arguments: ${tool.name}`);
       return;
     }
-    
+
     setToolQueue(prev => [...prev, tool]);
     logMessage(`[DetectedTools] Added tool to queue: ${tool.name}`);
   };
@@ -221,7 +221,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
     e?.stopPropagation();
     const formattedResult = `<tool_output>\n${result}\n</tool_output>`;
     onInsert(formattedResult);
-    
+
     // If autoSubmit is enabled, trigger submission after insertion
     if (autoSubmit && triggerSubmission) {
       // Add a small delay to ensure text is inserted before submission
@@ -274,7 +274,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
     setExpandedTool(null);
     setIsProcessingQueue(false);
     // We don't reset autoExecutedTools to prevent re-execution
-    
+
     // Call parent callback to clear the actual tools array if provided
     if (onClearTools) {
       onClearTools();
@@ -301,7 +301,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
               </span>
             )}
           </Typography>
-          
+
           {/* Add Clear All button */}
           {(uniqueTools.length > 0 || toolQueue.length > 0) && (
             <Button
@@ -326,10 +326,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
               className="rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
               <div className="px-3 py-2.5 bg-white dark:bg-slate-900">
                 <div className="flex items-center justify-between">
-                  <div 
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={() => toggleExpand(tool.id)}
-                  >
+                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleExpand(tool.id)}>
                     <Icon name="lightning" size="sm" className="text-emerald-500" />
                     <Typography variant="body" className="font-medium">
                       {tool.name}
@@ -353,19 +350,25 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                       )}
                     />
                   </div>
-                  
+
                   <div className="flex items-center gap-1.5">
                     {/* Primary Execute Button - Always visible */}
                     <Button
-                      onClick={(e) => handleExecute(tool, e)}
-                      disabled={loading[tool.id] || toolQueue.some(queuedTool => queuedTool.id === tool.id) || invalidJsonTools.has(tool.id)}
+                      onClick={e => handleExecute(tool, e)}
+                      disabled={
+                        loading[tool.id] ||
+                        toolQueue.some(queuedTool => queuedTool.id === tool.id) ||
+                        invalidJsonTools.has(tool.id)
+                      }
                       size="sm"
                       variant="outline"
                       className={cn(
                         'h-7 px-2 text-xs',
-                        (loading[tool.id] || toolQueue.some(queuedTool => queuedTool.id === tool.id) || invalidJsonTools.has(tool.id))
+                        loading[tool.id] ||
+                          toolQueue.some(queuedTool => queuedTool.id === tool.id) ||
+                          invalidJsonTools.has(tool.id)
                           ? 'opacity-50'
-                          : 'bg-emerald-100/50 hover:bg-emerald-200/50 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-emerald-100/50 hover:bg-emerald-200/50 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
                       )}>
                       {loading[tool.id] ? (
                         <span className="flex items-center">
@@ -388,12 +391,12 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                         </span>
                       )}
                     </Button>
-                    
+
                     {/* Show Insert and Attach buttons only when result is available */}
                     {results[tool.id] && (
                       <>
                         <Button
-                          onClick={(e) => handleInsert(results[tool.id], e)}
+                          onClick={e => handleInsert(results[tool.id], e)}
                           size="sm"
                           variant="outline"
                           className="h-7 px-2 text-xs bg-purple-100/50 hover:bg-purple-200/50 dark:bg-purple-900/20 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-400">
@@ -402,10 +405,10 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                             <span>Insert</span>
                           </span>
                         </Button>
-                        
+
                         {onAttachAsFile && (
                           <Button
-                            onClick={(e) => handleAttachAsFile(tool, e)}
+                            onClick={e => handleAttachAsFile(tool, e)}
                             disabled={attaching[tool.id]}
                             size="sm"
                             variant="outline"
@@ -413,7 +416,7 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                               'h-7 px-2 text-xs',
                               attaching[tool.id]
                                 ? 'opacity-50'
-                                : 'bg-slate-100/50 hover:bg-slate-200/50 dark:bg-slate-900/20 dark:hover:bg-slate-900/30 text-slate-700 dark:text-slate-400'
+                                : 'bg-slate-100/50 hover:bg-slate-200/50 dark:bg-slate-900/20 dark:hover:bg-slate-900/30 text-slate-700 dark:text-slate-400',
                             )}>
                             {attaching[tool.id] ? (
                               <span className="flex items-center">
@@ -439,10 +442,11 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                     <Typography variant="caption" className="mb-1 block">
                       Arguments:
                     </Typography>
-                    <pre className={cn(
-                      "text-xs bg-white p-2 rounded overflow-x-auto text-slate-700 dark:bg-slate-900 dark:text-slate-300",
-                      invalidJsonTools.has(tool.id) ? "border border-red-300 dark:border-red-700" : ""
-                    )}>
+                    <pre
+                      className={cn(
+                        'text-xs bg-white p-2 rounded overflow-x-auto text-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        invalidJsonTools.has(tool.id) ? 'border border-red-300 dark:border-red-700' : '',
+                      )}>
                       {JSON.stringify(tool.args, null, 2)}
                     </pre>
                   </div>
@@ -450,12 +454,17 @@ const DetectedTools: React.FC<DetectedToolsProps> = ({
                   {results[tool.id] && (
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-1">
-                        <Typography variant="caption" className="block">Result:</Typography>
+                        <Typography variant="caption" className="block">
+                          Result:
+                        </Typography>
                       </div>
-                      <div className={cn(
-                        "text-xs bg-white p-2 rounded overflow-x-auto text-slate-700 dark:bg-slate-900 dark:text-slate-300",
-                        results[tool.id].startsWith('Error:') ? "border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400" : ""  
-                      )}>
+                      <div
+                        className={cn(
+                          'text-xs bg-white p-2 rounded overflow-x-auto text-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                          results[tool.id].startsWith('Error:')
+                            ? 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400'
+                            : '',
+                        )}>
                         {results[tool.id]}
                       </div>
                     </div>

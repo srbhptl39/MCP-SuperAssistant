@@ -44,7 +44,9 @@ export const getSidebarPreferences = async (): Promise<SidebarPreferences> => {
       ...(preferences || {}),
     };
   } catch (error) {
-    logMessage(`[Storage] Error retrieving sidebar preferences: ${error instanceof Error ? error.message : String(error)}`);
+    logMessage(
+      `[Storage] Error retrieving sidebar preferences: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return DEFAULT_PREFERENCES;
   }
 };
@@ -71,4 +73,4 @@ export const saveSidebarPreferences = async (preferences: Partial<SidebarPrefere
   } catch (error) {
     logMessage(`[Storage] Error saving sidebar preferences: ${error instanceof Error ? error.message : String(error)}`);
   }
-}; 
+};

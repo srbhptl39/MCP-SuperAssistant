@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useState, useEffect } from 'react';
 import { useBackgroundCommunication } from '../hooks/backgroundCommunication';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
@@ -214,7 +215,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status }) => {
               onClick={handleReconnect}
               disabled={isReconnecting}
               size="sm"
-              variant={isReconnecting ? "outline" : "default"}
+              variant={isReconnecting ? 'outline' : 'default'}
               className="h-7 text-xs">
               {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
             </Button>
@@ -259,18 +260,10 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status }) => {
             </div>
             <div className="flex justify-end">
               {/* Assuming Button component handles dark mode variants */}
-              <Button
-                onClick={() => setShowSettings(false)}
-                variant="outline"
-                size="sm"
-                className="h-7 mr-2 text-xs">
+              <Button onClick={() => setShowSettings(false)} variant="outline" size="sm" className="h-7 mr-2 text-xs">
                 Cancel
               </Button>
-              <Button
-                onClick={handleSaveServerConfig}
-                variant="default"
-                size="sm"
-                className="h-7 text-xs">
+              <Button onClick={handleSaveServerConfig} variant="default" size="sm" className="h-7 text-xs">
                 Save & Reconnect
               </Button>
             </div>
@@ -287,14 +280,17 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status }) => {
               <span className="font-medium text-slate-700 dark:text-slate-200">Status:</span> {displayStatus}
             </p>
             <p className="text-slate-600 dark:text-slate-300">
-              <span className="font-medium text-slate-700 dark:text-slate-200">Server URI:</span> {serverUri || 'Not configured'}
+              <span className="font-medium text-slate-700 dark:text-slate-200">Server URI:</span>{' '}
+              {serverUri || 'Not configured'}
             </p>
             <p className="text-slate-600 dark:text-slate-300">
-              <span className="font-medium text-slate-700 dark:text-slate-200">Last updated:</span> {new Date().toLocaleTimeString()}
+              <span className="font-medium text-slate-700 dark:text-slate-200">Last updated:</span>{' '}
+              {new Date().toLocaleTimeString()}
             </p>
             {lastReconnectTime && (
               <p className="text-slate-600 dark:text-slate-300">
-                <span className="font-medium text-slate-700 dark:text-slate-200">Last reconnect attempt:</span> {lastReconnectTime}
+                <span className="font-medium text-slate-700 dark:text-slate-200">Last reconnect attempt:</span>{' '}
+                {lastReconnectTime}
               </p>
             )}
           </CardContent>

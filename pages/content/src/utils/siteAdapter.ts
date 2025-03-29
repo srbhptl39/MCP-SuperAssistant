@@ -63,9 +63,9 @@ export function getSiteAdapter(): SiteAdapter | null {
   logMessage(`Looking for adapter for hostname: ${currentHostname} and URL: ${currentUrl}`);
 
   // Log all registered adapters for debugging
-  const adapterHostnames = siteAdapters.map(adapter => 
-    Array.isArray(adapter.hostname) ? adapter.hostname.join(', ') : adapter.hostname
-  ).join('; ');
+  const adapterHostnames = siteAdapters
+    .map(adapter => (Array.isArray(adapter.hostname) ? adapter.hostname.join(', ') : adapter.hostname))
+    .join('; ');
   logMessage(`Current registered adapters: ${adapterHostnames}`);
 
   for (const adapter of siteAdapters) {
@@ -81,7 +81,7 @@ export function getSiteAdapter(): SiteAdapter | null {
     // Check hostname match
     let hostnameMatch = false;
     const hostnames = Array.isArray(adapter.hostname) ? adapter.hostname : [adapter.hostname];
-    
+
     for (const hostname of hostnames) {
       const adapterHostnameNoWww = hostname.replace(/^www\./, '');
       const currentHostnameNoWww = currentHostname.replace(/^www\./, '');

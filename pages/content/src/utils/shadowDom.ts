@@ -3,7 +3,7 @@ import { logMessage } from './helpers';
 /**
  * Injects CSS into a Shadow DOM with proper error handling
  * This enhanced version ensures CSS is properly scoped and applied in the Shadow DOM
- * 
+ *
  * @param shadowRoot The Shadow DOM root to inject styles into
  * @param cssPath The path to the CSS file relative to the extension root
  * @returns Promise that resolves when the CSS is injected or rejects with an error
@@ -16,27 +16,26 @@ export const injectShadowDomCSS = async (shadowRoot: ShadowRoot, cssPath: string
   try {
     const cssUrl = chrome.runtime.getURL(cssPath);
     logMessage(`Fetching CSS from: ${cssUrl}`);
-    
+
     const response = await fetch(cssUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch CSS: ${response.statusText} (URL: ${cssUrl})`);
     }
-    
+
     let cssText = await response.text();
     if (cssText.length === 0) {
       throw new Error('CSS content is empty');
     }
-    
+
     logMessage(`Fetched CSS content (${cssText.length} bytes)`);
-    
+
     // Modify the CSS to better target elements within the Shadow DOM
     cssText = transformCSSForShadowDOM(cssText);
-    
+
     const styleElement = document.createElement('style');
     styleElement.textContent = cssText;
     shadowRoot.appendChild(styleElement);
-    
-    
+
     logMessage('Successfully injected CSS into Shadow DOM with additional customizations');
     return Promise.resolve();
   } catch (error) {
@@ -48,17 +47,17 @@ export const injectShadowDomCSS = async (shadowRoot: ShadowRoot, cssPath: string
 /**
  * Transform CSS to better work within Shadow DOM
  * This function processes the CSS to ensure it targets elements within the Shadow DOM correctly
- * 
+ *
  * @param css The original CSS content
  * @returns The transformed CSS content
  */
 function transformCSSForShadowDOM(css: string): string {
   // Keep track of CSS processing
   logMessage('Transforming CSS for Shadow DOM compatibility');
-  
+
   // Remove any host-targeting selectors that might cause conflicts
   css = css.replace(/:root/g, ':host');
-  
+
   // Add custom Shadow DOM enhancements
   css = `
     /* Shadow DOM Reset Styles */
@@ -77,28 +76,27 @@ function transformCSSForShadowDOM(css: string): string {
     /* Original CSS with modifications */
     ${css}
   `;
-  
+
   return css;
 }
 
 /**
  * Generate custom styles specifically for the Shadow DOM
  * These styles help ensure the UI renders correctly within the Shadow DOM
- * 
+ *
  * @returns CSS string with custom styles
  */
-
 
 /**
  * Apply critical styles directly to an element within the Shadow DOM
  * This can be used to fix specific styling issues on individual elements
- * 
+ *
  * @param element The element to style
  * @param styles CSS styles as a string
  */
 export const applyShadowDomElementStyles = (element: HTMLElement, styles: string): void => {
   if (!element) return;
-  
+
   // Apply styles directly to the element
   element.setAttribute('style', `${element.getAttribute('style') || ''}; ${styles}`);
   logMessage(`Applied direct styles to element: ${element.tagName}`);
@@ -108,7 +106,7 @@ export const applyShadowDomElementStyles = (element: HTMLElement, styles: string
  * Apply dark mode styling to the Shadow DOM
  * This function applies dark mode by adding a class to the Shadow DOM host
  * and injecting CSS variables for theme colors
- * 
+ *
  * @param shadowRoot The Shadow DOM root to apply dark mode to
  * @returns void
  */
@@ -117,13 +115,13 @@ export const applyDarkMode = (shadowRoot: ShadowRoot): void => {
     logMessage('[applyDarkMode] Shadow root is not available');
     return;
   }
-  
+
   // Add the dark mode class to the host element
   if (shadowRoot.host) {
     shadowRoot.host.classList.remove('light');
     shadowRoot.host.classList.add('dark');
   }
-  
+
   // Apply theme via CSS variables
   const styleElement = shadowRoot.querySelector('#theme-variables') as HTMLStyleElement;
   if (styleElement) {
@@ -134,7 +132,7 @@ export const applyDarkMode = (shadowRoot: ShadowRoot): void => {
     newStyleElement.textContent = generateDarkThemeVariables();
     shadowRoot.appendChild(newStyleElement);
   }
-  
+
   logMessage('[applyDarkMode] Dark mode applied to Shadow DOM');
 };
 
@@ -142,7 +140,7 @@ export const applyDarkMode = (shadowRoot: ShadowRoot): void => {
  * Apply light mode styling to the Shadow DOM
  * This function applies light mode by adding a class to the Shadow DOM host
  * and injecting CSS variables for theme colors
- * 
+ *
  * @param shadowRoot The Shadow DOM root to apply light mode to
  * @returns void
  */
@@ -151,13 +149,13 @@ export const applyLightMode = (shadowRoot: ShadowRoot): void => {
     logMessage('[applyLightMode] Shadow root is not available');
     return;
   }
-  
+
   // Add the light mode class to the host element
   if (shadowRoot.host) {
     shadowRoot.host.classList.remove('dark');
     shadowRoot.host.classList.add('light');
   }
-  
+
   // Apply theme via CSS variables
   const styleElement = shadowRoot.querySelector('#theme-variables') as HTMLStyleElement;
   if (styleElement) {
@@ -168,7 +166,7 @@ export const applyLightMode = (shadowRoot: ShadowRoot): void => {
     newStyleElement.textContent = generateLightThemeVariables();
     shadowRoot.appendChild(newStyleElement);
   }
-  
+
   logMessage('[applyLightMode] Light mode applied to Shadow DOM');
 };
 
@@ -338,7 +336,7 @@ function generateLightThemeVariables(): string {
 /**
  * Debug Shadow DOM styling issues
  * This is a helper function for development to diagnose styling problems
- * 
+ *
  * @param shadowRoot The Shadow DOM root to debug
  */
 export const debugShadowDomStyling = (shadowRoot: ShadowRoot): void => {
@@ -347,26 +345,26 @@ export const debugShadowDomStyling = (shadowRoot: ShadowRoot): void => {
       console.error('Cannot debug: Shadow DOM not available');
       return;
     }
-    
+
     // Log all style elements in the Shadow DOM
     const styles = shadowRoot.querySelectorAll('style');
     console.log(`[Debug] Found ${styles.length} style elements in Shadow DOM`);
-    
+
     styles.forEach((style, index) => {
       console.log(`[Debug] Style #${index + 1}:`, style.textContent);
     });
-    
+
     // Log computed styles for key elements
     const sidebarContainer = shadowRoot.querySelector('#sidebar-container');
     if (sidebarContainer) {
       console.log('[Debug] Sidebar container computed styles:', window.getComputedStyle(sidebarContainer));
     }
-    
+
     // Check dark mode
     const host = shadowRoot.host;
     console.log('[Debug] Shadow host classes:', host.className);
     console.log('[Debug] Is dark mode active in host?', host.classList.contains('dark'));
-    
+
     logMessage('[Debug] Shadow DOM styling debug complete - check console for details');
   } catch (error) {
     console.error('Error debugging Shadow DOM styles:', error);
@@ -387,21 +385,21 @@ export const injectTailwindToShadowDom = async (shadowRoot: ShadowRoot): Promise
     // 1. Fetch the compiled Tailwind CSS
     const cssUrl = chrome.runtime.getURL('content/index.css');
     logMessage(`Fetching Tailwind CSS from: ${cssUrl}`);
-    
+
     const response = await fetch(cssUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch CSS: ${response.statusText}`);
     }
-    
+
     const cssText = await response.text();
-    
+
     // 2. Create a CSSStyleSheet using the Constructable Stylesheets API
     const sheet = new CSSStyleSheet();
     await sheet.replace(cssText);
-    
+
     // 3. Apply the stylesheet to the shadow root
     shadowRoot.adoptedStyleSheets = [sheet];
-    
+
     // 4. Add essential Shadow DOM reset styles
     const resetStyles = document.createElement('style');
     resetStyles.textContent = `
@@ -415,10 +413,10 @@ export const injectTailwindToShadowDom = async (shadowRoot: ShadowRoot): Promise
       }
     `;
     shadowRoot.appendChild(resetStyles);
-    
+
     logMessage('Successfully injected Tailwind CSS into Shadow DOM using Constructable Stylesheets');
   } catch (error) {
     logMessage(`Error injecting Tailwind CSS: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
-}; 
+};
