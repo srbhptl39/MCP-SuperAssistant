@@ -26,9 +26,18 @@ class AdapterRegistryImpl implements AdapterRegistry {
   // Register a new adapter
   registerAdapter(adapter: SiteAdapter): void {
     const hostnames = Array.isArray(adapter.hostname) ? adapter.hostname : [adapter.hostname];
+    if (!hostnames.length) {
+      logMessage('Cannot register adapter: no hostnames provided');
+      return;
+    }
 
     for (const hostname of hostnames) {
+      if (this.adapters.has(hostname)) {
+        logMessage(`Adapter for hostname ${hostname} already registered, replacing...`);
+      }
+
       this.adapters.set(hostname, adapter);
+      logMessage(`Registered adapter for hostname: ${hostname}`);
     }
 
     // Clear the cache when a new adapter is registered
@@ -101,6 +110,31 @@ class AdapterRegistryImpl implements AdapterRegistry {
     }
 
     return undefined;
+  }
+
+  // Get all registered adapters
+  getAllAdapters(): SiteAdapter[] {
+    // Use Set to deduplicate adapters that might be registered for multiple hostnames
+    return Array.from(new Set(this.adapters.values()));
+  }
+
+  // Check if an adapter is registered for a hostname
+  hasAdapter(hostname: string): boolean {
+    return this.adapters.has(hostname);
+  }
+
+  // Remove an adapter by hostname
+  removeAdapter(hostname: string): void {
+    if (this.adapters.has(hostname)) {
+      this.adapters.delete(hostname);
+      logMessage(`Removed adapter for hostname: ${hostname}`);
+    }
+  }
+
+  // Clear all registered adapters
+  clearAdapters(): void {
+    this.adapters.clear();
+    logMessage('Cleared all registered adapters');
   }
 }
 

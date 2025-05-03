@@ -40,6 +40,7 @@ const manifest = {
     '*://*.aistudio.google.com/*',
     '*://*.openrouter.ai/*',
     '*://*.google-analytics.com/*',
+    '*://*.agenthustle.ai/*',
   ],
   permissions: ['storage', 'clipboardWrite'],
   // permissions: ['storage', 'scripting', 'clipboardWrite'],
@@ -102,6 +103,12 @@ const manifest = {
     // Specific content script for OpenRouter tool call parsing
     {
       matches: ['*://*.openrouter.ai/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+    // Specific content script for AgentHustle tool call parsing
+    {
+      matches: ['*://*.agenthustle.ai/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },
