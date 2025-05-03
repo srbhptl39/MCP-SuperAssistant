@@ -13,7 +13,7 @@ import '@src/components/sidebar/styles/sidebar.css';
 /**
  * Type definition for the site type
  */
-export type SiteType = 'perplexity' | 'chatgpt' | 'grok' | 'gemini' | 'aistudio' | 'openrouter';
+export type SiteType = 'perplexity' | 'chatgpt' | 'grok' | 'gemini' | 'aistudio' | 'openrouter' | 'agenthustle';
 
 /**
  * BaseSidebarManager is a base class for creating sidebar managers
