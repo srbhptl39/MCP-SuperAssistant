@@ -24,6 +24,13 @@ export interface FunctionCallRendererConfig {
   enableStalledStreamDetection: boolean;
   stalledStreamTimeout: number;
   stalledStreamCheckInterval: number;
+  // Retry mechanism for better resilience
+  maxRetryAttempts: number;
+  retryDelay: number;
+  // New properties for better resilience
+  reconnectDelay: number;
+  maxReconnectAttempts: number;
+  exponentialBackoff: boolean;
 }
 
 /**

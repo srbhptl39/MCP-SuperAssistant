@@ -11,6 +11,8 @@ import {
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
 import type { ParamValueElement } from '../core/types';
+import { streamingLastUpdated } from '../observer/streamObserver';
+import { stalledStreamRetryCount, stalledStreams } from '../observer/stalledStreamHandler';
 
 // Define custom property for tracking scroll state
 declare global {
@@ -183,417 +185,457 @@ if (typeof window !== 'undefined') {
 }
 
 export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { current: boolean }): boolean => {
-  const functionInfo = containsFunctionCalls(block);
+  try {
+    const functionInfo = containsFunctionCalls(block);
 
-  if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
-    return false;
-  }
-
-  const blockId =
-    block.getAttribute('data-block-id') || `block-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-  // Get the set of pre-existing incomplete blocks if it exists
-  const preExistingIncompleteBlocks = (window as any).preExistingIncompleteBlocks || new Set<string>();
-
-  // Check if this is a pre-existing incomplete block that should not get spinners
-  const isPreExistingIncomplete = preExistingIncompleteBlocks.has(blockId);
-
-  let existingDiv = renderedFunctionBlocks.get(blockId);
-  let isNewRender = false;
-  let previousCompletionStatus: boolean | null = null;
-
-  if (processedElements.has(block)) {
-    if (!existingDiv) {
-      const existingDivs = document.querySelectorAll<HTMLDivElement>(`.function-block[data-block-id="${blockId}"]`);
-      if (existingDivs.length > 0) {
-        existingDiv = existingDivs[0];
-        renderedFunctionBlocks.set(blockId, existingDiv);
-      } else {
-        processedElements.delete(block);
-      }
-    }
-  }
-
-  if (!existingDiv) {
-    isNewRender = true;
-    if (!processedElements.has(block)) {
-      processedElements.add(block);
-      block.setAttribute('data-block-id', blockId);
-    }
-  } else {
-    previousCompletionStatus = !existingDiv.classList.contains('function-loading');
-  }
-
-  const rawContent = block.textContent?.trim() || '';
-  const { tag, content } = extractLanguageTag(rawContent);
-
-  // CRITICAL: Use the existing div if available for streaming updates, or create a new one
-  const blockDiv = existingDiv || document.createElement('div');
-
-  // Only update these properties on a new render, not during streaming updates
-  if (isNewRender) {
-    blockDiv.className = 'function-block';
-    blockDiv.setAttribute('data-block-id', blockId);
-
-    // Apply theme class based on current theme
-    applyThemeClass(blockDiv);
-
-    // Register this block
-    renderedFunctionBlocks.set(blockId, blockDiv);
-  }
-
-  // Handle state transitions when block completion status changes
-  if (!isNewRender) {
-    const justCompleted = previousCompletionStatus === false && functionInfo.isComplete;
-    const justBecameIncomplete = previousCompletionStatus === true && !functionInfo.isComplete;
-
-    if (justCompleted) {
-      // Update UI state when transitioning from loading to complete
-      blockDiv.classList.remove('function-loading');
-      blockDiv.classList.add('function-complete');
-
-      // Remove spinner if exists
-      const spinner = blockDiv.querySelector('.spinner');
-      if (spinner) {
-        spinner.remove();
-      }
-    } else if (justBecameIncomplete) {
-      // Update UI state when transitioning from complete to loading
-      blockDiv.classList.remove('function-complete');
-      blockDiv.classList.add('function-loading');
-    }
-  } else {
-    // Only add loading state for new renders if not pre-existing incomplete
-    if (!functionInfo.isComplete && !isPreExistingIncomplete) {
-      blockDiv.classList.add('function-loading');
-    }
-
-    // Add language tag if needed for new renders
-    if (tag || functionInfo.languageTag) {
-      const langTag = document.createElement('div');
-      langTag.className = 'language-tag';
-      langTag.textContent = tag || functionInfo.languageTag;
-      blockDiv.appendChild(langTag);
-    }
-  }
-
-  // Extract function name from the raw content
-  // Use regex to extract function name directly from content as a fallback for functionInfo
-  const invokeMatch = content.match(/<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i);
-  const functionName = invokeMatch ? invokeMatch[1] : 'function';
-  const callId = invokeMatch && invokeMatch[2] ? invokeMatch[2] : blockId;
-
-  // Handle function name creation or update
-  let functionNameElement = blockDiv.querySelector<HTMLDivElement>('.function-name');
-
-  if (!functionNameElement) {
-    // Create function name if not exists (new render)
-    functionNameElement = document.createElement('div');
-    functionNameElement.className = 'function-name';
-
-    const functionNameText = document.createElement('span');
-    functionNameText.className = 'function-name-text';
-    functionNameText.textContent = functionName;
-    functionNameElement.appendChild(functionNameText);
-
-    // Add call ID to the function name element (positioned top right via CSS)
-    if (callId) {
-      const callIdElement = document.createElement('span');
-      callIdElement.className = 'call-id';
-      callIdElement.textContent = callId;
-      functionNameElement.appendChild(callIdElement);
-    }
-
-    // If function is not complete and not a pre-existing incomplete block, add spinner
-    if (!functionInfo.isComplete && !isPreExistingIncomplete) {
-      const spinner = document.createElement('div');
-      spinner.className = 'spinner';
-      functionNameElement.appendChild(spinner);
-    }
-
-    blockDiv.appendChild(functionNameElement);
-  } else {
-    // Update existing function name (streaming update)
-    const nameText = functionNameElement.querySelector<HTMLSpanElement>('.function-name-text');
-    if (nameText && nameText.textContent !== functionName) {
-      nameText.textContent = functionName;
-    }
-
-    // Update call ID if needed
-    const callIdElement = functionNameElement.querySelector<HTMLSpanElement>('.call-id');
-    if (callId) {
-      if (callIdElement) {
-        if (callIdElement.textContent !== callId) {
-          callIdElement.textContent = callId;
-        }
-      } else {
-        const newCallId = document.createElement('span');
-        newCallId.className = 'call-id';
-        newCallId.textContent = callId;
-        functionNameElement.appendChild(newCallId);
-      }
-    }
-  }
-
-  // Get existing or create a new parameter container
-  let paramsContainer = blockDiv.querySelector<HTMLDivElement>('.function-params');
-
-  if (!paramsContainer) {
-    // Create parameter container if it doesn't exist
-    paramsContainer = document.createElement('div');
-    paramsContainer.className = 'function-params';
-    paramsContainer.style.display = 'flex';
-    paramsContainer.style.flexDirection = 'column';
-    paramsContainer.style.gap = '4px';
-    paramsContainer.style.width = '100%';
-    blockDiv.appendChild(paramsContainer);
-  }
-
-  // --- START: Incremental Parameter Parsing and Rendering ---
-  const partialParameters: Record<string, string> = {};
-  const paramStartRegex = /<parameter\s+name="([^"]+)"[^>]*>/gs;
-  let match;
-  while ((match = paramStartRegex.exec(rawContent)) !== null) {
-    const paramName = match[1];
-    const startIndex = match.index + match[0].length;
-    const endTag = '</parameter>';
-    const endTagIndex = rawContent.indexOf(endTag, startIndex);
-
-    let extractedValue = '';
-    // Determine if parameter is complete (has ending tag) or still streaming
-    const isParamStreaming = endTagIndex === -1;
-    if (!isParamStreaming) {
-      // Full parameter content available (within the current rawContent)
-      extractedValue = rawContent.substring(startIndex, endTagIndex);
-    } else {
-      // Partial parameter content (streaming)
-      extractedValue = rawContent.substring(startIndex);
-    }
-
-    // Handle potential CDATA within the extracted value
-    const cdataMatch = extractedValue.match(/<!\[CDATA\[(.*?)(?:\]\]>)?$/s);
-    if (cdataMatch) {
-      // Use CDATA content, remove partial end tag if streaming
-      extractedValue = cdataMatch[1];
-    } else {
-      // Trim only if not CDATA, as CDATA preserves whitespace
-      extractedValue = extractedValue.trim();
-    }
-
-    partialParameters[paramName] = extractedValue;
-
-    // Create or update the parameter - use the found/created params container
-    // If paramsContainer doesn't exist, this will still work by using document-level lookup
-    createOrUpdateParamElement(paramsContainer!, paramName, extractedValue, blockId, isNewRender, isParamStreaming);
-  }
-  // --- END: Incremental Parameter Parsing and Rendering ---
-
-  // Extract *complete* parameters using the function from components.ts *only when needed*
-  let completeParameters: Record<string, any> | null = null;
-  if (functionInfo.isComplete) {
-    completeParameters = extractFunctionParameters(rawContent);
-  }
-
-  // Generate content signature *only* when complete
-  let contentSignature: string | null = null;
-  if (functionInfo.isComplete && completeParameters) {
-    contentSignature = generateContentSignature(functionName, completeParameters);
-  }
-
-  // Only replace the original element with our render if this is a new render
-  if (isNewRender) {
-    if (block.parentNode) {
-      block.parentNode.insertBefore(blockDiv, block);
-      block.style.display = 'none';
-    } else {
-      if (CONFIG.debug) console.warn('Function call block has no parent element, cannot insert rendered block');
+    if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
       return false;
     }
-  }
 
-  // Create a button container if it doesn't exist
-  let buttonContainer = blockDiv.querySelector<HTMLDivElement>('.function-buttons');
-  if (!buttonContainer) {
-    // Create a container for the buttons
-    buttonContainer = document.createElement('div');
-    buttonContainer.className = 'function-buttons';
-    blockDiv.appendChild(buttonContainer);
+    const blockId =
+      block.getAttribute('data-block-id') || `block-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Add spacing between parameters and buttons
-    const spacer = document.createElement('div');
-    spacer.style.height = '8px';
-    blockDiv.insertBefore(spacer, buttonContainer);
-  }
+    // Get the set of pre-existing incomplete blocks if it exists
+    const preExistingIncompleteBlocks = (window as any).preExistingIncompleteBlocks || new Set<string>();
 
-  // Add a raw XML toggle if the function is complete
-  if (functionInfo.isComplete && !blockDiv.querySelector('.raw-toggle')) {
-    // If we're using the button container, pass it instead of blockDiv
-    if (buttonContainer) {
-      addRawXmlToggle(buttonContainer, rawContent);
-    } else {
-      addRawXmlToggle(blockDiv, rawContent);
+    // Check if this is a pre-existing incomplete block that should not get spinners
+    const isPreExistingIncomplete = preExistingIncompleteBlocks.has(blockId);
+
+    let existingDiv = renderedFunctionBlocks.get(blockId);
+    let isNewRender = false;
+    let previousCompletionStatus: boolean | null = null;
+
+    // Track retry attempts for this block
+    const retryCount = (window as any)._stalledStreamRetryCount?.get(blockId) || 0;
+    const maxRetries = CONFIG.maxRetryAttempts;
+
+    // Enhanced error recovery - check if we're in a retry situation
+    const isRetry = retryCount > 0;
+    if (isRetry) {
+      console.debug(`Retry attempt ${retryCount}/${maxRetries} for block ${blockId}`);
     }
-  }
 
-  // Add execute button if the function is complete and not already added
-  if (functionInfo.isComplete && !blockDiv.querySelector('.execute-button')) {
-    // Ensure completeParameters is available before adding button/setting up auto-exec
-    if (!completeParameters) {
+    // If this is a retry and we've exceeded max attempts, mark as permanently failed
+    if (isRetry && retryCount >= maxRetries) {
+      console.warn(`Max retry attempts (${maxRetries}) reached for block ${blockId}`);
+      block.classList.add('function-permanently-failed');
+      return false;
+    }
+
+    if (processedElements.has(block)) {
+      if (!existingDiv) {
+        const existingDivs = document.querySelectorAll<HTMLDivElement>(`.function-block[data-block-id="${blockId}"]`);
+        if (existingDivs.length > 0) {
+          existingDiv = existingDivs[0];
+          renderedFunctionBlocks.set(blockId, existingDiv);
+        } else {
+          processedElements.delete(block);
+        }
+      }
+    }
+
+    if (!existingDiv) {
+      isNewRender = true;
+      if (!processedElements.has(block)) {
+        processedElements.add(block);
+        block.setAttribute('data-block-id', blockId);
+      }
+    } else {
+      previousCompletionStatus = !existingDiv.classList.contains('function-loading');
+    }
+
+    const rawContent = block.textContent?.trim() || '';
+    const { tag, content } = extractLanguageTag(rawContent);
+
+    // CRITICAL: Use the existing div if available for streaming updates, or create a new one
+    const blockDiv = existingDiv || document.createElement('div');
+
+    // Only update these properties on a new render, not during streaming updates
+    if (isNewRender) {
+      blockDiv.className = 'function-block';
+      blockDiv.setAttribute('data-block-id', blockId);
+
+      // Apply theme class based on current theme
+      applyThemeClass(blockDiv);
+
+      // Register this block
+      renderedFunctionBlocks.set(blockId, blockDiv);
+    }
+
+    // Handle state transitions when block completion status changes
+    if (!isNewRender) {
+      const justCompleted = previousCompletionStatus === false && functionInfo.isComplete;
+      const justBecameIncomplete = previousCompletionStatus === true && !functionInfo.isComplete;
+
+      if (justCompleted) {
+        // Update UI state when transitioning from loading to complete
+        blockDiv.classList.remove('function-loading');
+        blockDiv.classList.add('function-complete');
+
+        // Remove spinner if exists
+        const spinner = blockDiv.querySelector('.spinner');
+        if (spinner) {
+          spinner.remove();
+        }
+      } else if (justBecameIncomplete) {
+        // Update UI state when transitioning from complete to loading
+        blockDiv.classList.remove('function-complete');
+        blockDiv.classList.add('function-loading');
+      }
+    } else {
+      // Only add loading state for new renders if not pre-existing incomplete
+      if (!functionInfo.isComplete && !isPreExistingIncomplete) {
+        blockDiv.classList.add('function-loading');
+      }
+
+      // Add language tag if needed for new renders
+      if (tag || functionInfo.languageTag) {
+        const langTag = document.createElement('div');
+        langTag.className = 'language-tag';
+        langTag.textContent = tag || functionInfo.languageTag;
+        blockDiv.appendChild(langTag);
+      }
+    }
+
+    // Extract function name from the raw content
+    // Use regex to extract function name directly from content as a fallback for functionInfo
+    const invokeMatch = content.match(/<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i);
+    const functionName = invokeMatch ? invokeMatch[1] : 'function';
+    const callId = invokeMatch && invokeMatch[2] ? invokeMatch[2] : blockId;
+
+    // Handle function name creation or update
+    let functionNameElement = blockDiv.querySelector<HTMLDivElement>('.function-name');
+
+    if (!functionNameElement) {
+      // Create function name if not exists (new render)
+      functionNameElement = document.createElement('div');
+      functionNameElement.className = 'function-name';
+
+      const functionNameText = document.createElement('span');
+      functionNameText.className = 'function-name-text';
+      functionNameText.textContent = functionName;
+      functionNameElement.appendChild(functionNameText);
+
+      // Add call ID to the function name element (positioned top right via CSS)
+      if (callId) {
+        const callIdElement = document.createElement('span');
+        callIdElement.className = 'call-id';
+        callIdElement.textContent = callId;
+        functionNameElement.appendChild(callIdElement);
+      }
+
+      // If function is not complete and not a pre-existing incomplete block, add spinner
+      if (!functionInfo.isComplete && !isPreExistingIncomplete) {
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+        functionNameElement.appendChild(spinner);
+      }
+
+      blockDiv.appendChild(functionNameElement);
+    } else {
+      // Update existing function name (streaming update)
+      const nameText = functionNameElement.querySelector<HTMLSpanElement>('.function-name-text');
+      if (nameText && nameText.textContent !== functionName) {
+        nameText.textContent = functionName;
+      }
+
+      // Update call ID if needed
+      const callIdElement = functionNameElement.querySelector<HTMLSpanElement>('.call-id');
+      if (callId) {
+        if (callIdElement) {
+          if (callIdElement.textContent !== callId) {
+            callIdElement.textContent = callId;
+          }
+        } else {
+          const newCallId = document.createElement('span');
+          newCallId.className = 'call-id';
+          newCallId.textContent = callId;
+          functionNameElement.appendChild(newCallId);
+        }
+      }
+    }
+
+    // Get existing or create a new parameter container
+    let paramsContainer = blockDiv.querySelector<HTMLDivElement>('.function-params');
+
+    if (!paramsContainer) {
+      // Create parameter container if it doesn't exist
+      paramsContainer = document.createElement('div');
+      paramsContainer.className = 'function-params';
+      paramsContainer.style.display = 'flex';
+      paramsContainer.style.flexDirection = 'column';
+      paramsContainer.style.gap = '4px';
+      paramsContainer.style.width = '100%';
+      blockDiv.appendChild(paramsContainer);
+    }
+
+    // --- START: Incremental Parameter Parsing and Rendering ---
+    const partialParameters: Record<string, string> = {};
+    const paramStartRegex = /<parameter\s+name="([^"]+)"[^>]*>/gs;
+    let match;
+    while ((match = paramStartRegex.exec(rawContent)) !== null) {
+      const paramName = match[1];
+      
+      try {
+        const result = extractParameterValue(rawContent, match.index);
+        if (result !== null) {
+          partialParameters[paramName] = result.value;
+          createOrUpdateParamElement(paramsContainer!, paramName, result.value, blockId, isNewRender, result.isStreaming);
+        }
+      } catch (paramError) {
+        console.warn(`Error extracting parameter ${paramName}:`, paramError);
+        // Continue with next parameter instead of failing completely
+        continue;
+      }
+    }
+    // --- END: Incremental Parameter Parsing and Rendering ---
+
+    // Extract *complete* parameters using the function from components.ts *only when needed*
+    let completeParameters: Record<string, any> | null = null;
+    if (functionInfo.isComplete) {
       completeParameters = extractFunctionParameters(rawContent);
     }
-    // If we're using the button container, pass it instead of blockDiv
-    if (buttonContainer) {
-      addExecuteButton(buttonContainer, rawContent); // rawContent has full data here
-    } else {
-      addExecuteButton(blockDiv, rawContent);
+
+    // Generate content signature *only* when complete
+    let contentSignature: string | null = null;
+    if (functionInfo.isComplete && completeParameters) {
+      contentSignature = generateContentSignature(functionName, completeParameters);
     }
 
-    // Setup auto-execution with proper wait time for DOM stabilization
-    // This ensures we wait until the function block is fully rendered and stable
-    const autoExecuteEnabled = (window as any).toggleState?.autoExecute === true;
+    // Only replace the original element with our render if this is a new render
+    if (isNewRender) {
+      if (block.parentNode) {
+        block.parentNode.insertBefore(blockDiv, block);
+        block.style.display = 'none';
+      } else {
+        if (CONFIG.debug) console.warn('Function call block has no parent element, cannot insert rendered block');
+        return false;
+      }
+    }
 
-    // Extract function information for execution tracking
-    const invokeMatch = content.match(/<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i);
-    const extractedCallId = invokeMatch && invokeMatch[2] ? invokeMatch[2] : blockId;
+    // Create a button container if it doesn't exist
+    let buttonContainer = blockDiv.querySelector<HTMLDivElement>('.function-buttons');
+    if (!buttonContainer) {
+      // Create a container for the buttons
+      buttonContainer = document.createElement('div');
+      buttonContainer.className = 'function-buttons';
+      blockDiv.appendChild(buttonContainer);
 
-    // Check if the function has already been executed using the complete signature
-    if (contentSignature && !executionTracker.isFunctionExecuted(extractedCallId, contentSignature, functionName)) {
-      // Proceed with auto-execution setup
-      // STRICT CHECK #1: Is auto-execute enabled in UI settings?
-      if (autoExecuteEnabled !== true) {
-        console.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
-        return true;
+      // Add spacing between parameters and buttons
+      const spacer = document.createElement('div');
+      spacer.style.height = '8px';
+      blockDiv.insertBefore(spacer, buttonContainer);
+    }
+
+    // Add a raw XML toggle if the function is complete
+    if (functionInfo.isComplete && !blockDiv.querySelector('.raw-toggle')) {
+      // If we're using the button container, pass it instead of blockDiv
+      if (buttonContainer) {
+        addRawXmlToggle(buttonContainer, rawContent);
+      } else {
+        addRawXmlToggle(blockDiv, rawContent);
+      }
+    }
+
+    // Add execute button if the function is complete and not already added
+    if (functionInfo.isComplete && !blockDiv.querySelector('.execute-button')) {
+      // Ensure completeParameters is available before adding button/setting up auto-exec
+      if (!completeParameters) {
+        completeParameters = extractFunctionParameters(rawContent);
+      }
+      // If we're using the button container, pass it instead of blockDiv
+      if (buttonContainer) {
+        addExecuteButton(buttonContainer, rawContent); // rawContent has full data here
+      } else {
+        addExecuteButton(blockDiv, rawContent);
       }
 
-      // STRICT CHECK #2: Has this block already been processed for auto-execution?
-      if (executionTracker.isBlockExecuted(blockId) === true) {
-        console.debug(`Auto-execution skipped: Block ${blockId} (${functionName}) has already been processed`);
-        return true;
-      }
+      // Setup auto-execution with proper wait time for DOM stabilization
+      // This ensures we wait until the function block is fully rendered and stable
+      const autoExecuteEnabled = (window as any).toggleState?.autoExecute === true;
 
-      // At this point, we've passed all checks and can proceed with auto-execution
-      // Immediately mark function as scheduled for execution to prevent race conditions
-      executionTracker.markFunctionExecuted(extractedCallId, contentSignature, functionName);
-      executionTracker.markBlockExecuted(blockId);
+      // Extract function information for execution tracking
+      const invokeMatch = content.match(/<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i);
+      const extractedCallId = invokeMatch && invokeMatch[2] ? invokeMatch[2] : blockId;
 
-      console.debug(`Setting up auto-execution for block ${blockId} (${functionName})`);
-
-      // Store function details for use in the retry mechanism (use completeParameters)
-      const functionDetails = {
-        functionName,
-        callId: extractedCallId,
-        contentSignature,
-        params: completeParameters || {}, // Ensure params is an object
-      };
-      // Use a more robust retry mechanism with proper cleanup
-      const setupAutoExecution = () => {
-        const attempts = executionTracker.incrementAttempts(blockId);
-
-        if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
-          console.debug(`Auto-execute: Giving up on block ${blockId} after ${attempts - 1} attempts`);
-          executionTracker.cleanupBlock(blockId);
-          return;
+      // Check if the function has already been executed using the complete signature
+      if (contentSignature && !executionTracker.isFunctionExecuted(extractedCallId, contentSignature, functionName)) {
+        // Proceed with auto-execution setup
+        // STRICT CHECK #1: Is auto-execute enabled in UI settings?
+        if (autoExecuteEnabled !== true) {
+          console.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
+          return true;
         }
 
-        console.debug(`Auto-execute attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS} for block ${blockId}`);
+        // STRICT CHECK #2: Has this block already been processed for auto-execution?
+        if (executionTracker.isBlockExecuted(blockId) === true) {
+          console.debug(`Auto-execution skipped: Block ${blockId} (${functionName}) has already been processed`);
+          return true;
+        }
 
-        setTimeout(() => {
-          let currentBlock = document.querySelector<HTMLDivElement>(`.function-block[data-block-id="${blockId}"]`);
+        // At this point, we've passed all checks and can proceed with auto-execution
+        // Immediately mark function as scheduled for execution to prevent race conditions
+        executionTracker.markFunctionExecuted(extractedCallId, contentSignature, functionName);
+        executionTracker.markBlockExecuted(blockId);
 
-          if (!currentBlock) {
-            console.debug(`Auto-execute: Original block ${blockId} not found. Searching for replacement...`);
-            const potentialBlocks = document.querySelectorAll<HTMLDivElement>('.function-block');
-            for (const block of potentialBlocks) {
-              const preElement = block.querySelector('pre');
-              if (!preElement || !preElement.textContent) continue; // Skip if no pre element or content
+        console.debug(`Setting up auto-execution for block ${blockId} (${functionName})`);
 
-              // Manually parse name and callId from content here
-              const content = preElement.textContent;
-              const invokeRegex = /<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i;
-              const match = content.match(invokeRegex);
+        // Store function details for use in the retry mechanism (use completeParameters)
+        const functionDetails = {
+          functionName,
+          callId: extractedCallId,
+          contentSignature,
+          params: completeParameters || {}, // Ensure params is an object
+        };
+        // Use a more robust retry mechanism with proper cleanup
+        const setupAutoExecution = () => {
+          const attempts = executionTracker.incrementAttempts(blockId);
 
-              // Check if the parsed details match the function we are trying to execute
-              if (match && match[1] === functionDetails.functionName && match[2] === functionDetails.callId) {
-                const replacementBlockId = block.getAttribute('data-block-id');
-                // Use the imported getPreviousExecution which checks storage
-                const alreadyExecuted = getPreviousExecution(
-                  functionDetails.functionName,
-                  functionDetails.callId,
-                  functionDetails.contentSignature,
-                );
-                // Removed isBeingProcessed check
+          if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
+            console.debug(`Auto-execute: Giving up on block ${blockId} after ${attempts - 1} attempts`);
+            executionTracker.cleanupBlock(blockId);
+            return;
+          }
 
-                if (!alreadyExecuted) {
-                  console.debug(
-                    `Auto-execute: Found potential replacement block ${replacementBlockId || 'unknown ID'}. Attempting execution.`,
+          console.debug(`Auto-execute attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS} for block ${blockId}`);
+
+          setTimeout(() => {
+            let currentBlock = document.querySelector<HTMLDivElement>(`.function-block[data-block-id="${blockId}"]`);
+
+            if (!currentBlock) {
+              console.debug(`Auto-execute: Original block ${blockId} not found. Searching for replacement...`);
+              const potentialBlocks = document.querySelectorAll<HTMLDivElement>('.function-block');
+              for (const block of potentialBlocks) {
+                const preElement = block.querySelector('pre');
+                if (!preElement || !preElement.textContent) continue; // Skip if no pre element or content
+
+                // Manually parse name and callId from content here
+                const content = preElement.textContent;
+                const invokeRegex = /<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/i;
+                const match = content.match(invokeRegex);
+
+                // Check if the parsed details match the function we are trying to execute
+                if (match && match[1] === functionDetails.functionName && match[2] === functionDetails.callId) {
+                  const replacementBlockId = block.getAttribute('data-block-id');
+                  // Use the imported getPreviousExecution which checks storage
+                  const alreadyExecuted = getPreviousExecution(
+                    functionDetails.functionName,
+                    functionDetails.callId,
+                    functionDetails.contentSignature,
                   );
-                  currentBlock = block; // Target the replacement block
-                  break;
-                } else {
-                  console.debug(
-                    `Auto-execute: Replacement block ${replacementBlockId || 'unknown ID'} skipped (already executed).`,
-                  ); // Updated log message
+                  // Removed isBeingProcessed check
+
+                  if (!alreadyExecuted) {
+                    console.debug(
+                      `Auto-execute: Found potential replacement block ${replacementBlockId || 'unknown ID'}. Attempting execution.`,
+                    );
+                    currentBlock = block; // Target the replacement block
+                    break;
+                  } else {
+                    console.debug(
+                      `Auto-execute: Replacement block ${replacementBlockId || 'unknown ID'} skipped (already executed).`,
+                    ); // Updated log message
+                  }
                 }
               }
             }
-          }
 
-          if (!currentBlock) {
-            console.debug(
-              `Auto-execute: Block ${blockId} (and suitable replacement) not found in DOM (attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS})`,
-            );
-            if (attempts < MAX_AUTO_EXECUTE_ATTEMPTS) {
-              setTimeout(setupAutoExecution, 500); // Retry
-            } else {
-              console.debug(`Auto-execute: Giving up on block ${blockId} - not found in DOM`);
-              executionTracker.cleanupBlock(blockId);
+            if (!currentBlock) {
+              console.debug(
+                `Auto-execute: Block ${blockId} (and suitable replacement) not found in DOM (attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS})`,
+              );
+              if (attempts < MAX_AUTO_EXECUTE_ATTEMPTS) {
+                setTimeout(setupAutoExecution, 500); // Retry
+              } else {
+                console.debug(`Auto-execute: Giving up on block ${blockId} - not found in DOM`);
+                executionTracker.cleanupBlock(blockId);
+              }
+              return;
             }
-            return;
-          }
 
-          // --- START: Added final check against persistent storage ---
-          // Use the imported getPreviousExecution which checks storage
-          const finalCheckExecuted = getPreviousExecution(
-            functionDetails.functionName,
-            functionDetails.callId,
-            functionDetails.contentSignature,
-          );
-          if (finalCheckExecuted) {
-            console.debug(
-              `Auto-execute: Function ${functionDetails.functionName} (callId: ${functionDetails.callId}) was found in execution history right before click. Skipping.`,
+            // --- START: Added final check against persistent storage ---
+            // Use the imported getPreviousExecution which checks storage
+            const finalCheckExecuted = getPreviousExecution(
+              functionDetails.functionName,
+              functionDetails.callId,
+              functionDetails.contentSignature,
             );
-            executionTracker.cleanupBlock(blockId); // Clean up tracker
-            return;
-          }
-          // --- END: Added final check against persistent storage ---
-
-          const executeButton = currentBlock.querySelector<HTMLButtonElement>('.execute-button');
-          if (executeButton) {
-            console.debug(
-              `Auto-execute: Executing function in block ${currentBlock.getAttribute('data-block-id') || blockId} (${functionDetails.functionName}) after DOM stabilization`,
-            );
-            executeButton.click();
-            // NOTE: Execution marking should happen *after* click success, likely handled by the execute button's click handler via functionHistory/storage.
-            executionTracker.cleanupBlock(blockId); // Clean up tracker for *this* attempt
-          } else {
-            console.debug(
-              `Auto-execute: Execute button not found in block ${currentBlock.getAttribute('data-block-id') || blockId} (attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS})`,
-            );
-            if (attempts < MAX_AUTO_EXECUTE_ATTEMPTS) {
-              setTimeout(setupAutoExecution, 500); // Retry
-            } else {
-              console.debug(`Auto-execute: Giving up on block ${blockId} - button not found`);
-              executionTracker.cleanupBlock(blockId);
+            if (finalCheckExecuted) {
+              console.debug(
+                `Auto-execute: Function ${functionDetails.functionName} (callId: ${functionDetails.callId}) was found in execution history right before click. Skipping.`,
+              );
+              executionTracker.cleanupBlock(blockId); // Clean up tracker
+              return;
             }
-          }
-        }, 500); // Reduced initial wait to 500ms
-      };
+            // --- END: Added final check against persistent storage ---
 
-      setupAutoExecution();
+            const executeButton = currentBlock.querySelector<HTMLButtonElement>('.execute-button');
+            if (executeButton) {
+              console.debug(
+                `Auto-execute: Executing function in block ${currentBlock.getAttribute('data-block-id') || blockId} (${functionDetails.functionName}) after DOM stabilization`,
+              );
+              executeButton.click();
+              // NOTE: Execution marking should happen *after* click success, likely handled by the execute button's click handler via functionHistory/storage.
+              executionTracker.cleanupBlock(blockId); // Clean up tracker for *this* attempt
+            } else {
+              console.debug(
+                `Auto-execute: Execute button not found in block ${currentBlock.getAttribute('data-block-id') || blockId} (attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS})`,
+              );
+              if (attempts < MAX_AUTO_EXECUTE_ATTEMPTS) {
+                setTimeout(setupAutoExecution, 500); // Retry
+              } else {
+                console.debug(`Auto-execute: Giving up on block ${blockId} - button not found`);
+                executionTracker.cleanupBlock(blockId);
+              }
+            }
+          }, 500); // Reduced initial wait to 500ms
+        };
+
+        setupAutoExecution();
+      }
     }
-  }
 
-  return true;
+    // Enhanced completion status handling
+    if (functionInfo.isComplete) {
+      block.classList.remove('function-loading', 'function-stalled');
+      block.classList.add('function-complete');
+      
+      // Clear retry count on successful completion
+      stalledStreamRetryCount.delete(blockId);
+      stalledStreams.delete(blockId);
+      
+      // Remove any stalled indicators
+      const stalledIndicator = block.querySelector(`.stalled-indicator[data-stalled-for="${blockId}"]`);
+      stalledIndicator?.remove();
+    } else {
+      block.classList.add('function-loading');
+      if (!isPreExistingIncomplete) {
+        // Update last activity timestamp
+        streamingLastUpdated.set(blockId, Date.now());
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in renderFunctionCall:', error);
+    
+    // Enhanced error recovery
+    const blockId = block.getAttribute('data-block-id');
+    if (blockId) {
+      const retryCount = (window as any)._stalledStreamRetryCount?.get(blockId) || 0;
+      if (retryCount < CONFIG.maxRetryAttempts) {
+        // Schedule a retry with exponential backoff
+        const delay = Math.min(CONFIG.retryDelay * Math.pow(2, retryCount), 30000);
+        setTimeout(() => {
+          console.debug(`Retrying render for block ${blockId} after error (attempt ${retryCount + 1})`);
+          (window as any)._stalledStreamRetryCount?.set(blockId, retryCount + 1);
+          renderFunctionCall(block, isProcessingRef);
+        }, delay);
+      }
+    }
+    
+    return false;
+  }
 };
 
 /**
@@ -753,4 +795,38 @@ export const createOrUpdateParamElement = (
       }
     }
   }
+};
+
+/**
+ * Extract parameter value from raw content
+ */
+const extractParameterValue = (rawContent: string, matchIndex: number): { value: string; isStreaming: boolean } | null => {
+  const startTag = '<parameter>';
+  const endTag = '</parameter>';
+  const startIndex = rawContent.indexOf(startTag, matchIndex) + startTag.length;
+  const endTagIndex = rawContent.indexOf(endTag, startIndex);
+
+  // Determine if parameter is complete (has ending tag) or still streaming
+  const isStreaming = endTagIndex === -1;
+  let extractedValue: string;
+
+  if (!isStreaming) {
+    // Full parameter content available
+    extractedValue = rawContent.substring(startIndex, endTagIndex);
+  } else {
+    // Partial parameter content (streaming)
+    extractedValue = rawContent.substring(startIndex);
+  }
+
+  // Handle potential CDATA within the extracted value
+  const cdataMatch = extractedValue.match(/<!\[CDATA\[(.*?)(?:\]\]>)?$/s);
+  if (cdataMatch) {
+    // Use CDATA content, remove partial end tag if streaming
+    extractedValue = cdataMatch[1];
+  } else {
+    // Trim only if not CDATA, as CDATA preserves whitespace
+    extractedValue = extractedValue.trim();
+  }
+
+  return { value: extractedValue, isStreaming };
 };

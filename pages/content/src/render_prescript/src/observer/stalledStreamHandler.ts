@@ -149,6 +149,70 @@ export const detectPreExistingIncompleteBlocks = (): void => {
 };
 
 /**
+ * Calculate retry delay with exponential backoff
+ */
+const calculateRetryDelay = (retryCount: number, baseDelay: number): number => {
+  if (!CONFIG.exponentialBackoff) return baseDelay;
+  // Exponential backoff with a maximum delay of 30 seconds
+  return Math.min(baseDelay * Math.pow(2, retryCount), 30000);
+};
+
+/**
+ * Handle retry attempt for a stalled stream
+ */
+const handleRetryAttempt = (blockId: string, block: HTMLElement): void => {
+  const retryCount = stalledStreamRetryCount.get(blockId) || 0;
+  const maxRetries = CONFIG.maxRetryAttempts;
+  
+  if (retryCount >= maxRetries) {
+    // Max retries reached, update UI to show permanent stall
+    block.classList.add('function-permanently-stalled');
+    const indicator = block.querySelector(`.stalled-indicator[data-stalled-for="${blockId}"]`);
+    if (indicator) {
+      const message = indicator.querySelector('.stalled-message span');
+      if (message) {
+        message.textContent = `Stream permanently stalled after ${maxRetries} retry attempts.`;
+      }
+      // Remove retry button
+      const retryButton = indicator.querySelector('.stalled-retry-button');
+      retryButton?.remove();
+    }
+    return;
+  }
+
+  // Increment retry count
+  stalledStreamRetryCount.set(blockId, retryCount + 1);
+  
+  // Calculate delay with exponential backoff
+  const delay = calculateRetryDelay(retryCount, CONFIG.retryDelay);
+  
+  // Update UI to show retry attempt
+  const indicator = block.querySelector(`.stalled-indicator[data-stalled-for="${blockId}"]`);
+  if (indicator) {
+    const message = indicator.querySelector('.stalled-message span');
+    if (message) {
+      message.textContent = `Retrying... (Attempt ${retryCount + 1}/${maxRetries})`;
+    }
+  }
+
+  // Attempt retry after delay
+  setTimeout(() => {
+    // Remove stalled status
+    stalledStreams.delete(blockId);
+    block.classList.remove('function-stalled');
+    
+    // Trigger re-render
+    const functionBlock = block.closest('pre');
+    if (functionBlock instanceof HTMLPreElement) {
+      renderFunctionCall(functionBlock, { current: false });
+    }
+    
+    // Force check for updates
+    checkStreamingUpdates();
+  }, delay);
+};
+
+/**
  * Create a stalled indicator for the specified block
  */
 export const createStalledIndicator = (blockId: string, block: HTMLElement, isAbrupt: boolean = false): void => {
@@ -192,26 +256,12 @@ export const createStalledIndicator = (blockId: string, block: HTMLElement, isAb
   }
   message.appendChild(span);
 
-  // Add a retry button
+  // Add a retry button with enhanced retry logic
   const retryButton = document.createElement('button');
   retryButton.className = 'stalled-retry-button';
   retryButton.textContent = 'Check for updates';
   retryButton.onclick = () => {
-    // Track retry attempts
-    const retryCount = (stalledStreamRetryCount.get(blockId) || 0) + 1;
-    stalledStreamRetryCount.set(blockId, retryCount);
-
-    // Update retry button text
-    retryButton.textContent = retryCount > 1 ? `Check again (${retryCount})` : 'Check again';
-
-    // Force a check for updates
-    checkStreamingUpdates();
-
-    // Try re-rendering this block
-    const event = new CustomEvent('render-function-call', {
-      detail: { blockId, element: block },
-    });
-    document.dispatchEvent(event);
+    handleRetryAttempt(blockId, block);
   };
 
   indicator.appendChild(message);
@@ -222,92 +272,30 @@ export const createStalledIndicator = (blockId: string, block: HTMLElement, isAb
 };
 
 /**
- * Check for stalled streams
+ * Check for stalled streams with improved detection
  */
 export const checkStalledStreams = (): void => {
   if (!CONFIG.enableStalledStreamDetection) return;
 
   const now = Date.now();
-  const stalledTimeout = CONFIG.stalledStreamTimeout;
+  
+  // Get all function blocks
+  document.querySelectorAll('.function-block').forEach(block => {
+    const blockId = block.getAttribute('data-block-id');
+    if (!blockId) return;
 
-  // Additional check for any incomplete function calls that might have been missed
-  const potentiallyMissedBlocks = Array.from(document.querySelectorAll('pre, code')).filter(el => {
-    // If already processed or part of function block, skip
-    if (el.closest('.function-block') || el.hasAttribute('data-monitored-node')) {
-      return false;
-    }
+    const lastUpdate = streamingLastUpdated.get(blockId) || 0;
+    const timeSinceUpdate = now - lastUpdate;
 
-    const content = el.textContent || '';
-    return (
-      content.includes('<function_calls>') ||
-      content.includes('<invoke') ||
-      (content.includes('<parameter') && !content.includes('</parameter>'))
-    );
-  });
-
-  // Process potentially missed blocks
-  for (const element of potentiallyMissedBlocks) {
-    const blockId =
-      element.getAttribute('data-block-id') || `missed-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // Set block ID if not already present
-    if (!element.getAttribute('data-block-id')) {
-      element.setAttribute('data-block-id', blockId);
-    }
-
-    if (CONFIG.debug) {
-      console.debug(`Found potentially missed function block: ${blockId}`);
-    }
-
-    // Trigger a custom event to render this block
-    const event = new CustomEvent('render-function-call', {
-      detail: { blockId, element },
-    });
-    document.dispatchEvent(event);
-  }
-
-  // Check all streaming blocks for stalled status
-  streamingLastUpdated.forEach((lastUpdate, blockId) => {
-    // Skip blocks already marked as stalled
-    if (stalledStreams.has(blockId)) return;
-
-    // Check if the block is still in the DOM
-    const block = renderedFunctionBlocks.get(blockId);
-    if (!block || !document.body.contains(block)) {
-      streamingLastUpdated.delete(blockId);
-      return;
-    }
-
-    // Skip blocks that are pre-existing incomplete
-    if (preExistingIncompleteBlocks.has(blockId)) return;
-
-    // Check if the block is complete (no longer loading)
-    if (!block.classList.contains('function-loading')) {
-      streamingLastUpdated.delete(blockId);
-      return;
-    }
-
-    // Check if the block has stalled
-    if (now - lastUpdate > stalledTimeout) {
-      if (CONFIG.debug)
-        console.debug(`Stream stalled for block: ${blockId}. No updates for ${Math.round((now - lastUpdate) / 1000)}s`);
-
-      // Verify if the block content is actually incomplete
-      const functionCallCompleteCheck = (block.textContent || '').includes('</function_calls>');
-      const invokeCompleteCheck = (block.textContent || '').includes('<invoke')
-        ? (block.textContent || '').includes('</invoke>')
-        : true;
-
-      // If the function call or invoke tags are complete, don't mark as stalled
-      if (functionCallCompleteCheck && invokeCompleteCheck) {
-        if (CONFIG.debug)
-          console.debug(`Block ${blockId} appears complete despite loading status, skipping stalled indicator`);
-        streamingLastUpdated.delete(blockId);
-        return;
+    // Check if block is incomplete
+    const isIncomplete = block.classList.contains('function-loading');
+    
+    // Check if stream is stalled
+    if (isIncomplete && timeSinceUpdate > CONFIG.stalledStreamTimeout) {
+      // Don't re-create indicator if already marked as stalled
+      if (!stalledStreams.has(blockId)) {
+        createStalledIndicator(blockId, block as HTMLElement);
       }
-
-      // Create stalled indicator for this block
-      createStalledIndicator(blockId, block, false);
     }
   });
 };

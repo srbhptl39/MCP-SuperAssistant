@@ -34,20 +34,25 @@ export const DEFAULT_CONFIG: FunctionCallRendererConfig = {
   enableDirectMonitoring: true,
   streamingContainerSelectors: ['.pre', '.code'],
   // streamingContainerSelectors: ['.message-content', '.chat-message', '.message-body', '.message'],
-  updateThrottle: 25,
-  streamingMonitoringInterval: 100,
+  updateThrottle: 100,
+  streamingMonitoringInterval: 300,
   largeContentThreshold: Number.MAX_SAFE_INTEGER,
-  progressiveUpdateInterval: 250,
+  progressiveUpdateInterval: 750,
   maxContentPreviewLength: Number.MAX_SAFE_INTEGER,
   usePositionFixed: false,
-  stabilizeTimeout: 500,
-  debug: true,
+  stabilizeTimeout: 2000,
+  debug: false,
   // Theme detection
   useHostTheme: true,
-  // Stalled stream detection - defaults
+  // Stalled stream detection - improved defaults
   enableStalledStreamDetection: true,
-  stalledStreamTimeout: 3000, // 3 seconds before marking a stream as stalled
-  stalledStreamCheckInterval: 1000, // Check every 1 second
+  stalledStreamTimeout: 8000,
+  stalledStreamCheckInterval: 3000,
+  maxRetryAttempts: 5,
+  retryDelay: 2000,
+  reconnectDelay: 5000,
+  maxReconnectAttempts: 3,
+  exponentialBackoff: true,
 };
 
 /**
