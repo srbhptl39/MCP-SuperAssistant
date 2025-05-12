@@ -11,8 +11,8 @@
   "types": "index.mts",
   "main": "dist/index.mjs",
   "scripts": {
-    "clean:bundle": "rimraf dist && pnpx rimraf build",
-    "clean:node_modules": "pnpx rimraf node_modules",
+    "clean:bundle": "rimraf dist && pnpm dlx rimraf build",
+    "clean:node_modules": "pnpm dlx rimraf node_modules",
     "clean:turbo": "rimraf .turbo",
     "clean": "pnpm clean:bundle && pnpm clean:node_modules && pnpm clean:turbo",
     "ready": "tsc -b && rollup --config dist/rollup.config.js",

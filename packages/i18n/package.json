@@ -12,7 +12,7 @@
   "types": "index.mts",
   "scripts": {
     "clean:bundle": "rimraf dist",
-    "clean:node_modules": "pnpx rimraf node_modules",
+    "clean:node_modules": "pnpm dlx rimraf node_modules",
     "clean:turbo": "rimraf .turbo",
     "clean": "pnpm clean:bundle && pnpm clean:node_modules && pnpm clean:turbo",
     "ready": "tsc -b prepare-build.tsconfig.json && node --env-file=../../.env dist/lib/prepare_build.js && tsc -b",

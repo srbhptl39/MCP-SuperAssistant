@@ -9,7 +9,7 @@
     "dist/**"
   ],
   "scripts": {
-    "clean:node_modules": "pnpx rimraf node_modules",
+    "clean:node_modules": "pnpm dlx rimraf node_modules",
     "clean:turbo": "rimraf .turbo",
     "clean": "pnpm clean:turbo && pnpm clean:node_modules",
     "build": "vite build",

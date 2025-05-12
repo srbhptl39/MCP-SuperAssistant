@@ -406,7 +406,19 @@ export function handleAutoSubmit(adapterName: string): void {
 
 // --- Event Listener Setup ---
 
+// Track which adapters have already registered a listener
+const registeredToolExecutionListeners = new Set<string>();
+
 export function setupToolExecutionListener(stateManager: ToggleStateManager, adapterName: string): void {
+  // Guard against double subscription
+  if (registeredToolExecutionListeners.has(adapterName)) {
+    console.log(`[${adapterName}] Tool execution listener already registered, skipping.`);
+    return;
+  }
+
+  // Register this adapter
+  registeredToolExecutionListeners.add(adapterName);
+
   document.addEventListener('mcp:tool-execution-complete', (event: Event) => {
     const customEvent = event as CustomEvent;
     if (customEvent.detail) {
