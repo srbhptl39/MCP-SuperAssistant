@@ -23,7 +23,11 @@ export class SidebarManager extends BaseSidebarManager {
   private static geminiInstance: SidebarManager | null = null;
   private static aistudioInstance: SidebarManager | null = null;
   private static openrouterInstance: SidebarManager | null = null;
+
+  private static agenthustleInstance: SidebarManager | null = null;
+
   private static deepseekInstance: SidebarManager | null = null;
+
   private lastToolOutputsHash: string = '';
   private lastMcpToolsHash: string = '';
   private isFirstLoad: boolean = true;
@@ -80,11 +84,19 @@ export class SidebarManager extends BaseSidebarManager {
           SidebarManager.openrouterInstance = new SidebarManager(siteType);
         }
         return SidebarManager.openrouterInstance;
+
+      case 'agenthustle':
+        if (!SidebarManager.agenthustleInstance) {
+          SidebarManager.agenthustleInstance = new SidebarManager(siteType);
+        }
+        return SidebarManager.agenthustleInstance;
+
       case 'deepseek':
         if (!SidebarManager.deepseekInstance) {
           SidebarManager.deepseekInstance = new SidebarManager(siteType);
         }
         return SidebarManager.deepseekInstance;
+
       default:
         // For any unexpected site type, create and return a new instance
         logMessage(`Creating new SidebarManager for unknown site type: ${siteType}`);
