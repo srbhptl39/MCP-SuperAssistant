@@ -40,8 +40,13 @@ const manifest = {
     '*://*.aistudio.google.com/*',
     '*://*.openrouter.ai/*',
     '*://*.google-analytics.com/*',
+
     '*://*.agenthustle.ai/*',
+
+    '*://*.chat.deepseek.com/*',
+
   ],
+
   permissions: ['storage', 'clipboardWrite'],
   // permissions: ['storage', 'scripting', 'clipboardWrite'],
   // options_page: 'options/index.html',
@@ -106,9 +111,15 @@ const manifest = {
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },
+
     // Specific content script for AgentHustle tool call parsing
     {
       matches: ['*://*.agenthustle.ai/*'],
+
+    // Specific content script for DeepSeek tool call parsing
+    {
+      matches: ['*://*.chat.deepseek.com/*'],
+
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

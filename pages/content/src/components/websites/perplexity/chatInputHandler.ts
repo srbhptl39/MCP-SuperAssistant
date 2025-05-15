@@ -128,7 +128,36 @@ export const insertToolResultToChatInput = (result: any): boolean => {
  */
 export const attachFileToChatInput = async (file: File): Promise<boolean> => {
   try {
-    // Find the Perplexity input element
+    // First try to find the hidden file input element in Perplexity
+    const fileInputSelector = 'input[type="file"][multiple][accept*=".pdf"]';
+    let fileInput = document.querySelector(fileInputSelector) as HTMLInputElement | null;
+
+    if (!fileInput) {
+      logMessage('Could not find Perplexity file input element, looking for more generic selector');
+      // Try a more generic selector if the specific one fails
+      fileInput = document.querySelector('input[type="file"][multiple]') as HTMLInputElement | null;
+    }
+
+    if (fileInput) {
+      logMessage('Found Perplexity file input element');
+
+      // Create a DataTransfer object and add the file
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+
+      // Set the files property on the input element
+      fileInput.files = dataTransfer.files;
+
+      // Trigger the change event to notify the application
+      const changeEvent = new Event('change', { bubbles: true });
+      fileInput.dispatchEvent(changeEvent);
+
+      logMessage(`Attached file ${file.name} to Perplexity input via file input element`);
+      return true;
+    }
+
+    // Fallback to the original method if no file input element is found
+    logMessage('No file input element found, falling back to drag and drop simulation');
     const chatInput = findChatInputElement();
 
     if (!chatInput) {
@@ -175,7 +204,7 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
       logMessage(`Could not copy to clipboard: ${clipboardError}`);
     }
 
-    logMessage(`Attached file ${file.name} to Perplexity input`);
+    logMessage(`Attached file ${file.name} to Perplexity input via drag and drop simulation`);
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

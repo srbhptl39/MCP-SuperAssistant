@@ -34,6 +34,22 @@ export const findChatInputElement = (): HTMLTextAreaElement | null => {
     return chatInput as HTMLTextAreaElement;
   }
 
+  // Try to find the input with "Type something or tab to choose an example prompt" aria-label
+  chatInput = document.querySelector("textarea.textarea[aria-label='Type something or tab to choose an example prompt']");
+
+  if (chatInput) {
+    logMessage('Found AiStudio input with "Type something or tab to choose an example prompt" aria-label');
+    return chatInput as HTMLTextAreaElement;
+  }
+
+  // Try to find the input with "Start typing a prompt" aria-label
+  chatInput = document.querySelector("textarea.textarea[aria-label='Start typing a prompt']");
+
+  if (chatInput) {
+    logMessage('Found AiStudio input with "Start typing a prompt" aria-label');
+    return chatInput as HTMLTextAreaElement;
+  }
+
   // If neither specific placeholder is found, try a more general approach
   chatInput = document.querySelector('textarea[placeholder*="Ask"]');
 
