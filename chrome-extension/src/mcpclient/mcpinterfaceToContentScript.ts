@@ -7,6 +7,7 @@ import {
 } from './officialmcpclient';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { ServerConfig } from '../../../pages/content/src/types/mcp';
 
 // Define the Primitive type locally since it's not exported from officialmcpclient
 type PrimitiveType = 'resource' | 'tool' | 'prompt';
@@ -29,7 +30,7 @@ type Primitive = {
 class McpInterface {
   private static instance: McpInterface | null = null;
   private connections: Map<string, chrome.runtime.Port> = new Map();
-  private serverUrl: string = 'http://localhost:3006/sse';
+  private serverConfig: ServerConfig = { uri: 'http://localhost:3006/sse', token: undefined };
   private isConnected: boolean = false;
   private connectionCheckInterval: NodeJS.Timeout | null = null;
   private connectionCheckIntervalTime: number = 10000; // Reduced from 30000 to 10000ms
@@ -281,7 +282,7 @@ class McpInterface {
       processedArgs = sanitizedArgs;
 
       // Call the tool with the processed args using the persistent connection
-      const result = await callToolWithSSE(this.serverUrl, toolName, processedArgs);
+      const result = await callToolWithSSE(this.serverConfig, toolName, processedArgs);
 
       // Send the result back to the content script
       port.postMessage({
@@ -398,7 +399,7 @@ class McpInterface {
       });
 
       // Force reconnect to the MCP server
-      await forceReconnectToMcpServer(this.serverUrl);
+      await forceReconnectToMcpServer(this.serverConfig);
 
       // Check the new connection status
       const isConnected = await this.checkServerConnection();
@@ -449,9 +450,7 @@ class McpInterface {
         requestId,
       );
     }
-  }
-
-  /**
+  }  /**
    * Get available tools from the MCP server
    * Uses the getPrimitivesWithSSE function to get all primitives directly
    * @param forceRefresh Whether to force a fresh request and bypass cache
@@ -461,13 +460,12 @@ class McpInterface {
       console.log(`[MCP Interface] Getting available primitives from server (forceRefresh: ${forceRefresh})`);
 
       // Use getPrimitivesWithSSE to get all primitives directly using the persistent connection
-      const primitives = await getPrimitivesWithSSE(this.serverUrl, forceRefresh);
+      const primitives = await getPrimitivesWithSSE(this.serverConfig, forceRefresh);
 
       console.log(`[MCP Interface] Found ${primitives.length} primitives`);
       return primitives;
     } catch (error) {
       console.error('[MCP Interface] Failed to get available primitives:', error);
-
       // Return an empty array instead of throwing to be more resilient
       return [];
     }
@@ -539,7 +537,23 @@ class McpInterface {
    */
   public updateServerUrl(url: string): void {
     console.log(`[MCP Interface] Updating server URL: ${url}`);
-    this.serverUrl = url;
+    this.serverConfig = { ...this.serverConfig, uri: url };
+  }
+  
+  /**
+   * Update the MCP server auth token
+   */
+  public updateAuthToken(token?: string): void {
+    console.log(`[MCP Interface] Updating auth token: ${token ? '(token provided)' : '(no token)'}`);
+    this.serverConfig = { ...this.serverConfig, token };
+  }
+  
+  /**
+   * Update the server configuration
+   */
+  public updateServerConfig(config: ServerConfig): void {
+    console.log(`[MCP Interface] Updating server config: ${config.uri}${config.token ? ' with token' : ''}`);
+    this.serverConfig = { ...config };
   }
 
   /**
@@ -591,10 +605,10 @@ class McpInterface {
     console.log(`[MCP Interface] Handling get server config request ${requestId}`);
 
     try {
-      // Send the current server URL back to the content script
+      // Send the current server config back to the content script
       port.postMessage({
         type: 'SERVER_CONFIG_RESULT',
-        config: { uri: this.serverUrl },
+        config: { ...this.serverConfig },
         requestId,
       });
 
@@ -639,22 +653,26 @@ class McpInterface {
         throw new Error(`Invalid URI: ${config.uri}`);
       }
 
-      // Update the server URL
+      // Update the server URL and auth token
       this.updateServerUrl(config.uri);
+      this.updateAuthToken(config.token);
 
-      // Save the server URL to storage
+      // Save the server URL and token to storage
       try {
-        await chrome.storage.local.set({ mcpServerUrl: config.uri });
-        console.log(`[MCP Interface] Saved server URL to storage: ${config.uri}`);
+        await chrome.storage.local.set({ 
+          mcpServerUrl: config.uri,
+          mcpAuthToken: config.token
+        });
+        console.log(`[MCP Interface] Saved server config to storage: ${config.uri}${config.token ? ' with token' : ''}`);
       } catch (storageError) {
-        console.error(`[MCP Interface] Error saving server URL to storage:`, storageError);
-        // Continue even if storage fails - we've already updated the in-memory URL
+        console.error(`[MCP Interface] Error saving server config to storage:`, storageError);
+        // Continue even if storage fails - we've already updated the in-memory values
       }
 
       // Force reconnect to the new server
-      console.log(`[MCP Interface] Forcing reconnection to new server URL: ${config.uri}`);
+      console.log(`[MCP Interface] Forcing reconnection to new server URL: ${config.uri}${config.token ? ' with token' : ''}`);
       try {
-        await forceReconnectToMcpServer(config.uri);
+        await forceReconnectToMcpServer(config);
         console.log(`[MCP Interface] Successfully reconnected to new server URL: ${config.uri}`);
 
         // Check the new connection status

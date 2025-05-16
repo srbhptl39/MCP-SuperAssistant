@@ -52,6 +52,7 @@ export interface AvailableToolsProps {
 // Server configuration interface
 export interface ServerConfig {
   uri: string;
+  token?: string;
 }
 
 // Interface for the background communication hook
