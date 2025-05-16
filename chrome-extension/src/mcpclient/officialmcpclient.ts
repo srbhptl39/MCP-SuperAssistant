@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport, SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { ServerConfig } from '../../../pages/content/src/types/mcp';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 // Define types for primitives
@@ -31,7 +32,7 @@ class PersistentMcpClient {
   private static instance: PersistentMcpClient | null = null;
   private client: Client | null = null;
   private transport: Transport | null = null;
-  private serverUrl: string = '';
+  private serverConfig: ServerConfig = { uri: '' };
   private isConnected: boolean = false;
   private connectionPromise: Promise<Client> | null = null;
   private reconnectAttempts: number = 0;
@@ -63,33 +64,41 @@ class PersistentMcpClient {
 
   /**
    * Connect to the MCP server
-   * @param uri The URI of the MCP server
+   * @param config The server configuration containing URI and optional token
    * @returns Promise that resolves to the client instance
    */
-  public async connect(uri: string): Promise<Client> {
+  public async connect(config: ServerConfig): Promise<Client> {
+    const { uri, token } = config;
+
     // If we're already connecting, return the existing promise
-    if (this.connectionPromise && this.serverUrl === uri && this.isConnected) {
+    if (
+      this.connectionPromise &&
+      this.serverConfig.uri === uri &&
+      this.serverConfig.token === token &&
+      this.isConnected
+    ) {
       return this.connectionPromise;
     }
 
-    // If the URL has changed, disconnect first
-    if (this.serverUrl !== uri && this.isConnected) {
+    // If the URL or token has changed, disconnect first
+    if ((this.serverConfig.uri !== uri || this.serverConfig.token !== token) && this.isConnected) {
       await this.disconnect();
     }
 
-    this.serverUrl = uri;
+    this.serverConfig = config;
 
     // Create a new connection promise
-    this.connectionPromise = this.createConnection(uri);
+    this.connectionPromise = this.createConnection(this.serverConfig);
     return this.connectionPromise;
   }
 
   /**
    * Create a connection to the MCP server
-   * @param uri The URI of the MCP server
+   * @param config The server configuration containing URI and optional token
    * @returns Promise that resolves to the client instance
    */
-  private async createConnection(uri: string): Promise<Client> {
+  private async createConnection(config: ServerConfig): Promise<Client> {
+    const { uri, token } = config;
     const spinner = createSpinner(`Connecting to MCP server at ${uri}...`);
 
     try {
@@ -111,15 +120,35 @@ class PersistentMcpClient {
 
       // Check server availability
       spinner.success(`Checking if server at ${serverUrl} is available...`);
-      const isAvailable = await isServerAvailable(serverUrl);
+      const isAvailable = await isServerAvailable(config);
       if (!isAvailable) {
         throw new Error(`Server at ${serverUrl} is not available`);
       }
       spinner.success(`Server at ${serverUrl} is available`);
 
-      // Create transport and client
+      // Create transport and client with auth token if provided
       spinner.success(`Creating MCP client and connecting to server...`);
-      this.transport = new SSEClientTransport(new URL(uri));
+
+      let transportOptions: SSEClientTransportOptions = {};
+
+      // Set up authorization headers if token is provided
+      if (token) {
+        const headers = {
+          Authorization: `Bearer ${token}`
+        };
+
+        transportOptions = {
+          eventSourceInit: {
+            fetch: (url, init) => fetch(url, { ...init, headers }),
+          },
+          requestInit: {
+            headers,
+          },
+        };
+        console.log('[PersistentMcpClient] Using Bearer token for authentication');
+      }
+
+      this.transport = new SSEClientTransport(new URL(uri), transportOptions);
       this.client = await createClient();
       await this.client.connect(this.transport);
 
@@ -196,8 +225,8 @@ class PersistentMcpClient {
 
     this.reconnectTimeoutId = setTimeout(() => {
       this.reconnectTimeoutId = null;
-      if (this.serverUrl) {
-        this.connectionPromise = this.createConnection(this.serverUrl);
+      if (this.serverConfig.uri) {
+        this.connectionPromise = this.createConnection(this.serverConfig);
       }
     }, delay);
   }
@@ -208,7 +237,7 @@ class PersistentMcpClient {
    */
   public async ensureConnection(): Promise<Client> {
     // If we've never connected, throw an error
-    if (!this.serverUrl) {
+    if (!this.serverConfig.uri) {
       throw new Error('No server URL set, call connect() first');
     }
 
@@ -218,7 +247,7 @@ class PersistentMcpClient {
     }
 
     // If we're not connected or it's been too long since the last check, reconnect
-    this.connectionPromise = this.createConnection(this.serverUrl);
+    this.connectionPromise = this.createConnection(this.serverConfig);
     return this.connectionPromise;
   }
 
@@ -331,17 +360,17 @@ class PersistentMcpClient {
   private async checkConnectionStatus(): Promise<boolean> {
     try {
       // If we don't have a server URL, we're not connected
-      if (!this.serverUrl) {
+      if (!this.serverConfig.uri) {
         this.isConnected = false;
         return false;
       }
 
       // Parse the URL to get the server URL
-      const baseUrl = new URL(this.serverUrl);
+      const baseUrl = new URL(this.serverConfig.uri);
       const serverUrl = `${baseUrl.protocol}//${baseUrl.host}`;
 
       // Check if the server is available
-      const isAvailable = await isServerAvailable(serverUrl);
+      const isAvailable = await isServerAvailable(this.serverConfig);
 
       // Update the connection status
       const wasConnected = this.isConnected;
@@ -378,8 +407,8 @@ class PersistentMcpClient {
 
     // Disconnect and reconnect
     await this.disconnect();
-    if (this.serverUrl) {
-      await this.connect(this.serverUrl);
+    if (this.serverConfig.uri) {
+      await this.connect(this.serverConfig);
     }
   }
 
@@ -396,7 +425,7 @@ class PersistentMcpClient {
    * Get the server URL
    */
   public getServerUrl(): string {
-    return this.serverUrl;
+    return this.serverConfig.uri;
   }
 }
 
@@ -427,36 +456,54 @@ function prettyPrint(obj: any): void {
 
 /**
  * Utility function to check if a server is available
- * @param url The URL to check
+ * @param config The server configuration containing URI and optional token
  * @returns Promise that resolves to true if server is available, false otherwise
  */
-async function isServerAvailable(url: string): Promise<boolean> {
+async function isServerAvailable(config: ServerConfig): Promise<boolean> {
   try {
+    const { uri, token } = config;
+    
+    if (!uri) {
+      console.log('No server URI provided');
+      return false;
+    }
+    
+    // Parse the URL to get the server URL
+    const baseUrl = new URL(uri);
+    const serverUrl = `${baseUrl.protocol}//${baseUrl.host}`;
+    
     // Create an abort controller with timeout to prevent long waits
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
 
     try {
+      // Set up headers if token is provided
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       // Use fetch with HEAD method to check if server is available
-      await fetch(url, {
+      await fetch(serverUrl, {
         method: 'HEAD',
         mode: 'no-cors', // Use no-cors to avoid CORS issues during check
         signal: controller.signal,
+        headers,
       });
 
       // If we get here, the server is available
-      console.log(`Server at ${url} appears to be available`);
+      console.log(`Server at ${serverUrl} appears to be available`);
       return true;
     } catch (fetchError) {
       // Any fetch error means the server is not available
-      console.log(`Server at ${url} is not available (fetch failed)`);
+      console.log(`Server at ${serverUrl} is not available (fetch failed)`);
       return false;
     } finally {
       clearTimeout(timeoutId);
     }
   } catch (error) {
     // This catch block handles any other errors that might occur
-    console.log(`Error checking server availability at ${url}:`, error);
+    console.log(`Error checking server availability:`, error);
     return false;
   }
 }
@@ -504,15 +551,15 @@ const persistentClient = PersistentMcpClient.getInstance();
 
 /**
  * Call a tool on the MCP server using the persistent connection
- * @param uri The URI of the MCP server
+ * @param config The server configuration containing URI and optional token
  * @param toolName The name of the tool to call
  * @param args The arguments to pass to the tool as an object with string keys
  * @returns Promise that resolves to the result of the tool call
  */
-export async function callToolWithSSE(uri: string, toolName: string, args: { [key: string]: unknown }): Promise<any> {
+export async function callToolWithSSE(config: ServerConfig, toolName: string, args: { [key: string]: unknown }): Promise<any> {
   try {
     // Connect to the server if not already connected
-    await persistentClient.connect(uri);
+    await persistentClient.connect(config);
 
     // Call the tool using the persistent connection
     return await persistentClient.callTool(toolName, args);
@@ -524,14 +571,14 @@ export async function callToolWithSSE(uri: string, toolName: string, args: { [ke
 
 /**
  * Get all primitives from the MCP server using the persistent connection
- * @param uri The URI of the MCP server
+ * @param config The server configuration containing URI and optional token
  * @param forceRefresh Whether to force a refresh and ignore the cache
  * @returns Promise that resolves to an array of primitives (resources, tools, and prompts)
  */
-export async function getPrimitivesWithSSE(uri: string, forceRefresh: boolean = false): Promise<Primitive[]> {
+export async function getPrimitivesWithSSE(config: ServerConfig, forceRefresh: boolean = false): Promise<Primitive[]> {
   try {
     // Connect to the server if not already connected
-    await persistentClient.connect(uri);
+    await persistentClient.connect(config);
 
     // Clear cache if force refresh is requested
     if (forceRefresh) {
@@ -577,8 +624,8 @@ export async function checkMcpServerConnection(): Promise<boolean> {
     const baseUrl = new URL(serverUrl);
     const hostUrl = `${baseUrl.protocol}//${baseUrl.host}`;
 
-    // Check if the server is available
-    return await isServerAvailable(hostUrl);
+    // Check if the server is available - we don't have access to the token here
+    return await isServerAvailable({ uri: hostUrl, token: undefined });
   } catch (error) {
     console.error('Error checking MCP server connection:', error);
     return false;
@@ -587,16 +634,16 @@ export async function checkMcpServerConnection(): Promise<boolean> {
 
 /**
  * Force a reconnection to the MCP server
- * @param uri The URI of the MCP server
+ * @param config The server configuration containing URI and optional token
  * @returns Promise that resolves when reconnection is complete
  */
-export async function forceReconnectToMcpServer(uri: string): Promise<void> {
+export async function forceReconnectToMcpServer(config: ServerConfig): Promise<void> {
   // Clear the cache to ensure we get fresh data from the new server
   persistentClient.clearCache();
 
   // Disconnect and reconnect
   await persistentClient.disconnect();
-  await persistentClient.connect(uri);
+  await persistentClient.connect(config);
 }
 
 /**
@@ -636,24 +683,24 @@ async function callTool(client: Client, toolName: string, args: { [key: string]:
 /**
  * Run the MCP client with SSE transport
  * This function is used by the background script to initialize the connection
- * @param uri The URI of the MCP server
+ * @param config The server configuration containing URI and optional token
  * @returns Promise that resolves when the connection is established
  */
-export async function runWithSSE(uri: string): Promise<void> {
+export async function runWithSSE(config: ServerConfig): Promise<void> {
   try {
-    console.log(`Attempting to connect to SSE endpoint: ${uri}`);
+    console.log(`Attempting to connect to SSE endpoint: ${config.uri}`);
 
     // First check if the server is available before attempting to connect
-    const baseUrl = new URL(uri);
+    const baseUrl = new URL(config.uri);
     const serverUrl = `${baseUrl.protocol}//${baseUrl.host}`;
-    const isAvailable = await isServerAvailable(serverUrl);
+    const isAvailable = await isServerAvailable(config);
 
     if (!isAvailable) {
       throw new Error(`Server at ${serverUrl} is not available`);
     }
 
     // Connect to the server using the persistent client
-    await persistentClient.connect(uri);
+    await persistentClient.connect(config);
 
     // Get primitives to verify the connection works
     const primitives = await persistentClient.getPrimitives();
