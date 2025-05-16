@@ -7,6 +7,8 @@ import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
 import { ServerConfig } from '@src/types/mcp';
 
+type ConfigTab = 'default' | 'mcp-router';
+
 interface ServerStatusProps {
   status: string;
 }
@@ -23,6 +25,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
   // Add ref to track initialization status
   const isInitializedRef = useRef<boolean>(false);
+  
+  // Add state for tab navigation
+  const [activeConfigTab, setActiveConfigTab] = useState<ConfigTab>('default');
 
   // Get communication methods with error handling
   const communicationMethods = useBackgroundCommunication();
@@ -288,15 +293,23 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
   const handleSaveServerConfig = async () => {
     try {
-      logMessage(`[ServerStatus] Saving server config: ${serverConfig.uri}${serverConfig.token ? ' with token' : ''}`);
+      // Create a config based on the active tab
+      const configToSave = { ...serverConfig };
+      
+      // If MCP Router tab is active, override the URI with the fixed value
+      if (activeConfigTab === 'mcp-router') {
+        configToSave.uri = 'http://localhost:3282/mcp/sse';
+      }
+      
+      logMessage(`[ServerStatus] Saving server config: ${configToSave.uri}${configToSave.token ? ' with token' : ''}`);
 
       // Handle case where background connection is unavailable
       if (hasBackgroundError) {
         throw new Error('Background services unavailable');
       }
 
-      // Use serverConfig directly
-      await updateServerConfig(serverConfig);
+      // Use the appropriate config based on active tab
+      await updateServerConfig(configToSave);
       logMessage('[ServerStatus] Server config updated successfully');
 
       // Reconnect to apply new settings and refresh tools
@@ -477,35 +490,92 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             <Typography variant="h4" className="mb-2 text-slate-800 dark:text-slate-100">
               Server Configuration
             </Typography>
-            <div className="mb-3">
-              {/* Label already has dark mode styles */}
-              <label htmlFor="server-uri" className="block mb-1 text-slate-600 dark:text-slate-400">
-                Server URI
-              </label>
-              {/* Input already has dark mode styles */}
-              <input
-                id="server-uri"
-                type="text"
-                value={serverConfig.uri}
-                onChange={handleServerConfigChange('uri')}
-                placeholder="Enter server URI"
-                className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
-              />
+            
+            {/* Tab Navigation */}
+            <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
+              <div className="flex">
+                <button
+                  className={cn(
+                    'py-2 px-4 font-medium text-sm transition-all duration-200',
+                    activeConfigTab === 'default'
+                      ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                  )}
+                  onClick={() => setActiveConfigTab('default')}>
+                  Default
+                </button>
+                <button
+                  className={cn(
+                    'py-2 px-4 font-medium text-sm transition-all duration-200',
+                    activeConfigTab === 'mcp-router'
+                      ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                  )}
+                  onClick={() => setActiveConfigTab('mcp-router')}>
+                  MCP Router
+                </button>
+              </div>
             </div>
-            <div className="mb-3">
-              <label htmlFor="server-token" className="block mb-1 text-slate-600 dark:text-slate-400">
-                Bearer Token (optional)
-              </label>
-              <input
-                id="server-token"
-                type="password"
-                value={serverConfig.token || ''}
-                onChange={handleServerConfigChange('token')}
-                placeholder="Enter authentication token"
-                className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
-              />
-            </div>
-            <div className="flex justify-end">
+            
+            {/* Default Tab Content */}
+            {activeConfigTab === 'default' && (
+              <>
+                <div className="mb-3">
+                  <label htmlFor="default-server-uri" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    Server URI
+                  </label>
+                  <input
+                    id="default-server-uri"
+                    type="text"
+                    value={serverConfig.uri}
+                    onChange={handleServerConfigChange('uri')}
+                    placeholder="Enter server URI"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="default-server-token" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    Bearer Token (optional)
+                  </label>
+                  <input
+                    id="default-server-token"
+                    type="password"
+                    value={serverConfig.token || ''}
+                    onChange={handleServerConfigChange('token')}
+                    placeholder="Enter authentication token"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+              </>
+            )}
+            
+            {/* MCP Router Tab Content */}
+            {activeConfigTab === 'mcp-router' && (
+              <>
+                <div className="mb-3">
+                  <a href="https://github.com/mcp-router/mcp-router" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-xs flex items-center" target="_blank" rel="noopener noreferrer">
+                    <Icon name="info" size="xs" className="mr-1" />
+                    What is MCP Router?
+                  </a>
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="server-token" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    MCPR_TOKEN
+                  </label>
+                  <input
+                    id="server-token"
+                    type="password"
+                    value={serverConfig.token || ''}
+                    onChange={handleServerConfigChange('token')}
+                    placeholder="Enter authentication token"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+              </>
+            )}
+            
+            {/* Save Button Area - Shown for both tabs */}
+            <div className="flex justify-end mt-3">
               {/* Assuming Button component handles dark mode variants */}
               <Button onClick={() => setShowSettings(false)} variant="outline" size="sm" className="h-7 mr-2 text-xs">
                 Cancel
