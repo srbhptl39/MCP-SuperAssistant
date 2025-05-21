@@ -1,7 +1,7 @@
 
 <div align="center">
    <!-- <img src="chrome-extension/public/icon-34.png" alt="MCP SuperAssistant Logo" width="100" height="100"> -->
-   <h1>MCP SuperAssistant Chrome Extension</h1>
+   <h1>MCP SuperAssistant Browser Extension</h1>
 </div>
 
 <p align="center">
@@ -15,7 +15,7 @@ Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter an
 
 ## Overview
 
-MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio and Grok. It allows users to execute MCP tools directly from these platforms and insert the results back into the conversation, enhancing the capabilities of web-based AI assistants.
+MCP SuperAssistant is a Chrome and firefox extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio and Grok. It allows users to execute MCP tools directly from these platforms and insert the results back into the conversation, enhancing the capabilities of web-based AI assistants.
 
 ## Currently Supported Platforms
 
