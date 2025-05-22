@@ -5,6 +5,9 @@ import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
+import { ServerConfig } from '@src/types/mcp';
+
+type ConfigTab = 'default' | 'mcp-router';
 
 interface ServerStatusProps {
   status: string;
@@ -17,11 +20,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [showSettings, setShowSettings] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [lastReconnectTime, setLastReconnectTime] = useState<string>('');
-  const [serverUri, setServerUri] = useState<string>('');
+  const [serverConfig, setServerConfig] = useState<ServerConfig>({ uri: '' });
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
   // Add ref to track initialization status
   const isInitializedRef = useRef<boolean>(false);
+  
+  // Add state for tab navigation
+  const [activeConfigTab, setActiveConfigTab] = useState<ConfigTab>('default');
 
   // Get communication methods with error handling
   const communicationMethods = useBackgroundCommunication();
@@ -70,7 +76,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   }, [communicationMethods]);
 
   const updateServerConfig = useCallback(
-    async (config: { uri: string }) => {
+    async (config: ServerConfig) => {
       try {
         if (!communicationMethods.updateServerConfig) {
           throw new Error('Communication method unavailable');
@@ -143,17 +149,20 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         logMessage('[ServerStatus] Fetching initial server configuration');
         const config = await getServerConfig();
         if (config && config.uri) {
-          setServerUri(config.uri);
+          // Update config state
+          setServerConfig(config);
           isInitializedRef.current = true;
           logMessage('[ServerStatus] Initial server configuration loaded successfully');
         } else {
           // Handle empty URI case - set a default or placeholder
-          setServerUri('http://localhost:3006/sse');
+          const defaultConfig = { uri: 'http://localhost:3006/sse' };
+          setServerConfig(defaultConfig);
           logMessage('[ServerStatus] Using default server URI as config returned empty value');
         }
       } catch (error) {
         // Set default URI on error
-        setServerUri('http://localhost:3006/sse');
+        const defaultConfig = { uri: 'http://localhost:3006/sse' };
+        setServerConfig(defaultConfig);
         logMessage(
           `[ServerStatus] Error fetching server config: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -165,7 +174,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     if (!isInitializedRef.current) {
       fetchServerConfig().catch(() => {
         // Set default URI as last resort
-        setServerUri('http://localhost:3006/sse');
+        setServerConfig({ uri: 'http://localhost:3006/sse' });
         logMessage('[ServerStatus] Setting default URI after fetch failure');
         isInitializedRef.current = true;
       });
@@ -185,7 +194,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         try {
           const config = await getServerConfig();
           if (config && config.uri) {
-            setServerUri(config.uri);
+            setServerConfig(config);
           }
         } catch (error) {
           logMessage(`[ServerStatus] Retry fetch error: ${error instanceof Error ? error.message : String(error)}`);
@@ -197,6 +206,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       retryFetch();
     }
   }, [communicationMethods, getServerConfig]);
+
+  // ServerConfig is now the source of truth, with serverUri and serverToken kept for backward compatibility
 
   // Set status message based on connection state
   useEffect(() => {
@@ -287,20 +298,33 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     logMessage(`[ServerStatus] Settings ${showSettings ? 'hidden' : 'shown'}`);
   };
 
-  const handleServerUriChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setServerUri(e.target.value);
+  const handleServerConfigChange = (fieldName: keyof ServerConfig) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setServerConfig(prev => ({
+      ...prev,
+      [fieldName]: fieldName === 'token' && value === '' ? undefined : value
+    }));
   };
 
   const handleSaveServerConfig = async () => {
     try {
-      logMessage(`[ServerStatus] Saving server URI: ${serverUri}`);
+      // Create a config based on the active tab
+      const configToSave = { ...serverConfig };
+      
+      // If MCP Router tab is active, override the URI with the fixed value
+      if (activeConfigTab === 'mcp-router') {
+        configToSave.uri = 'http://localhost:3282/mcp/sse';
+      }
+      
+      logMessage(`[ServerStatus] Saving server config: ${configToSave.uri}${configToSave.token ? ' with token' : ''}`);
 
       // Handle case where background connection is unavailable
       if (hasBackgroundError) {
         throw new Error('Background services unavailable');
       }
 
-      await updateServerConfig({ uri: serverUri });
+      // Use the appropriate config based on active tab
+      await updateServerConfig(configToSave);
       logMessage('[ServerStatus] Server config updated successfully');
 
       // Reconnect to apply new settings and refresh tools
@@ -531,22 +555,92 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             <Typography variant="h4" className="mb-2 text-slate-800 dark:text-slate-100">
               Server Configuration
             </Typography>
-            <div className="mb-3">
-              {/* Label already has dark mode styles */}
-              <label htmlFor="server-uri" className="block mb-1 text-slate-600 dark:text-slate-400">
-                Server URI
-              </label>
-              {/* Input already has dark mode styles */}
-              <input
-                id="server-uri"
-                type="text"
-                value={serverUri}
-                onChange={handleServerUriChange}
-                placeholder="Enter server URI"
-                className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
-              />
+            
+            {/* Tab Navigation */}
+            <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
+              <div className="flex">
+                <button
+                  className={cn(
+                    'py-2 px-4 font-medium text-sm transition-all duration-200',
+                    activeConfigTab === 'default'
+                      ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                  )}
+                  onClick={() => setActiveConfigTab('default')}>
+                  Default
+                </button>
+                <button
+                  className={cn(
+                    'py-2 px-4 font-medium text-sm transition-all duration-200',
+                    activeConfigTab === 'mcp-router'
+                      ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                  )}
+                  onClick={() => setActiveConfigTab('mcp-router')}>
+                  MCP Router
+                </button>
+              </div>
             </div>
-            <div className="flex justify-end">
+            
+            {/* Default Tab Content */}
+            {activeConfigTab === 'default' && (
+              <>
+                <div className="mb-3">
+                  <label htmlFor="default-server-uri" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    Server URI
+                  </label>
+                  <input
+                    id="default-server-uri"
+                    type="text"
+                    value={serverConfig.uri}
+                    onChange={handleServerConfigChange('uri')}
+                    placeholder="Enter server URI"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="default-server-token" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    Bearer Token (optional)
+                  </label>
+                  <input
+                    id="default-server-token"
+                    type="password"
+                    value={serverConfig.token || ''}
+                    onChange={handleServerConfigChange('token')}
+                    placeholder="Enter authentication token"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+              </>
+            )}
+            
+            {/* MCP Router Tab Content */}
+            {activeConfigTab === 'mcp-router' && (
+              <>
+                <div className="mb-3">
+                  <a href="https://github.com/mcp-router/mcp-router" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-xs flex items-center" target="_blank" rel="noopener noreferrer">
+                    <Icon name="info" size="xs" className="mr-1" />
+                    What is MCP Router?
+                  </a>
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="server-token" className="block mb-1 text-slate-600 dark:text-slate-400">
+                    MCPR_TOKEN
+                  </label>
+                  <input
+                    id="server-token"
+                    type="password"
+                    value={serverConfig.token || ''}
+                    onChange={handleServerConfigChange('token')}
+                    placeholder="Enter authentication token"
+                    className="w-full px-2 py-1 text-sm border border-slate-300 rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-600 outline-none"
+                  />
+                </div>
+              </>
+            )}
+            
+            {/* Save Button Area - Shown for both tabs */}
+            <div className="flex justify-end mt-3">
               {/* Assuming Button component handles dark mode variants */}
               <Button onClick={() => setShowSettings(false)} variant="outline" size="sm" className="h-7 mr-2 text-xs">
                 Cancel
@@ -580,7 +674,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             </p>
             <p className="text-slate-600 dark:text-slate-300">
               <span className="font-medium text-slate-700 dark:text-slate-200">Server URI:</span>{' '}
-              {serverUri || 'Not configured'}
+              {serverConfig.uri || 'Not configured'}
+            </p>
+            <p className="text-slate-600 dark:text-slate-300">
+              <span className="font-medium text-slate-700 dark:text-slate-200">Bearer Token:</span>{' '}
+              {serverConfig.token ? '••••••••' : 'Not configured'}
             </p>
             <p className="text-slate-600 dark:text-slate-300">
               <span className="font-medium text-slate-700 dark:text-slate-200">Last updated:</span>{' '}

@@ -1,5 +1,5 @@
 import { logMessage } from './helpers';
-import type { ToolCallCallback, ConnectionStatusCallback, ToolCallRequest } from '../types/mcp';
+import type { ToolCallCallback, ConnectionStatusCallback, ToolCallRequest, ServerConfig } from '../types/mcp';
 import { Primitive } from '../types/mcp';
 
 /**
@@ -924,7 +924,7 @@ class McpHandler {
    * @param config The new server configuration
    * @returns Promise that resolves to a boolean indicating success
    */
-  public updateServerConfig(config: { uri: string }, callback: ToolCallCallback): string {
+  public updateServerConfig(config: ServerConfig, callback: ToolCallCallback): string {
     if (!this.port) {
       logMessage('[MCP Handler] Not connected to background script');
       callback(null, 'Not connected to background script');
@@ -949,7 +949,7 @@ class McpHandler {
       requestId,
     });
 
-    logMessage(`[MCP Handler] Sent update server config request: ${requestId} with URI: ${config.uri}`);
+    logMessage(`[MCP Handler] Sent update server config request: ${requestId} with URI: ${config.uri}${config.token ? ' (token provided)' : ''}`);
 
     return requestId;
   }

@@ -80,7 +80,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
   );
 
   try {
-    await runWithSSE(uri);
+    await runWithSSE({ uri });
 
     console.log('MCP client connected successfully');
     mcpInterface.updateConnectionStatus(true);
