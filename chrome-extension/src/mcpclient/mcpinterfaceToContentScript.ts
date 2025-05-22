@@ -60,25 +60,29 @@ class McpInterface {
   }
 
   /**
-   * Start periodic connection check
+   * Start connection check - only run once on initialization
+   * CRITICAL: No automatic reconnection - all reconnection is user-driven
    */
   private startConnectionCheck(): void {
-    // Clear any existing interval
-    if (this.connectionCheckInterval !== null) {
+    if (this.connectionCheckInterval) {
       clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
     }
 
-    // Set up new interval
-    this.connectionCheckInterval = setInterval(() => {
-      this.checkServerConnection().then(isConnected => {
-        // Only broadcast if the status has changed
-        if (isConnected !== this.isConnected) {
-          console.log(`[MCP Interface] Connection status changed: ${isConnected}`);
-          this.isConnected = isConnected;
-          this.broadcastConnectionStatus();
-        }
-      });
-    }, this.connectionCheckIntervalTime);
+    // Only do an initial check, no periodic checks
+    // This ensures we only check once during page load and never automatically reconnect
+    console.log('[MCP Interface] Performing initial connection check (one-time only)');
+    this.checkServerConnection().then(isConnected => {
+      console.log(`[MCP Interface] Initial connection check result: ${isConnected ? 'Connected' : 'Disconnected'}`);
+      this.isConnected = isConnected;
+      this.broadcastConnectionStatus();
+    }).catch(error => {
+      console.error('[MCP Interface] Error during initial connection check:', error);
+      this.isConnected = false;
+      this.broadcastConnectionStatus();
+    });
+    
+    // No interval is set - reconnection will only happen when explicitly requested by the user
   }
 
   /**
@@ -315,8 +319,21 @@ class McpInterface {
     }
   }
 
+  // Cache for tool details to reduce server requests
+  private toolDetailsCache: {
+    primitives: Primitive[];
+    lastFetch: number;
+    fetchPromise: Promise<Primitive[]> | null;
+    inProgress: boolean;
+  } = {
+    primitives: [],
+    lastFetch: 0,
+    fetchPromise: null,
+    inProgress: false
+  };
+  
   /**
-   * Handle get tool details requests from content scripts
+   * Handle get tool details requests from content scripts with caching
    */
   private async handleGetToolDetails(connectionId: string, message: any): Promise<void> {
     const { requestId, forceRefresh } = message;
@@ -334,12 +351,62 @@ class McpInterface {
     }
 
     console.log(`[MCP Interface] Getting available tools for request ${requestId} (forceRefresh: ${!!forceRefresh})`);
-
+    
     try {
-      // Get the primitives from the server using the persistent connection
-      // Use forceRefresh flag if provided in the message
-      const primitives = await this.getAvailableToolsFromServer(!!forceRefresh);
-
+      // Check if we can use the cache (cache is valid for 20 seconds)
+      const now = Date.now();
+      const CACHE_TTL = 20000; // 20 seconds
+      
+      // Use cache if available and not force refreshing and cache is fresh
+      if (!forceRefresh && 
+          this.toolDetailsCache.primitives.length > 0 && 
+          (now - this.toolDetailsCache.lastFetch < CACHE_TTL)) {
+        console.log(`[MCP Interface] Using cached primitives for request ${requestId} (age: ${now - this.toolDetailsCache.lastFetch}ms)`);
+        
+        // Filter to only include tools
+        const tools = this.toolDetailsCache.primitives.filter(p => p.type === 'tool');
+        
+        // Send the cached result back to the content script
+        port.postMessage({
+          type: 'TOOL_DETAILS_RESULT',
+          result: tools,
+          requestId,
+        });
+        
+        console.log(`[MCP Interface] Tool details request ${requestId} completed successfully with ${tools.length} tools (from cache)`);
+        return;
+      }
+      
+      // If there's already a request in progress, wait for it to complete
+      if (this.toolDetailsCache.inProgress && this.toolDetailsCache.fetchPromise) {
+        console.log(`[MCP Interface] Waiting for in-progress fetch to complete for request ${requestId}`);
+        const primitives = await this.toolDetailsCache.fetchPromise;
+        
+        // Filter to only include tools
+        const tools = primitives.filter(p => p.type === 'tool');
+        
+        // Send the result back to the content script
+        port.postMessage({
+          type: 'TOOL_DETAILS_RESULT',
+          result: tools,
+          requestId,
+        });
+        
+        console.log(`[MCP Interface] Tool details request ${requestId} completed successfully with ${tools.length} tools (from shared request)`);
+        return;
+      }
+      
+      // Start a new fetch request
+      this.toolDetailsCache.inProgress = true;
+      this.toolDetailsCache.fetchPromise = this.getAvailableToolsFromServer(!!forceRefresh);
+      
+      // Get the primitives from the server
+      const primitives = await this.toolDetailsCache.fetchPromise;
+      
+      // Update the cache
+      this.toolDetailsCache.primitives = primitives;
+      this.toolDetailsCache.lastFetch = Date.now();
+      
       // Filter to only include tools
       const tools = primitives.filter(p => p.type === 'tool');
 
@@ -351,7 +418,7 @@ class McpInterface {
       });
 
       console.log(
-        `[MCP Interface] Tool details request ${requestId} completed successfully with ${tools.length} tools`,
+        `[MCP Interface] Tool details request ${requestId} completed successfully with ${tools.length} tools (fresh fetch)`,
       );
 
       // Update connection status after successful call
@@ -373,6 +440,10 @@ class McpInterface {
         error instanceof Error ? error.message : String(error),
         requestId,
       );
+    } finally {
+      // Mark request as complete
+      this.toolDetailsCache.inProgress = false;
+      this.toolDetailsCache.fetchPromise = null;
     }
   }
 

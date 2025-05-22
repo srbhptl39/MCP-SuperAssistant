@@ -534,7 +534,9 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         resultsPanel.appendChild(loadingIndicator);
 
         if (error) {
-          displayResult(resultsPanel, loadingIndicator, false, `Error: ${error}`);
+          // Pass the error directly without adding "Error:" prefix since the error message
+          // already contains the necessary information
+          displayResult(resultsPanel, loadingIndicator, false, error);
         } else {
           displayResult(resultsPanel, loadingIndicator, true, result);
 
@@ -1020,7 +1022,31 @@ export const displayResult = (
   } else {
     // For error results, don't add insert button
     resultContent.className = 'function-result-error';
-    resultContent.textContent = result.message || 'An unknown error occurred';
+    
+    // Check for specific server-related error messages
+    let errorMessage = '';
+    
+    // Handle different error formats
+    if (typeof result === 'string') {
+      errorMessage = result;
+    } else if (result && typeof result === 'object') {
+      errorMessage = result.message || 'An unknown error occurred';
+    } else {
+      errorMessage = 'An unknown error occurred';
+    }
+    
+    // Handle server disconnection errors
+    if (typeof errorMessage === 'string') {
+      if (errorMessage.includes('SERVER_UNAVAILABLE')) {
+        errorMessage = 'Server is disconnected. Please check your connection settings.';
+      } else if (errorMessage.includes('CONNECTION_ERROR') || errorMessage.includes('RECONNECT_ERROR')) {
+        errorMessage = 'Connection to server failed. Please try reconnecting.';
+      } else if (errorMessage.includes('SERVER_ERROR')) {
+        errorMessage = 'Server error occurred. Please check server status.';
+      }
+    }
+    
+    resultContent.textContent = errorMessage;
 
     // Add error content directly to results panel
     resultsPanel.appendChild(resultContent);

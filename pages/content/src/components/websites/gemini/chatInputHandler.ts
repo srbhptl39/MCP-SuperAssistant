@@ -9,7 +9,7 @@ import { logMessage } from '@src/utils/helpers';
 // CSS selectors for Gemini's UI elements
 const SELECTORS = {
   CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p',
-  SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button[aria-label="Send message"]',
+  SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button',
   FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"]',
   FILE_INPUT: 'input[type="file"]',
   MAIN_PANEL: '.chat-web',

@@ -10,6 +10,7 @@ export interface FunctionCallRendererConfig {
   targetSelectors: string[];
   enableDirectMonitoring: boolean;
   streamingContainerSelectors: string[];
+  function_result_selector?: string[];
   updateThrottle: number;
   streamingMonitoringInterval: number;
   largeContentThreshold: number;

@@ -10,7 +10,7 @@
  * @param message The message to log
  */
 export const logMessage = (message: string): void => {
-  console.log(`[Content Script]: ${message}`);
+  console.debug(`[Content Script]: ${message}`);
 };
 
 /**

@@ -93,12 +93,27 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     [communicationMethods],
   );
 
-  // Update local status when props change
+  // CRITICAL FIX: Force the component to ALWAYS use the initialStatus prop directly
+  // This ensures the UI always reflects the actual server status without any conditions
   useEffect(() => {
-    if (initialStatus && initialStatus !== status && !isReconnecting) {
+    // Always log the status for debugging
+    logMessage(`[ServerStatus] Props received initialStatus: "${initialStatus}", current UI status: "${status}", isReconnecting: ${isReconnecting}`);
+    
+    // ALWAYS update the status from props, regardless of any other conditions
+    if (initialStatus && initialStatus !== status) {
+      logMessage(`[ServerStatus] FORCE UPDATING status from "${status}" to "${initialStatus}"`);
       setStatus(initialStatus);
+      
+      // Update status message based on the new status
+      if (initialStatus === 'disconnected') {
+        setStatusMessage('Server disconnected. Click the refresh button to reconnect.');
+      } else if (initialStatus === 'connected') {
+        setStatusMessage('Connected to MCP server');
+      } else if (initialStatus === 'error') {
+        setStatusMessage('Server connection error. Please check your configuration.');
+      }
     }
-  }, [initialStatus, status, isReconnecting]);
+  }, [initialStatus]); // Only depend on initialStatus to prevent circular dependencies
 
   // Check for background communication issues
   useEffect(() => {
@@ -441,47 +456,97 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   // Get status info based on current state
   const statusInfo = getStatusInfo();
 
+  // Determine if we should show enhanced visual cues for disconnected/error states
+  const isDisconnectedOrError = status === 'disconnected' || status === 'error';
+  
   return (
-    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+    <div className={cn(
+      "px-4 py-3 border-b border-slate-200 dark:border-slate-800",
+      // Add conditional styling for disconnected/error states
+      isDisconnectedOrError && "bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800/50 rounded-sm"
+    )}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={cn('flex items-center justify-center w-6 h-6 rounded-full', statusInfo.bgColor)}>
+          <div className={cn(
+            'flex items-center justify-center w-6 h-6 rounded-full', 
+            statusInfo.bgColor,
+            // Add animation for disconnected/error states
+            isDisconnectedOrError && 'animate-pulse'
+          )}>
             {statusInfo.icon}
           </div>
-          <Typography variant="body" className="font-medium text-slate-700 dark:text-slate-200">
+          <Typography 
+            variant="body" 
+            className={cn(
+              "font-medium",
+              // Change text color for disconnected/error states
+              isDisconnectedOrError 
+                ? "text-rose-600 dark:text-rose-400" 
+                : "text-slate-700 dark:text-slate-200"
+            )}>
             Server {statusInfo.label}
           </Typography>
         </div>
         <div className="flex items-center gap-2">
-          {/* Always show reconnect button for better UX unless connected and not reconnecting */}
-          {(status !== 'connected' || isReconnecting) && (
-            <Button
-              onClick={handleReconnect}
-              disabled={isReconnecting}
-              size="sm"
-              variant={isReconnecting ? 'outline' : 'default'}
-              className="h-7 text-xs">
-              {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
-            </Button>
-          )}
+          {/* Enhanced reconnect button for disconnected states */}
+          <button
+            onClick={handleReconnect}
+            disabled={isReconnecting}
+            className={cn(
+              "p-1 rounded transition-colors",
+              isReconnecting ? "opacity-50 cursor-not-allowed" : "",
+              // Change button color for disconnected/error states
+              isDisconnectedOrError 
+                ? "text-rose-600 hover:text-rose-700 hover:bg-rose-100 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-rose-900/30" 
+                : "text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30",
+              // Add animation for disconnected/error states when not reconnecting
+              isDisconnectedOrError && !isReconnecting && "animate-pulse"
+            )}
+            aria-label="Reconnect to server"
+            title="Reconnect to server">
+            <Icon name="refresh" size="sm" className={isReconnecting ? 'animate-spin' : ''} />
+          </button>
           {/* Settings and Details buttons already have dark mode styles */}
           <button
             onClick={handleSettings}
             className="p-1 text-slate-500 hover:text-slate-700 rounded hover:bg-slate-100 transition-colors dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800"
-            aria-label="Server settings">
+            aria-label="Server settings"
+            title="Server settings">
             <Icon name="settings" size="sm" />
           </button>
           <button
             onClick={handleDetails}
             className="p-1 text-slate-500 hover:text-slate-700 rounded hover:bg-slate-100 transition-colors dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800"
-            aria-label="Show details">
+            aria-label="Show details"
+            title="Show details">
             <Icon name="info" size="sm" />
           </button>
         </div>
       </div>
 
-      {/* Status message */}
-      <div className="mt-1 mb-1 text-xs text-slate-600 dark:text-slate-400">{statusMessage}</div>
+      {/* Enhanced status message with better visibility for disconnected states */}
+      <div className={cn(
+        "mt-1 mb-1 text-xs",
+        isDisconnectedOrError 
+          ? "text-rose-600 dark:text-rose-400 font-medium" 
+          : "text-slate-600 dark:text-slate-400"
+      )}>
+        {statusMessage}
+      </div>
+      
+      {/* Add prominent alert for disconnected/error states */}
+      {isDisconnectedOrError && (
+        <div className="mt-2 p-2 bg-rose-100 dark:bg-rose-900/20 rounded-md border border-rose-200 dark:border-rose-800/50">
+          <div className="flex items-center gap-2">
+            <Icon name="alert-triangle" size="sm" className="text-rose-600 dark:text-rose-400" />
+            <Typography variant="small" className="text-rose-600 dark:text-rose-400 font-medium">
+              {status === 'disconnected' 
+                ? "Server connection lost. Click the refresh button to reconnect." 
+                : "Server connection error. Check your configuration and try again."}
+            </Typography>
+          </div>
+        </div>
+      )}
 
       {/* Settings panel */}
       {showSettings && (

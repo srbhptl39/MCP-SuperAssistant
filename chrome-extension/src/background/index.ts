@@ -24,7 +24,7 @@ const MAX_CONNECTION_ATTEMPTS = 3;
 async function initializeExtension() {
   sendAnalyticsEvent('extension_loaded', {});
   console.log('Extension initializing...');
-
+  
   // Initialize theme
   try {
     const theme = await exampleThemeStorage.get();

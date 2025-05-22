@@ -140,7 +140,8 @@ export const updateHistoryPanel = (
 
       mcpHandler.callTool(executionData.functionName, executionData.params, (result: any, error: any) => {
         if (error) {
-          displayResult(resultsPanel, loadingIndicator, false, `Error: ${error}`);
+          // Pass the error directly without adding "Error:" prefix
+          displayResult(resultsPanel, loadingIndicator, false, error);
         } else {
           displayResult(resultsPanel, loadingIndicator, true, result);
 

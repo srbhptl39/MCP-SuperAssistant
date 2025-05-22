@@ -23,6 +23,12 @@ const API_ENDPOINT = GA_ENDPOINT;
 const DEFAULT_ENGAGEMENT_TIME_IN_MSEC = 100; // Standard value for measurement protocol
 const SESSION_EXPIRATION_IN_MIN = 30;
 
+// Store the last URL to detect changes
+let lastUrl: string = '';
+
+// Check if we're in a browser context (content script) or service worker (background)
+const isWindowContext = typeof window !== 'undefined';
+
 // --- Client ID Management ---
 async function getOrCreateClientId(): Promise<string> {
   try {
@@ -168,13 +174,159 @@ export async function sendAnalyticsEvent(name: string, params: { [key: string]: 
 // --- Specific Event Helpers (Optional but Recommended) ---
 
 /**
+ * Collects demographic data about the user's environment.
+ * This includes browser info, OS, language, screen size, and device type.
+ * @returns An object containing demographic data
+ */
+export function collectDemographicData(): { [key: string]: any } {
+  try {
+    // Check if we're in a browser context where these APIs are available
+    if (!isWindowContext) {
+      return {
+        context: 'background_service_worker',
+        user_agent: navigator?.userAgent || 'Unknown',
+      };
+    }
+    
+    const userAgent = navigator.userAgent;
+    const language = navigator.language;
+    
+    // Parse browser and OS information from user agent
+    let browser = 'Unknown';
+    let browserVersion = 'Unknown';
+    let os = 'Unknown';
+    let osVersion = 'Unknown';
+    
+    // Detect browser
+    if (userAgent.indexOf('Firefox') > -1) {
+      browser = 'Firefox';
+      const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
+      browserVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('Edg') > -1) {
+      browser = 'Edge';
+      const match = userAgent.match(/Edg\/(\d+\.\d+)/);
+      browserVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('Chrome') > -1) {
+      browser = 'Chrome';
+      const match = userAgent.match(/Chrome\/(\d+\.\d+)/);
+      browserVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('Safari') > -1) {
+      browser = 'Safari';
+      const match = userAgent.match(/Version\/(\d+\.\d+)/);
+      browserVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
+      browser = 'Internet Explorer';
+      const match = userAgent.match(/(?:MSIE |rv:)(\d+\.\d+)/);
+      browserVersion = match && match[1] ? match[1] : 'Unknown';
+    }
+    
+    // Detect OS
+    if (userAgent.indexOf('Windows') > -1) {
+      os = 'Windows';
+      const match = userAgent.match(/Windows NT (\d+\.\d+)/);
+      const ntVersion = match && match[1] ? match[1] : 'Unknown';
+      // Map Windows NT version to Windows version
+      const windowsVersions: { [key: string]: string } = {
+        '10.0': '10/11',
+        '6.3': '8.1',
+        '6.2': '8',
+        '6.1': '7',
+        '6.0': 'Vista',
+        '5.2': 'XP x64',
+        '5.1': 'XP',
+      };
+      osVersion = windowsVersions[ntVersion] || ntVersion;
+    } else if (userAgent.indexOf('Mac') > -1) {
+      os = 'macOS';
+      const match = userAgent.match(/Mac OS X ([\d_]+)/);
+      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
+    } else if (userAgent.indexOf('Linux') > -1) {
+      os = 'Linux';
+      const match = userAgent.match(/Linux ([\w\d\.]+)/);
+      osVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('Android') > -1) {
+      os = 'Android';
+      const match = userAgent.match(/Android ([\d\.]+)/);
+      osVersion = match && match[1] ? match[1] : 'Unknown';
+    } else if (userAgent.indexOf('iOS') > -1 || userAgent.indexOf('iPhone') > -1 || userAgent.indexOf('iPad') > -1) {
+      os = 'iOS';
+      const match = userAgent.match(/OS ([\d_]+)/);
+      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
+    }
+    
+    // Determine device type
+    let deviceType = 'desktop';
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)) {
+      deviceType = /iPad|tablet/i.test(userAgent) ? 'tablet' : 'mobile';
+    }
+    
+    // Get screen information
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const screenResolution = `${screenWidth}x${screenHeight}`;
+    const pixelRatio = window.devicePixelRatio || 1;
+    
+    // Get country/region (this will be limited and may need server-side enrichment)
+    // For privacy reasons, we're just using the language as a proxy
+    const region = language.split('-')[1] || language;
+    
+    return {
+      browser,
+      browser_version: browserVersion,
+      operating_system: os,
+      os_version: osVersion,
+      language,
+      region,
+      screen_resolution: screenResolution,
+      pixel_ratio: pixelRatio,
+      device_type: deviceType,
+      user_agent: userAgent,
+    };
+  } catch (error) {
+    console.error('[GA4] Error collecting demographic data:', error);
+    return {
+      error: 'Failed to collect demographic data',
+    };
+  }
+}
+
+
+
+/**
+ * Tracks a URL change event with demographic data.
+ * @param url The new URL
+ */
+export async function trackUrlChange(url: string): Promise<void> {
+  const demographicData = collectDemographicData();
+  
+  // Only include document.title if in browser context
+  const pageTitle = isWindowContext ? document.title : 'Unknown';
+  
+  await sendAnalyticsEvent('url_change', {
+    page_location: url,
+    page_title: pageTitle,
+    previous_page: lastUrl,
+    ...demographicData,
+  });
+}
+
+/**
  * Sends a 'page_view' event. Automatically includes title and location.
  * Call this from extension pages (popup, options, side panel) or content scripts if needed.
  */
 export async function trackPageView(): Promise<void> {
+  // Only run in browser context
+  if (!isWindowContext) {
+    console.debug('[GA4] Page view tracking skipped - not in browser context');
+    return;
+  }
+  
+  const demographicData = collectDemographicData();
+  
   await sendAnalyticsEvent('page_view', {
     page_title: document.title,
     page_location: document.location.href,
+    ...demographicData,
   });
 }
 

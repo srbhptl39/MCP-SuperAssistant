@@ -19,7 +19,24 @@ export { initGeminiComponents } from './gemini';
 export { initChatGPTComponents } from './chatgpt';
 
 // Export AI Studio components initializer
-export { initAIStudioComponents } from './aistudio';
+export {
+  initAIStudioComponents
+} from './aistudio';
+
+// Export DeepSeek components initializer
+export {
+  initDeepSeekComponents
+} from './deepseek';
+
+// Export Kagi components initializer
+export {
+  initKagiComponents
+} from './kagi';
+
+// Export T3 Chat components initializer
+export {
+  initT3ChatComponents
+} from './t3chat';
 
 // Note: Functions like insertToggleButtons, handleAutoInsert, handleAutoSubmit
 // are now part of the common framework and are not directly exported per adapter.

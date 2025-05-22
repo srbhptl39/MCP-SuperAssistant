@@ -1,6 +1,6 @@
 {
   "name": "chrome-extension",
-  "version": "0.1",
+  "version": "0.2",
   "description": "chrome extension - core settings",
   "type": "module",
   "private": true,
@@ -22,7 +22,7 @@
     "@extension/env": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.11.2",
     "vite-plugin-node-polyfills": "^0.23.0",
     "webextension-polyfill": "^0.12.0"
   },

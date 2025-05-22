@@ -170,6 +170,8 @@ const styles = `
   display: inline-block;
   margin-right: 10px;
   vertical-align: middle;
+  border-radius: 34px;
+  
 }
 
 .mcp-toggle-checkbox input {
@@ -234,9 +236,14 @@ input:checked + .mcp-toggle-slider:before {
 .mcp-toggle-item.disabled .mcp-toggle-slider {
   background-color: #dadce0;
   cursor: not-allowed;
+  border-radius: 34px;
+  overflow: hidden;
 }
 
 .mcp-instruction-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   border-radius: 8px;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -340,6 +347,9 @@ input:checked + .mcp-toggle-slider:before {
   }
 
   .mcp-toggle-item {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
     border-bottom: 1px solid #444;
     background: #2d2d2d;
   }
@@ -366,6 +376,8 @@ input:checked + .mcp-toggle-slider:before {
 
   .mcp-toggle-item.disabled .mcp-toggle-slider {
     background-color: #444;
+    border-radius: 34px;
+    overflow: hidden;
   }
 
   .mcp-instructions-container {
@@ -454,25 +466,31 @@ const ToggleItem: React.FC<ToggleItemProps> = ({ id, label, checked, disabled, o
         borderBottom: `1px solid ${toggleTheme.itemBorderColor}`,
         backgroundColor: toggleTheme.itemBackground,
       }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <label className="mcp-toggle-checkbox">
-          <input
-            type="checkbox"
-            id={id}
-            checked={checked}
-            disabled={disabled}
-            onChange={e => onChange(e.target.checked)}
-          />
-          <span
-            className="mcp-toggle-slider"
-            style={{
-              backgroundColor: disabled
-                ? toggleTheme.toggleBackgroundDisabled
-                : checked
-                  ? toggleTheme.toggleBackgroundChecked
-                  : toggleTheme.toggleBackground,
-            }}></span>
-        </label>
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center',
+        justifyContent: 'flex-start'
+      }}>
+        <div style={{ width: '36px', marginRight: '10px' }}>
+          <label className="mcp-toggle-checkbox" style={{ display: 'block' }}>
+            <input
+              type="checkbox"
+              id={id}
+              checked={checked}
+              disabled={disabled}
+              onChange={e => onChange(e.target.checked)}
+            />
+            <span
+              className="mcp-toggle-slider"
+              style={{
+                backgroundColor: disabled
+                  ? toggleTheme.toggleBackgroundDisabled
+                  : checked
+                    ? toggleTheme.toggleBackgroundChecked
+                    : toggleTheme.toggleBackground,
+              }}></span>
+          </label>
+        </div>
         <label
           htmlFor={id}
           className="mcp-toggle-label"
@@ -784,6 +802,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
               padding: '20px 20px 16px 20px',
               background: theme.mainBackground,
               boxSizing: 'border-box',
+              overflow: 'auto',
             }}>
             <div
               style={{

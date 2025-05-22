@@ -204,31 +204,24 @@ class PersistentMcpClient {
 
   /**
    * Schedule a reconnection attempt
+   * CRITICAL: No automatic reconnection - all reconnection is user-driven
    */
   private scheduleReconnect(): void {
+    // Clear any existing reconnect timeout
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;
     }
 
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('[PersistentMcpClient] Maximum reconnect attempts reached, giving up');
-      return;
-    }
+    // Log that we're not automatically reconnecting
+    console.log('[PersistentMcpClient] No automatic reconnection - reconnection is user-driven only');
 
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+    // Reset reconnect attempts counter to ensure we don't hit the max limit
+    // This allows user-initiated reconnects to always work
+    this.reconnectAttempts = 0;
 
-    console.log(
-      `[PersistentMcpClient] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`,
-    );
-
-    this.reconnectTimeoutId = setTimeout(() => {
-      this.reconnectTimeoutId = null;
-      if (this.serverConfig.uri) {
-        this.connectionPromise = this.createConnection(this.serverConfig);
-      }
-    }, delay);
+    // Do not schedule any automatic reconnection
+    // All reconnection must be explicitly initiated by the user through the UI
   }
 
   /**
@@ -462,16 +455,16 @@ function prettyPrint(obj: any): void {
 async function isServerAvailable(config: ServerConfig): Promise<boolean> {
   try {
     const { uri, token } = config;
-    
+
     if (!uri) {
       console.log('No server URI provided');
       return false;
     }
-    
+
     // Parse the URL to get the server URL
     const baseUrl = new URL(uri);
     const serverUrl = `${baseUrl.protocol}//${baseUrl.host}`;
-    
+
     // Create an abort controller with timeout to prevent long waits
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
@@ -482,7 +475,7 @@ async function isServerAvailable(config: ServerConfig): Promise<boolean> {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      
+
       // Use fetch with HEAD method to check if server is available
       await fetch(serverUrl, {
         method: 'HEAD',

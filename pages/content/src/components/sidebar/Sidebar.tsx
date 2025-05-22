@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSiteAdapter } from '@src/adapters/adapterRegistry';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
-import DetectedTools from './DetectedTools/DetectedTools';
 import InstructionManager from './Instructions/InstructionManager';
 import InputArea from './InputArea/InputArea';
 import { useBackgroundCommunication } from './hooks/backgroundCommunication';
@@ -37,10 +36,19 @@ const Sidebar: React.FC = () => {
   const adapter = useSiteAdapter();
   // Get communication methods with fallback for failed initialization
   const communicationMethods = useBackgroundCommunication();
+  
+  // Use a single source of truth for server status from the useBackgroundCommunication hook
+  // This is the most reliable source as it's already set up to handle all connection status updates
   const serverStatus = communicationMethods?.serverStatus || 'disconnected';
   const availableTools = communicationMethods?.availableTools || [];
   const sendMessage = communicationMethods?.sendMessage || (async () => 'Error: Communication unavailable');
   const refreshTools = communicationMethods?.refreshTools || (async () => []);
+  const forceReconnect = communicationMethods?.forceReconnect || (async () => false);
+  
+  // Debug logging for serverStatus changes
+  useEffect(() => {
+    logMessage(`[Sidebar] serverStatus changed to: "${serverStatus}", passing to ServerStatus component`);
+  }, [serverStatus]);
 
   const [isMinimized, setIsMinimized] = useState(false);
   const [detectedTools, setDetectedTools] = useState<DetectedTool[]>([]);
