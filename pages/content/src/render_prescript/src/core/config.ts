@@ -33,7 +33,6 @@ export const DEFAULT_CONFIG: FunctionCallRendererConfig = {
   targetSelectors: ['pre', 'code'],
   enableDirectMonitoring: true,
   streamingContainerSelectors: ['.pre', '.code'],
-  function_result_selector: [], // Empty by default, will be populated by website-specific configs
   // streamingContainerSelectors: ['.message-content', '.chat-message', '.message-body', '.message'],
   updateThrottle: 25,
   streamingMonitoringInterval: 100,
@@ -65,7 +64,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['.pre'],
-      function_result_selector: ['div.chat-turn-container'],
     },
   },
   {
@@ -73,7 +71,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['.pre'],
-      function_result_selector: ['div.group\\/query', '.group\\/query', 'div[class*="group/query"]'],
     },
   },
   {
@@ -81,15 +78,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['code-block'],
       streamingContainerSelectors: ['.code-block'],
-      function_result_selector: ['div.query-content'],
-    },
-  },
-  {
-    urlPattern: 'grok.com',
-    config: {
-      targetSelectors: ['code'],
-      streamingContainerSelectors: ['code'],
-      function_result_selector: ['div.relative.items-end'],
     },
   },
   {
@@ -97,11 +85,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: [
-        'div.flex.max-w-full.flex-col.relative.overflow-auto.gap-1.items-end',
-        'div.flex', 
-        'div.flex.items-end'
-      ],
     },
   },
   {
@@ -109,7 +92,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div[data-message-author-role="user"]'],
     },
   },
   {
@@ -117,7 +99,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div[data-message-author-role="user"]'],
     },
   },
   {
@@ -125,15 +106,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['.codehilite'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div[data-author="user"]'],
-    },
-  },
-  {
-    urlPattern: 'chat.deepseek.com',
-    config: {
-      targetSelectors: ['pre'],
-      streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div._9663006'],
     },
   },
   {
@@ -141,7 +113,6 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div[aria-label="Your message"]'],
     },
   },
   // Add more website-specific configurations as needed

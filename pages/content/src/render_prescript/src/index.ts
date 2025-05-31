@@ -7,11 +7,6 @@ import {
   startDirectMonitoring,
   stopDirectMonitoring,
   initializeObserver,
-  processFunctionResults,
-  checkForUnprocessedFunctionResults,
-  startFunctionResultMonitoring,
-  stopFunctionResultMonitoring,
-  initializeFunctionResultObserver,
   processUpdateQueue,
   checkStreamingUpdates,
   checkStalledStreams,
@@ -48,11 +43,6 @@ const initializeRenderer = () => {
 
   injectStyles();
   processFunctionCalls(); // Initial processing of existing blocks
-  
-  // Process function results if selectors are configured
-  if (CONFIG.function_result_selector && CONFIG.function_result_selector.length > 0) {
-    processFunctionResults(); // Initial processing of existing function results
-  }
 
   // Register the global event listener for function call rendering before starting the observer
   // document.addEventListener('render-function-call', (event: Event) => {
@@ -70,11 +60,6 @@ const initializeRenderer = () => {
   // Initialize the mutation observer
   initializeObserver(); // Start the main MutationObserver
   startDirectMonitoring(); // Start direct monitoring if enabled
-  
-  // Initialize the function result observer if selectors are configured
-  if (CONFIG.function_result_selector && CONFIG.function_result_selector.length > 0) {
-    initializeFunctionResultObserver(); // Start the function result observer
-  }
 
   // Make sure stalled stream detection is explicitly started
   startStalledStreamDetection();
@@ -120,17 +105,6 @@ const configure = (options: Partial<FunctionCallRendererConfig>) => {
   }
   if (userOptions.streamingContainerSelectors !== undefined)
     CONFIG.streamingContainerSelectors = [...userOptions.streamingContainerSelectors];
-  if (userOptions.function_result_selector !== undefined) {
-    const oldLength = CONFIG.function_result_selector?.length || 0;
-    CONFIG.function_result_selector = [...userOptions.function_result_selector];
-    
-    // If function_result_selector was empty before and now has items, or vice versa,
-    // we need to restart monitoring
-    if ((oldLength === 0 && CONFIG.function_result_selector.length > 0) ||
-        (oldLength > 0 && CONFIG.function_result_selector.length === 0)) {
-      monitoringRestart = true;
-    }
-  }
   if (userOptions.streamingMonitoringInterval !== undefined) {
     CONFIG.streamingMonitoringInterval = userOptions.streamingMonitoringInterval;
     monitoringRestart = true;
@@ -162,16 +136,9 @@ const configure = (options: Partial<FunctionCallRendererConfig>) => {
   }
 
   if (monitoringRestart) {
-    // Restart function call monitoring
     stopDirectMonitoring();
     if (CONFIG.enableDirectMonitoring) {
       startDirectMonitoring();
-    }
-    
-    // Restart function result monitoring if selectors are configured
-    stopFunctionResultMonitoring();
-    if (CONFIG.function_result_selector && CONFIG.function_result_selector.length > 0) {
-      startFunctionResultMonitoring();
     }
   }
 
@@ -208,12 +175,8 @@ export {
   styles,
   processFunctionCalls,
   checkForUnprocessedFunctionCalls,
-  processFunctionResults,
-  checkForUnprocessedFunctionResults,
   startDirectMonitoring,
   stopDirectMonitoring,
-  startFunctionResultMonitoring,
-  stopFunctionResultMonitoring,
   configure as configureFunctionCallRenderer,
   initializeRenderer as initialize,
   processUpdateQueue as forceStreamingUpdate,

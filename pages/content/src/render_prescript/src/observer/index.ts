@@ -8,13 +8,6 @@ import {
   initializeObserver,
 } from './mutationObserver';
 import {
-  processFunctionResults,
-  checkForUnprocessedFunctionResults,
-  startFunctionResultMonitoring,
-  stopFunctionResultMonitoring,
-  initializeFunctionResultObserver,
-} from './functionResultObserver';
-import {
   checkStalledStreams,
   detectPreExistingIncompleteBlocks,
   preExistingIncompleteBlocks,
@@ -32,13 +25,6 @@ export {
   startDirectMonitoring,
   stopDirectMonitoring,
   initializeObserver,
-
-  // Function result functions
-  processFunctionResults,
-  checkForUnprocessedFunctionResults,
-  startFunctionResultMonitoring,
-  stopFunctionResultMonitoring,
-  initializeFunctionResultObserver,
 
   // Streaming and updates
   processUpdateQueue,

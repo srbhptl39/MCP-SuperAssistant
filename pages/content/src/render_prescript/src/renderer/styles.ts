@@ -423,7 +423,9 @@ export const styles = `
   }
   
   /* Function results panel styles */
-  .mcp-function-results-panel {
+  .function-results-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #dadce0;
     border-radius: 6px;
     margin-top: 10px;
     overflow: auto;
@@ -520,10 +522,8 @@ export const styles = `
     color: #ffcb6b;
   }
   
-  .function-block.theme-light .mcp-function-results-panel,
-  .function-block.theme-light .xml-results-panel,
-  .function-block:not(.theme-dark) .mcp-function-results-panel,
-  .function-block:not(.theme-dark) .xml-results-panel {
+  .function-block.theme-light .function-results-panel,
+  .function-block:not(.theme-dark) .function-results-panel {
     background-color: #f8f9fa;
     border: 1px solid #eaecef;
     color: #202124;
@@ -532,13 +532,12 @@ export const styles = `
     margin-top: 12px;
   }
   
-  .function-block.theme-dark .mcp-function-results-panel,
-  .function-block.theme-dark .xml-results-panel {
-    background-color: #1e1e1e;
-    border: 1px solid rgba(255,255,255,0.03);
+  .function-block.theme-dark .function-results-panel {
+    background-color: #2d2d2d;
+    border: 1px solid #444;
     color: #e8eaed;
     border-radius: 8px;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     margin-top: 12px;
   }
   
@@ -551,16 +550,6 @@ export const styles = `
   .function-block.theme-dark .function-result-error {
     color: #f28b82;
     background-color: rgba(242, 139, 130, 0.1);
-  }
-  
-  /* XML pre element styles */
-  .xml-pre {
-    white-space: pre-wrap;
-    margin: 0;
-    padding: 12px;
-    font-family: inherit;
-    font-size: 13px;
-    line-height: 1.5;
   }
   
   /* Small layout adjustments for mobile */
