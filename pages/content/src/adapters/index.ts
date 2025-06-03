@@ -17,6 +17,7 @@ import type { SiteAdapter } from '../utils/siteAdapter';
 import { DeepSeekAdapter } from './deepseekAdapter';
 import { KagiAdapter } from './kagiAdapter';
 import { T3ChatAdapter } from './t3chatAdapter';
+import { SciraAdapter } from './sciraAdapter'; // Import SciraAdapter
 
 // Define type for adapter constructor
 type AdapterConstructor = new () => SiteAdapter;
@@ -38,6 +39,7 @@ const adapterInfos: AdapterInfo[] = [
   { AdapterClass: DeepSeekAdapter, hostnames: ['chat.deepseek.com'] },
   { AdapterClass: KagiAdapter, hostnames: ['kagi.com'] },
   { AdapterClass: T3ChatAdapter, hostnames: ['t3.chat'] },
+  { AdapterClass: SciraAdapter, hostnames: ['scira.ai'] }, // Add SciraAdapter
 ];
 
 // Map of adapter instances that will be lazily initialized
@@ -221,3 +223,4 @@ export const openrouterAdapter = () => initializeAdapter(OpenRouterAdapter);
 export const deepseekAdapter = () => initializeAdapter(DeepSeekAdapter);
 export const kagiAdapter = () => initializeAdapter(KagiAdapter);
 export const t3chatAdapter = () => initializeAdapter(T3ChatAdapter);
+export const sciraAdapter = () => initializeAdapter(SciraAdapter); // Export SciraAdapter getter

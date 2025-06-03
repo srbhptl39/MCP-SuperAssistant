@@ -46,6 +46,7 @@ MCP SuperAssistant is a Chrome extension that integrates the Model Context Proto
 - [DeepSeek](https://chat.deepseek.com/)
 - [Kagi](https://kagi.com/assistant)
 - [T3 Chat](https://t3.chat/)
+- [Scira.ai](https://scira.ai/)
 
 
 ## Demo Video
@@ -62,7 +63,7 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 
 ## Key Features
 
-- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat!
+- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat, Scira.ai!
 - **Sidebar UI**: Clean, unobtrusive interface that integrates with the AI platform
 - **Tool Detection**: Automatically detects MCP tool calls in AI responses
 - **Tool Execution**: Execute MCP tools with a single click
