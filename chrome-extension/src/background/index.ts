@@ -5,6 +5,7 @@ import {
   isMcpServerConnected,
   forceReconnectToMcpServer,
   checkMcpServerConnection,
+  resetMcpFailureCounters,
 } from '../mcpclient/officialmcpclient';
 import { mcpInterface } from '../mcpclient/mcpinterfaceToContentScript';
 import { sendAnalyticsEvent, trackError } from '../../utils/analytics';
@@ -151,6 +152,8 @@ async function tryConnectToServer(uri: string): Promise<void> {
     } else {
       console.log('Maximum connection attempts reached. Will try again during periodic check.');
       isConnecting = false;
+      // Don't reset failure counters here - let the periodic check handle it
+      // This prevents immediate retry storms while allowing periodic recovery
     }
   } finally {
     if (connectionAttemptCount >= MAX_CONNECTION_ATTEMPTS) {
@@ -160,7 +163,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
 }
 
 // Set up a periodic connection check
-const PERIODIC_CHECK_INTERVAL = 60000; // 1 minute
+const PERIODIC_CHECK_INTERVAL = 30000; // 30 seconds (reduced from 60 seconds)
 setInterval(async () => {
   if (isConnecting) {
     return; // Skip if already connecting
@@ -173,6 +176,7 @@ setInterval(async () => {
   // If not connected and we're not in the middle of connecting, try to connect
   if (!isConnected && !isConnecting) {
     connectionAttemptCount = 0; // Reset counter for periodic checks
+    resetMcpFailureCounters(); // Reset failure counters to allow reconnection
     console.log('Periodic check: MCP server not connected, attempting to connect');
     const serverUrl = mcpInterface.getServerUrl();
     tryConnectToServer(serverUrl).catch(() => {});
