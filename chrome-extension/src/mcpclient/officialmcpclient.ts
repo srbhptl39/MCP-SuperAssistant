@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport, SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
-// import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'; // DISABLED: Using SSE only
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
@@ -79,9 +79,19 @@ class PersistentMcpClient {
     }
 
     // If we're already connecting to the same URI and have a valid promise, return it
+    // IMPORTANT: Also verify the connection is actually valid, not just marked as connected
     if (this.connectionPromise && this.serverUrl === uri && this.isConnected) {
-      console.log('[PersistentMcpClient] Connection already established, returning existing client');
-      return this.connectionPromise;
+      // Perform a quick validation to ensure the connection is still alive
+      const isActuallyConnected = await this.validateConnection();
+      if (isActuallyConnected) {
+        console.log('[PersistentMcpClient] Connection already established and validated, returning existing client');
+        return this.connectionPromise;
+      } else {
+        console.log('[PersistentMcpClient] Connection marked as established but validation failed, reconnecting');
+        // Reset connection state to force reconnection
+        this.isConnected = false;
+        this.connectionPromise = null;
+      }
     }
 
     // If we're already trying to connect to the same URI, wait for that connection
@@ -141,13 +151,20 @@ class PersistentMcpClient {
 
       spinner.success(`URI validated: ${uri}`);
 
-      // Use SSE transport only (StreamableHTTP disabled)
-      spinner.success(`Attempting connection with SSE transport...`);
+      // Determine transport type based on URL
+      const isStreamableHTTP = uri.endsWith('/mcp');
+      const isSSE = uri.endsWith('/sse');
 
-      console.log('Connecting with SSE transport...');
+      if (!isStreamableHTTP && !isSSE) {
+        // For backward compatibility, assume SSE for non-specific URLs
+        console.log('No specific endpoint detected, attempting SSE transport for backward compatibility...');
+      }
+
+      console.log(`Attempting connection with ${isStreamableHTTP ? 'Streamable HTTP' : 'SSE'} transport...`);
+
       const client = new Client(
         {
-          name: 'sse-client',
+          name: isStreamableHTTP ? 'streamable-http-client' : 'sse-client',
           version: '1.0.0',
         },
         { capabilities: {} },
@@ -158,7 +175,17 @@ class PersistentMcpClient {
         console.debug('[server log]:', notification.params.data);
       });
 
-      const transport = new SSEClientTransport(baseUrl);
+      let transport: Transport;
+      
+      if (isStreamableHTTP) {
+        // Use Streamable HTTP transport for /mcp endpoints
+        spinner.success(`Attempting connection with Streamable HTTP transport...`);
+        transport = new StreamableHTTPClientTransport(baseUrl);
+      } else {
+        // Use SSE transport for /sse endpoints or as fallback
+        spinner.success(`Attempting connection with SSE transport...`);
+        transport = new SSEClientTransport(baseUrl);
+      }
       
       // Add timeout to prevent hanging connections
       const connectionTimeout = 10000; // 10 seconds
@@ -166,15 +193,15 @@ class PersistentMcpClient {
       
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
-          reject(new Error(`Connection timeout after ${connectionTimeout}ms. The server may be slow to respond or the SSE endpoint may not be functioning properly.`));
+          reject(new Error(`Connection timeout after ${connectionTimeout}ms. The server may be slow to respond or the ${isStreamableHTTP ? 'Streamable HTTP' : 'SSE'} endpoint may not be functioning properly.`));
         }, connectionTimeout);
       });
       
       // Race between connection and timeout
       await Promise.race([connectionPromise, timeoutPromise]);
 
-      console.log('Successfully connected using SSE transport');
-      spinner.success(`Connected using SSE transport`);
+      console.log(`Successfully connected using ${isStreamableHTTP ? 'Streamable HTTP' : 'SSE'} transport`);
+      spinner.success(`Connected using ${isStreamableHTTP ? 'Streamable HTTP' : 'SSE'} transport`);
 
       this.client = client;
       this.transport = transport;
@@ -332,6 +359,47 @@ class PersistentMcpClient {
   }
 
   /**
+   * Validate if the current connection is actually working
+   * @returns Promise that resolves to true if connection is valid
+   */
+  private async validateConnection(): Promise<boolean> {
+    if (!this.client || !this.isConnected) {
+      return false;
+    }
+
+    try {
+      // For SSE connections, we can't really validate without making a request
+      // So we'll check if the client object exists and has required methods
+      if (typeof this.client.listTools !== 'function') {
+        return false;
+      }
+
+      // If we recently checked (within 5 seconds), assume it's still valid
+      const timeSinceLastCheck = Date.now() - this.lastConnectionCheck;
+      if (timeSinceLastCheck < 5000) {
+        return true;
+      }
+
+      // Otherwise, try a lightweight operation with short timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Validation timeout')), 1000); // Reduced to 1 second
+      });
+
+      await Promise.race([
+        this.client.listTools(),
+        timeoutPromise
+      ]);
+
+      this.lastConnectionCheck = Date.now();
+      return true;
+    } catch (error) {
+      // Don't log every validation failure to reduce noise
+      console.debug('[PersistentMcpClient] Connection validation failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Check if the connection is still valid and reconnect if needed
    * @returns Promise that resolves to the client instance
    */
@@ -401,6 +469,9 @@ class PersistentMcpClient {
         this.client = null;
         this.transport = null;
         this.connectionPromise = null;
+        // Increment failure counter for connection errors
+        this.consecutiveFailures++;
+        this.lastConnectionError = errorMessage;
       }
 
       throw error;
@@ -423,6 +494,10 @@ class PersistentMcpClient {
       /connection failed/i,
       /transport error/i,
       /socket error/i,
+      /session.*not found/i,
+      /no active.*connection/i,
+      /invalid session/i,
+      /session.*expired/i,
     ];
 
     return connectionErrorPatterns.some(pattern => pattern.test(errorMessage));
@@ -519,25 +594,32 @@ class PersistentMcpClient {
         return false;
       }
 
-      // For periodic connection checks, we should be conservative
-      // Only mark as disconnected if we have clear evidence of connection failure
-      // The client itself tracks connection state, so we trust that unless proven otherwise
+      // Perform actual validation instead of just trusting the flag
+      const isValid = await this.validateConnection();
+      
+      if (!isValid) {
+        console.log(`[PersistentMcpClient] Connection check failed - session may be invalid`);
+        this.isConnected = false;
+        // Reset connection promise to force reconnection on next attempt
+        this.connectionPromise = null;
+        return false;
+      }
 
-      // Don't call isServerAvailable for periodic checks as it may give false negatives
-      // The MCP client maintains its own connection state which is more reliable
-      console.log(`[PersistentMcpClient] Connection check: client exists and marked as connected`);
+      console.log(`[PersistentMcpClient] Connection check: validated successfully`);
 
       // Update the last check time
       this.lastConnectionCheck = Date.now();
 
-      // Return the current connection state without changing it
-      // Only actual connection errors should change this state
-      return this.isConnected;
+      // Connection is valid
+      this.isConnected = true;
+      return true;
     } catch (error) {
       console.error(`[PersistentMcpClient] Error during connection status check:`, error);
-      // Don't change connection status on check errors
+      // On check errors, mark as disconnected to be safe
+      this.isConnected = false;
+      this.connectionPromise = null;
       this.lastConnectionCheck = Date.now();
-      return this.isConnected;
+      return false;
     }
   }
 
@@ -725,6 +807,17 @@ class PersistentMcpClient {
     this.cleanupOldConnection(clientToClose, transportToClose);
     
     console.log('[PersistentMcpClient] Connection aborted');
+  }
+
+  /**
+   * Reset failure counters to allow reconnection
+   * This is useful when the server has been restarted and we want to retry
+   */
+  public resetFailureCounters(): void {
+    console.log('[PersistentMcpClient] Resetting failure counters');
+    this.consecutiveFailures = 0;
+    this.lastConnectionError = null;
+    this.reconnectAttempts = 0;
   }
 }
 
@@ -1056,6 +1149,13 @@ export function resetMcpConnectionState(): void {
  */
 export function abortMcpConnection(): void {
   persistentClient.abortConnection();
+}
+
+/**
+ * Reset failure counters to allow reconnection after server restart
+ */
+export function resetMcpFailureCounters(): void {
+  persistentClient.resetFailureCounters();
 }
 
 /**
