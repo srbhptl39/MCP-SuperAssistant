@@ -18,9 +18,9 @@ class McpHandler {
   private reconnectDelay: number = 2000;
   private reconnectTimeoutId: number | null = null;
   private isReconnecting: boolean = false;
-  private lastConnectionCheck: number = 0;
-  private connectionCheckInterval: number = 15000;
-  private connectionCheckTimeoutId: number | null = null;
+  // private lastConnectionCheck: number = 0; // Removed, heartbeat is primary
+  // private connectionCheckInterval: number = 15000; // Removed
+  // private connectionCheckTimeoutId: number | null = null; // Removed
   private heartbeatInterval: number | null = null;
   private heartbeatFrequency: number = 10000;
   private lastHeartbeatResponse: number = 0;
@@ -28,12 +28,6 @@ class McpHandler {
   private pendingRequestTimeoutMs: number = 30000;
   private staleRequestCleanupInterval: number | null = null;
   private extensionContextValid: boolean = true;
-
-  // Add debouncing for getServerConfig requests
-  private lastServerConfigRequest: number = 0;
-  private serverConfigDebounceMs: number = 1000; // 1 second debounce
-  private pendingServerConfigCallbacks: ToolCallCallback[] = [];
-  private serverConfigRequestId: string | null = null;
 
   /**
    * Private constructor to enforce singleton pattern
@@ -46,19 +40,18 @@ class McpHandler {
 
     // Listen for page visibility changes to reconnect if needed
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        const timeSinceLastCheck = Date.now() - this.lastConnectionCheck;
-        if (timeSinceLastCheck > this.connectionCheckInterval && !this.port && this.extensionContextValid) {
-          logMessage('[MCP Handler] Page became visible after inactivity, reconnecting...');
-          this.connect();
-        } else if (this.extensionContextValid) {
-          this.checkConnectionStatus();
+      if (document.visibilityState === 'visible' && this.extensionContextValid) {
+        if (!this.port) {
+          logMessage('[MCP Handler] Page became visible and port is not connected, attempting to connect.');
+          this.connect(); // Attempt to connect if no port
+        } else {
+          // If port exists, heartbeat will take care of checking.
+          // Optionally, could send an explicit CHECK_CONNECTION here if desired,
+          // but let's rely on heartbeat first.
+          logMessage('[MCP Handler] Page became visible, port exists. Heartbeat will validate.');
         }
       }
     });
-
-    // Start periodic connection check
-    this.startConnectionCheck();
 
     // Start cleanup of stale requests
     this.startStaleRequestCleanup();
@@ -66,8 +59,7 @@ class McpHandler {
     // Attempt initial connection with a small delay to ensure extension is ready
     setTimeout(() => {
       this.connect();
-      // Start the heartbeat only after initial connection attempt
-      this.startHeartbeat();
+      // Heartbeat will be started by connect() on successful connection
     }, 500);
 
     logMessage('[MCP Handler] Initialized');
@@ -84,27 +76,9 @@ class McpHandler {
   }
 
   /**
-   * Start periodic connection check
+   * Periodic connection check via `startConnectionCheck` has been removed.
+   * Heartbeat and `onDisconnect` are the primary mechanisms for connection maintenance.
    */
-  private startConnectionCheck(): void {
-    if (this.connectionCheckTimeoutId !== null) {
-      window.clearTimeout(this.connectionCheckTimeoutId);
-      this.connectionCheckTimeoutId = null;
-    }
-
-    this.connectionCheckTimeoutId = window.setTimeout(() => {
-      this.connectionCheckTimeoutId = null;
-
-      if (!this.isReconnecting && this.extensionContextValid) {
-        this.checkConnectionStatus();
-      }
-
-      // Only continue periodic checks if the extension context is still valid
-      if (this.extensionContextValid) {
-        this.startConnectionCheck();
-      }
-    }, this.connectionCheckInterval);
-  }
 
   /**
    * Start cleanup interval for stale pending requests
@@ -158,11 +132,10 @@ class McpHandler {
       }
 
       if (!this.port) {
-        // If we don't have a port, try to reconnect (only if context is valid)
-        if (!this.isReconnecting && this.extensionContextValid) {
-          logMessage('[MCP Handler] No port in heartbeat, attempting to reconnect');
-          this.connect();
-        }
+        // If we don't have a port, and heartbeat is still running,
+        // it means we are in a disconnected state. Connect should have been
+        // scheduled by onDisconnect or another mechanism. Heartbeat should just wait.
+        logMessage('[MCP Handler] No port in heartbeat, waiting for reconnection.');
         return;
       }
 
@@ -225,10 +198,11 @@ class McpHandler {
     // Clean up all intervals and timeouts
     this.stopHeartbeat();
 
-    if (this.connectionCheckTimeoutId !== null) {
-      window.clearTimeout(this.connectionCheckTimeoutId);
-      this.connectionCheckTimeoutId = null;
-    }
+    // connectionCheckTimeoutId was removed
+    // if (this.connectionCheckTimeoutId !== null) {
+    //   window.clearTimeout(this.connectionCheckTimeoutId);
+    //   this.connectionCheckTimeoutId = null;
+    // }
 
     if (this.reconnectTimeoutId !== null) {
       window.clearTimeout(this.reconnectTimeoutId);
@@ -318,12 +292,15 @@ class McpHandler {
         }
       });
 
-      this.checkConnectionStatus();
+      // Removed explicit checkConnectionStatus() call from here.
+      // Port listeners are set up; successful connection is determined by messages or disconnect.
+      // this.checkConnectionStatus();
 
-      this.lastConnectionCheck = Date.now();
       this.lastHeartbeatResponse = Date.now(); // Initialize heartbeat tracker
+      // lastConnectionCheck was removed
 
       this.isReconnecting = false;
+      this.startHeartbeat(); // Start heartbeat on successful connection
 
       logMessage('[MCP Handler] Connected to background script');
     } catch (error) {
@@ -348,6 +325,8 @@ class McpHandler {
    * @param clearReconnect Whether to clear reconnect attempts
    */
   private disconnect(clearReconnect: boolean = true): void {
+    this.stopHeartbeat(); // Stop heartbeat whenever disconnecting
+
     if (this.port) {
       try {
         this.port.disconnect();
@@ -401,46 +380,37 @@ class McpHandler {
   /**
    * Check the connection status with the background script
    * This performs both a check of the port itself and sends a message to verify
-   * the background service can respond
+   * the background service can respond.
+   * This is now primarily for an explicit check if needed, e.g. on visibility change,
+   * but not part of a periodic timer.
    */
   private checkConnectionStatus(): void {
     if (!this.extensionContextValid) {
+      logMessage('[MCP Handler] checkConnectionStatus: Context invalid.');
       return;
     }
 
     if (this.port) {
+      logMessage('[MCP Handler] checkConnectionStatus: Port exists, sending CHECK_CONNECTION.');
       try {
-        // Send a connectivity check message
-        this.port.postMessage({
-          type: 'CHECK_CONNECTION',
-          forceCheck: true,
-          timestamp: Date.now(),
-        });
-
-        this.lastConnectionCheck = Date.now();
+        this.port.postMessage({ type: 'CHECK_CONNECTION', forceCheck: true, timestamp: Date.now() });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logMessage(`[MCP Handler] Error sending connection check: ${errorMessage}`);
-
+        logMessage(`[MCP Handler] Error sending connection check (during checkConnectionStatus): ${errorMessage}`);
         if (errorMessage.includes('Extension context invalidated')) {
           this.handleExtensionContextInvalidated();
           return;
         }
-
-        // If we get an error sending a message, the port is dead
-        this.port = null;
-        this.isConnected = false;
-        this.notifyConnectionStatus();
-
-        // Schedule a reconnect
-        if (!this.isReconnecting && this.extensionContextValid) {
-          this.scheduleReconnect();
-        }
+        // If postMessage fails, port is likely dead. Disconnect and scheduleReconnect.
+        this.port = null; // Mark port as null before calling disconnect
+        this.disconnect(false); // Don't clear reconnect attempts here, scheduleReconnect will handle it
+        this.scheduleReconnect();
       }
-    } else if (!this.isReconnecting && this.extensionContextValid) {
-      // If we don't have a port and aren't already reconnecting, try to reconnect
-      logMessage('[MCP Handler] No port during connection check, attempting to reconnect');
+    } else if (!this.isReconnecting) {
+      logMessage('[MCP Handler] checkConnectionStatus: No port and not reconnecting, attempting to connect.');
       this.connect();
+    } else {
+      logMessage('[MCP Handler] checkConnectionStatus: No port but already reconnecting.');
     }
   }
 
@@ -801,8 +771,7 @@ class McpHandler {
     // Store the request
     this.pendingRequests.set(requestId, {
       requestId,
-      toolName: '',
-      args: {},
+      // toolName and args are optional and not applicable here
       callback,
       timestamp: Date.now(),
     });
@@ -855,8 +824,7 @@ class McpHandler {
     // Store the request
     this.pendingRequests.set(requestId, {
       requestId,
-      toolName: '',
-      args: {},
+      // toolName and args are optional and not applicable here
       callback,
       timestamp: Date.now(),
     });
@@ -942,57 +910,43 @@ class McpHandler {
    * @returns Promise that resolves to the server configuration
    */
   public getServerConfig(callback: ToolCallCallback): string {
+    if (!this.extensionContextValid) {
+      callback(null, 'Extension context invalidated');
+      return '';
+    }
     if (!this.port) {
-      logMessage('[MCP Handler] Not connected to background script');
+      logMessage('[MCP Handler] getServerConfig: Not connected to background script');
       callback(null, 'Not connected to background script');
       return '';
     }
 
-    // If there's already a pending request, add this callback to the queue
-    if (this.serverConfigRequestId && this.pendingRequests.has(this.serverConfigRequestId)) {
-      logMessage('[MCP Handler] Server config request already pending, adding callback to queue');
-      this.pendingServerConfigCallbacks.push(callback);
-      return this.serverConfigRequestId;
-    }
-
+    // Debouncing logic removed.
     const requestId = `server-config-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    this.serverConfigRequestId = requestId;
 
-    // Store the request
     this.pendingRequests.set(requestId, {
       requestId,
-      toolName: '',
-      args: {},
-      callback: (result: any, error?: string) => {
-        // Call the original callback
-        callback(result, error);
-
-        // Call all queued callbacks
-        this.pendingServerConfigCallbacks.forEach(queuedCallback => {
-          try {
-            queuedCallback(result, error);
-          } catch (callbackError) {
-            logMessage(
-              `[MCP Handler] Error in queued server config callback: ${callbackError instanceof Error ? callbackError.message : String(callbackError)}`,
-            );
-          }
-        });
-
-        // Clear the queue and request ID
-        this.pendingServerConfigCallbacks = [];
-        this.serverConfigRequestId = null;
-      },
+      toolName: 'getServerConfig', // Store toolname for context
+      // args is optional and not applicable here
+      callback,
       timestamp: Date.now(),
     });
 
-    // Send the request to the background script
-    this.port.postMessage({
-      type: 'GET_SERVER_CONFIG',
-      requestId,
-    });
-
-    logMessage(`[MCP Handler] Sent server config request: ${requestId}`);
-
+    try {
+      this.port.postMessage({
+        type: 'GET_SERVER_CONFIG',
+        requestId,
+      });
+      logMessage(`[MCP Handler] Sent server config request: ${requestId}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logMessage(`[MCP Handler] Error sending getServerConfig: ${errorMessage}`);
+      if (errorMessage.includes('Extension context invalidated')) {
+        this.handleExtensionContextInvalidated();
+      }
+      this.pendingRequests.delete(requestId);
+      callback(null, `Failed to send getServerConfig request: ${errorMessage}`);
+      return '';
+    }
     return requestId;
   }
 
@@ -1013,8 +967,7 @@ class McpHandler {
     // Store the request
     this.pendingRequests.set(requestId, {
       requestId,
-      toolName: '',
-      args: {},
+      // toolName and args are optional and not applicable here
       callback,
       timestamp: Date.now(),
     });
@@ -1035,10 +988,11 @@ class McpHandler {
    * Clean up resources
    */
   public dispose(): void {
-    if (this.connectionCheckTimeoutId !== null) {
-      window.clearTimeout(this.connectionCheckTimeoutId);
-      this.connectionCheckTimeoutId = null;
-    }
+    // connectionCheckTimeoutId was removed
+    // if (this.connectionCheckTimeoutId !== null) {
+    //   window.clearTimeout(this.connectionCheckTimeoutId);
+    //   this.connectionCheckTimeoutId = null;
+    // }
 
     if (this.heartbeatInterval !== null) {
       window.clearInterval(this.heartbeatInterval);

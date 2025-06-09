@@ -6,28 +6,15 @@
 
 import { logMessage } from '@src/utils/helpers';
 
-// Cache for the last found input element to improve reliability
-let lastFoundInputElement: HTMLElement | null = null;
-
 /**
- * Find the T3 Chat input element
- * @returns The chat input element or null if not found
+ * Returns an array of selectors for the T3 Chat input element.
+ * @returns Array of CSS selectors.
  */
-export const findChatInputElement = (): HTMLElement | null => {
-  // Try to find T3 Chat's textarea based on the provided HTML
-  const t3ChatInput = document.querySelector('textarea#chat-input, textarea[placeholder="Type your message here..."]');
-
-  if (t3ChatInput) {
-    logMessage('Found T3 Chat input element');
-    lastFoundInputElement = t3ChatInput as HTMLElement;
-    return t3ChatInput as HTMLElement;
-  }
-
-  // Fallback: Try to find the input element using common chat input patterns
-  logMessage('Primary selector failed, trying fallback method');
-
-  // Try to find by common class names or attributes used in chat interfaces
-  const possibleInputSelectors = [
+export const getT3ChatInputSelectors = (): string[] => {
+  return [
+    'textarea#chat-input',
+    'textarea[placeholder="Type your message here..."]',
+    // Fallbacks from original findChatInputElement
     'textarea.resize-none',
     'textarea[aria-label="Message input"]',
     'div[role="textbox"]',
@@ -36,24 +23,34 @@ export const findChatInputElement = (): HTMLElement | null => {
     'div[contenteditable="true"]',
     'textarea.message-input',
   ];
+};
 
-  for (const selector of possibleInputSelectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      logMessage(`Found T3 Chat input element via selector: ${selector}`);
-      lastFoundInputElement = element as HTMLElement;
-      return element as HTMLElement;
-    }
-  }
+/**
+ * Returns an array of selectors for the T3 Chat submit button.
+ * @returns Array of CSS selectors.
+ */
+export const getT3ChatSubmitButtonSelectors = (): string[] => {
+  return [
+    'button[type="submit"]',
+    'button[aria-label="Submit"]',
+    'button[aria-label="Send message"]',
+    'button.send-button',
+    'button.chat-submit',
+    'button[data-testid="send-button"]',
+    'svg.send-icon', // Icon based
+  ];
+};
 
-  // If we still haven't found it, try using the last found element if available
-  if (lastFoundInputElement && document.body.contains(lastFoundInputElement)) {
-    logMessage('Using cached input element');
-    return lastFoundInputElement;
-  }
-
-  logMessage('Could not find T3 Chat input element');
-  return null;
+/**
+ * Returns an array of selectors for the T3 Chat file input element.
+ * @returns Array of CSS selectors.
+ */
+export const getT3ChatFileInputSelectors = (): string[] => {
+  return [
+    'input[type="file"]', // Generic
+    'button[aria-label*="Attach"] input[type="file"]',
+    'div[class*="upload"] input[type="file"]',
+  ];
 };
 
 /**
@@ -75,163 +72,85 @@ export const formatAsJson = (data: any): string => {
 };
 
 /**
- * Insert text into the chat input
- * @param text The text to insert
- * @returns True if successful, false otherwise
+ * Insert text into the T3 Chat input.
+ * @param element The chat input HTMLElement.
+ * @param text The text to insert.
+ * @returns True if successful, false otherwise.
  */
-export const insertTextToChatInput = (text: string): boolean => {
+export const insertTextToChatInput = (element: HTMLElement, text: string): boolean => {
+  if (!element) {
+    logMessage('insertTextToChatInput (T3Chat): Element not provided.');
+    return false;
+  }
   try {
-    const chatInput = findChatInputElement();
-
-    if (!chatInput) {
-      logMessage('Could not find T3 Chat input element');
-      console.error('Could not find T3 Chat input element');
-      return false;
-    }
-
-    // First check if it's a textarea element (most reliable method)
-    if (chatInput.tagName === 'TEXTAREA') {
-      const textarea = chatInput as HTMLTextAreaElement;
+    element.focus();
+    if (element.tagName === 'TEXTAREA') {
+      const textarea = element as HTMLTextAreaElement;
       const currentText = textarea.value;
-
-      // For textareas, we can just use the \n character directly
-      const formattedText = currentText ? `${currentText}\n\n${text}` : text;
-      textarea.value = formattedText;
-
-      // Position cursor at the end
+      textarea.value = currentText ? `${currentText}\n\n${text}` : text;
       textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-
-      // Trigger input event
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      textarea.dispatchEvent(inputEvent);
-
-      // Focus the textarea
-      textarea.focus();
-
-      logMessage('Appended text to textarea with preserved newlines');
-      return true;
-    }
-    // Check if it's a contenteditable div
-    else if (chatInput.getAttribute('contenteditable') === 'true') {
-      // More reliable approach for contenteditable elements using Selection and Range
-      // This preserves the current content and adds the new text at the end
-      // with proper newline handling
-
-      // First, focus the element and move cursor to the end
-      chatInput.focus();
-
-      // Get current content
-      const currentText = chatInput.textContent || '';
-
-      // Create a text node with the new content
-      const textToInsert = text;
-
-      // If there's existing content, add newlines before the new text
-      if (currentText && currentText.trim() !== '') {
-        // Ensure the element has some content at the end to place cursor after
-        if (!chatInput.lastChild || chatInput.lastChild.nodeType !== Node.TEXT_NODE) {
-          chatInput.appendChild(document.createTextNode(''));
-        }
-
-        // Move cursor to the end
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(chatInput);
-        range.collapse(false); // collapse to end
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-
-        // Insert two newlines before the text
-        document.execCommand('insertText', false, '\n\n');
-      }
-
-      // Use execCommand to insert text, which properly handles newlines
+    } else if (element.isContentEditable) {
+      const currentText = element.textContent || '';
+      const textToInsert = currentText.trim() !== '' ? `\n\n${text}` : text;
       document.execCommand('insertText', false, textToInsert);
-
-      // Trigger input event for contenteditable
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-
-      logMessage('Appended text to contenteditable with preserved newlines using execCommand');
-      return true;
+    } else if ('value' in element) {
+      (element as HTMLInputElement).value = text;
+    } else {
+      element.textContent = text;
     }
-    // Fallback for other element types
-    else {
-      logMessage('Using fallback method for unknown element type');
 
-      // Try using value property first (for input-like elements)
-      if ('value' in chatInput) {
-        const inputElement = chatInput as HTMLInputElement;
-        const currentValue = inputElement.value;
-        inputElement.value = currentValue ? `${currentValue}\n\n${text}` : text;
-
-        // Trigger input event
-        const inputEvent = new InputEvent('input', { bubbles: true });
-        inputElement.dispatchEvent(inputEvent);
-
-        // Focus the element
-        inputElement.focus();
-
-        logMessage('Appended text to input element via value property');
-        return true;
-      }
-
-      // Last resort: use textContent
-      const currentText = chatInput.textContent || '';
-      chatInput.textContent = currentText ? `${currentText}\n\n${text}` : text;
-
-      // Trigger input event
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-
-      // Focus the element
-      chatInput.focus();
-
-      logMessage('Appended text to element via textContent property');
-      return true;
-    }
-  } catch (error) {
-    logMessage(`Error inserting text into T3 Chat input: ${error}`);
+    const inputEvent = new Event('input', { bubbles: true });
+    element.dispatchEvent(inputEvent);
+    logMessage('Appended text to T3 Chat input');
+    return true;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logMessage(`Error inserting text into T3 Chat input: ${errorMessage}`);
     console.error('Error inserting text into T3 Chat input:', error);
     return false;
   }
 };
 
 /**
- * Insert tool result into the chat input
- * @param result The tool result to insert
- * @returns True if successful, false otherwise
+ * Insert tool result into the T3 Chat input.
+ * @param element The chat input HTMLElement.
+ * @param result The tool result to insert (will be stringified if not a string).
+ * @returns True if successful, false otherwise.
  */
-export const insertToolResultToChatInput = (result: string): boolean => {
-  logMessage('Inserting tool result to T3 Chat input');
-  // const formattedResult = wrapInToolOutput(result);
-  return insertTextToChatInput(result);
+export const insertToolResultToChatInput = (element: HTMLElement, result: any): boolean => {
+  if (!element) {
+    logMessage('insertToolResultToChatInput (T3Chat): Element not provided.');
+    return false;
+  }
+  let textToInsert = result;
+  if (typeof result !== 'string') {
+    textToInsert = JSON.stringify(result, null, 2);
+    logMessage('Converted tool result to string format for T3Chat.');
+  }
+  return insertTextToChatInput(element, textToInsert);
 };
 
 /**
- * Attach a file to the chat input
- * @param file The file to attach
- * @returns True if successful, false otherwise
+ * Attach a file to the T3 Chat input.
+ * @param fileInputElement The file input HTMLElement.
+ * @param file The file to attach.
+ * @returns True if successful, false otherwise.
  */
-export const attachFileToChatInput = (file: File): boolean => {
+export const attachFileToChatInput = (fileInputElement: HTMLInputElement | null, file: File): boolean => {
   logMessage(`Attempting to attach file to T3 Chat input: ${file.name}`);
+  if (!fileInputElement) {
+    logMessage('attachFileToChatInput (T3Chat): fileInputElement not provided.');
+    return false;
+  }
   try {
-    // Find file input element
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    if (!fileInput) {
-      logMessage('Could not find file input element in T3 Chat');
-      return false;
-    }
-
     // Create a DataTransfer object to simulate a file drop
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
-    fileInput.files = dataTransfer.files;
+    fileInputElement.files = dataTransfer.files;
 
     // Trigger change event
     const changeEvent = new Event('change', { bubbles: true });
-    fileInput.dispatchEvent(changeEvent);
+    fileInputElement.dispatchEvent(changeEvent);
 
     logMessage(`Successfully attached file: ${file.name}`);
     return true;
@@ -243,106 +162,39 @@ export const attachFileToChatInput = (file: File): boolean => {
 };
 
 /**
- * Submit the chat input
- * @returns True if successful, false otherwise
+ * Submit the T3 Chat input.
+ * @param chatInputElement The chat input HTMLElement.
+ * @param submitButtonElement The submit button HTMLElement.
+ * @param simulateEnterFn Function to simulate Enter key (from BaseAdapter).
+ * @returns True if submission was attempted, false otherwise.
  */
-export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
+export const submitChatInput = async (
+  chatInputElement: HTMLElement | null,
+  submitButtonElement: HTMLElement | null,
+  simulateEnterFn: (element: HTMLElement) => void,
+): Promise<boolean> => {
   try {
-    // Find the chat input element
-    let chatInput: HTMLElement | null = null;
-    if (window.location.hostname === 't3.chat') {
-      chatInput = findChatInputElement();
-
-      if (!chatInput) {
-        logMessage('Could not find T3 Chat input element for submission');
-        return false;
-      }
-    }
-
-    // First try to find a submit button
-    const submitButtonSelectors = [
-      'button[type="submit"]',
-      'button[aria-label="Submit"]',
-      'button.send-button',
-      'button[aria-label="Send message"]',
-      'button.chat-submit',
-      'button[data-testid="send-button"]',
-      'svg.send-icon',
-      'button.submit-button',
-    ];
-
-    let submitButton: HTMLElement | null = null;
-
-    for (const selector of submitButtonSelectors) {
-      const button = document.querySelector(selector);
-      if (button && button instanceof HTMLElement) {
-        submitButton = button;
-        break;
-      }
-    }
-
-    if (submitButton) {
-      logMessage('Found submit button, clicking it');
-      submitButton.click();
+    if (
+      submitButtonElement &&
+      !(submitButtonElement as HTMLButtonElement).disabled &&
+      submitButtonElement.getAttribute('aria-disabled') !== 'true'
+    ) {
+      logMessage('T3Chat submit button found and enabled, clicking it.');
+      submitButtonElement.click();
       return true;
     }
 
-    // If no submit button found, try to simulate Enter key press
-    logMessage('No submit button found, simulating Enter key press');
-
-    // Create and dispatch keydown event
-    const enterKeyEvent = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      code: 'Enter',
-      keyCode: 13,
-      which: 13,
-      bubbles: true,
-      cancelable: true,
-    });
-
-    if (chatInput) {
-      chatInput.dispatchEvent(enterKeyEvent);
-    } else {
-      logMessage('No chat input found for dispatching Enter key event');
-      return false;
+    logMessage('T3Chat submit button not found or disabled. Falling back to Enter key simulation.');
+    if (chatInputElement) {
+      simulateEnterFn(chatInputElement);
+      return true;
     }
 
-    // If the keydown event didn't trigger submission (it was prevented),
-    // try to find and click a submit button again after a short delay
-    return new Promise(resolve => {
-      setTimeout(() => {
-        // Check if any new submit buttons appeared
-        for (const selector of submitButtonSelectors) {
-          const button = document.querySelector(selector);
-          if (button && button instanceof HTMLElement) {
-            logMessage('Found submit button after delay, clicking it');
-            button.click();
-            resolve(true);
-            return;
-          }
-        }
-
-        // If still no submit button, try one more approach: form submission
-        if (!chatInput) {
-          logMessage('No chat input found for form submission');
-          resolve(false);
-          return;
-        }
-
-        const form = chatInput.closest('form');
-        if (form) {
-          logMessage('Found form, submitting it');
-          form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
-          resolve(true);
-          return;
-        }
-
-        logMessage('Could not find a way to submit the T3 Chat input');
-        resolve(false);
-      }, 500);
-    });
-  } catch (error) {
-    logMessage(`Error submitting T3 Chat input: ${error}`);
+    logMessage('T3Chat chat input element not found for Enter key simulation.');
+    return false;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logMessage(`Error submitting T3 Chat input: ${errorMessage}`);
     console.error('Error submitting T3 Chat input:', error);
     return false;
   }

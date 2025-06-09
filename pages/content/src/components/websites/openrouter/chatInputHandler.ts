@@ -6,68 +6,40 @@
 
 import { logMessage } from '@src/utils/helpers';
 
-// Cache for the last found input element to improve reliability
-let lastFoundInputElement: HTMLElement | null = null;
+/**
+ * Returns an array of selectors for the OpenRouter chat input element.
+ * @returns Array of CSS selectors.
+ */
+export const getOpenRouterChatInputSelectors = (): string[] => {
+  return [
+    'textarea[name="Chat Input"][placeholder="Start a message..."].w-full', // Primary
+    'textarea[placeholder="Start a message..."]', // Simpler placeholder match
+    'textarea[placeholder="Ask anything"]', // Common placeholder
+    'div[contenteditable="true"]', // Generic contenteditable as a fallback
+    // Selectors based on common chat UI patterns (if primary ones fail)
+    'textarea.chat-input',
+    'div[role="textbox"]',
+  ];
+};
 
 /**
- * Find the OpenRouter chat input element
- * @returns The chat input element or null if not found
+ * Returns an array of selectors for the OpenRouter submit button.
+ * @returns Array of CSS selectors.
  */
-export const findChatInputElement = (): HTMLElement | null => {
-  // Try to find OpenRouter's contenteditable div
-  const chatInput = document.querySelector('textarea[name="Chat Input"][placeholder="Start a message..."].w-full');
-
-  if (chatInput) {
-    logMessage('Found OpenRouter input element');
-    lastFoundInputElement = chatInput as HTMLElement;
-    return chatInput as HTMLElement;
-  }
-
-  // Fallback: Try to find the input element using the placeholder element
-  logMessage('Primary selector failed, trying fallback method');
-  const placeholderElement = document.querySelector('p[data-placeholder="Ask anything"].placeholder');
-
-  if (placeholderElement) {
-    logMessage('Found placeholder element, looking for parent input element');
-    // The placeholder is typically inside the actual input element or a sibling
-    // First, try to find a parent that is contenteditable
-    let parent = placeholderElement.parentElement;
-    while (parent) {
-      if (parent.getAttribute('contenteditable') === 'true') {
-        logMessage('Found OpenRouter input element via placeholder parent');
-        lastFoundInputElement = parent;
-        return parent;
-      }
-      parent = parent.parentElement;
-    }
-
-    // If no contenteditable parent found, look for a sibling of the parent that is contenteditable
-    const parentSiblings = placeholderElement.parentElement?.parentElement?.children;
-    if (parentSiblings) {
-      for (let i = 0; i < parentSiblings.length; i++) {
-        const sibling = parentSiblings[i];
-        if (sibling.getAttribute('contenteditable') === 'true') {
-          logMessage('Found OpenRouter input element via placeholder sibling');
-          lastFoundInputElement = sibling as HTMLElement;
-          return sibling as HTMLElement;
-        }
-      }
-    }
-  }
-
-  // Second fallback: Try to find the textarea element with placeholder "Start a message..."
-  logMessage('First fallback failed, trying textarea selector');
-  const textareaElement = document.querySelector('textarea[placeholder="Start a message..."]');
-
-  if (textareaElement) {
-    logMessage('Found OpenRouter input element via textarea selector');
-    lastFoundInputElement = textareaElement as HTMLElement;
-    return textareaElement as HTMLElement;
-  }
-
-  logMessage('Could not find OpenRouter input element');
-  return null;
+export const getOpenRouterSubmitButtonSelectors = (): string[] => {
+  return [
+    'button[aria-label="Send message"]',
+    'button[data-testid="send-button"]',
+    'button[aria-label="Send prompt"]',
+    'button svg[data-icon="paper-airplane"]', // Icon based
+    'button[type="submit"]',
+    // More specific selector if available, e.g., a button that's a sibling of the input's parent
+    // Example: 'textarea[name="Chat Input"] + button', but this depends on exact DOM structure
+  ];
 };
+
+// No specific file input selectors are evident from the original code,
+// so attachFile will likely rely on drag-and-drop to the chat input area.
 
 /**
  * Wrap content in tool_output tags
@@ -88,168 +60,86 @@ export const formatAsJson = (data: any): string => {
 };
 
 /**
- * Insert text into the chat input
- * @param text The text to insert
- * @returns True if successful, false otherwise
+ * Insert text into the OpenRouter chat input.
+ * @param element The chat input HTMLElement.
+ * @param text The text to insert.
+ * @returns True if successful, false otherwise.
  */
-export const insertTextToChatInput = (text: string): boolean => {
+export const insertTextToChatInput = (element: HTMLElement, text: string): boolean => {
+  if (!element) {
+    logMessage('insertTextToChatInput (OpenRouter): Element not provided.');
+    return false;
+  }
   try {
-    const chatInput = findChatInputElement();
-
-    if (!chatInput) {
-      logMessage('Could not find OpenRouter input element');
-      console.error('Could not find OpenRouter input element');
-      return false;
-    }
-
-    // First check if it's a textarea element (most reliable method)
-    if (chatInput.tagName === 'TEXTAREA') {
-      const textarea = chatInput as HTMLTextAreaElement;
+    element.focus();
+    if (element.tagName === 'TEXTAREA') {
+      const textarea = element as HTMLTextAreaElement;
       const currentText = textarea.value;
-
-      // For textareas, we can just use the \n character directly
-      const formattedText = currentText ? `${currentText}\n\n${text}` : text;
-      textarea.value = formattedText;
-
-      // Position cursor at the end
+      textarea.value = currentText ? `${currentText}\n\n${text}` : text;
       textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-
-      // Trigger input event
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      textarea.dispatchEvent(inputEvent);
-
-      // Focus the textarea
-      textarea.focus();
-
-      logMessage('Appended text to textarea with preserved newlines');
-      return true;
-    }
-    // Check if it's a contenteditable div
-    else if (chatInput.getAttribute('contenteditable') === 'true') {
-      // More reliable approach for contenteditable elements using Selection and Range
-      // This preserves the current content and adds the new text at the end
-      // with proper newline handling
-
-      // First, focus the element and move cursor to the end
-      chatInput.focus();
-
-      // Get current content
-      const currentText = chatInput.textContent || '';
-
-      // Create a text node with the new content
-      const textToInsert = text;
-
-      // If there's existing content, add newlines before the new text
-      if (currentText && currentText.trim() !== '') {
-        // Ensure the element has some content at the end to place cursor after
-        if (!chatInput.lastChild || chatInput.lastChild.nodeType !== Node.TEXT_NODE) {
-          chatInput.appendChild(document.createTextNode(''));
-        }
-
-        // Move cursor to the end
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(chatInput);
-        range.collapse(false); // collapse to end
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-
-        // Insert two newlines before the text
-        document.execCommand('insertText', false, '\n\n');
-      }
-
-      // Use execCommand to insert text, which properly handles newlines
+    } else if (element.isContentEditable) {
+      const currentText = element.textContent || '';
+      const textToInsert = currentText.trim() !== '' ? `\n\n${text}` : text; // Add newlines if content exists
       document.execCommand('insertText', false, textToInsert);
-
-      // Trigger input event for contenteditable
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-
-      logMessage('Appended text to contenteditable with preserved newlines using execCommand');
-      return true;
+    } else if ('value' in element) {
+      // General input fallback
+      (element as HTMLInputElement).value = text;
+    } else {
+      // Last resort
+      element.textContent = text;
     }
-    // Fallback for other element types
-    else {
-      logMessage('Using fallback method for unknown element type');
 
-      // Try using value property first (for input-like elements)
-      if ('value' in chatInput) {
-        const inputElement = chatInput as HTMLInputElement;
-        const currentValue = inputElement.value;
-        inputElement.value = currentValue ? `${currentValue}\n\n${text}` : text;
-
-        // Trigger input event
-        const inputEvent = new InputEvent('input', { bubbles: true });
-        inputElement.dispatchEvent(inputEvent);
-
-        // Focus the element
-        inputElement.focus();
-
-        logMessage('Appended text to input element via value property');
-        return true;
-      }
-
-      // Last resort: use textContent
-      const currentText = chatInput.textContent || '';
-      chatInput.textContent = currentText ? `${currentText}\n\n${text}` : text;
-
-      // Trigger input event
-      const inputEvent = new InputEvent('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-
-      // Focus the element
-      chatInput.focus();
-
-      logMessage('Appended text using textContent (fallback method)');
-      return true;
-    }
+    const inputEvent = new Event('input', { bubbles: true });
+    element.dispatchEvent(inputEvent);
+    logMessage('Appended text to OpenRouter chat input');
+    return true;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logMessage(`Error appending text to OpenRouter input: ${errorMessage}`);
+    logMessage(`Error inserting text to OpenRouter input: ${errorMessage}`);
     console.error('Error appending text to OpenRouter input:', error);
     return false;
   }
 };
 
 /**
- * Insert tool result into the chat input
- * @param result The tool result to insert
- * @returns True if successful, false otherwise
+ * Insert tool result into the OpenRouter chat input.
+ * @param element The chat input HTMLElement.
+ * @param result The tool result to insert (will be stringified if not a string).
+ * @returns True if successful, false otherwise.
  */
-export const insertToolResultToChatInput = (result: any): boolean => {
+export const insertToolResultToChatInput = (element: HTMLElement, result: any): boolean => {
+  if (!element) {
+    logMessage('insertToolResultToChatInput (OpenRouter): Element not provided.');
+    return false;
+  }
   try {
-    // Format the tool result as JSON string
-    // const formattedResult = formatAsJson(result);
-    // const wrappedResult = wrapInToolOutput(formattedResult);
-    // Convert result to string if it's not already a string
+    let textToInsert = result;
     if (typeof result !== 'string') {
-      result = JSON.stringify(result, null, 2);
-      logMessage('Converted tool result to string format');
+      textToInsert = JSON.stringify(result, null, 2);
+      logMessage('Converted tool result to string format for OpenRouter.');
     }
-    return insertTextToChatInput(result);
+    return insertTextToChatInput(element, textToInsert);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logMessage(`Error formatting tool result: ${errorMessage}`);
+    logMessage(`Error inserting tool result to OpenRouter: ${errorMessage}`);
     console.error('Error formatting tool result:', error);
     return false;
   }
 };
 
 /**
- * Attach a file to the OpenRouter input
- * @param file The file to attach
- * @returns Promise that resolves to true if successful
+ * Attach a file to the OpenRouter input.
+ * Typically by drag-and-drop simulation onto the chat input area.
+ * @param chatInputElement The chat input HTMLElement (acts as drop zone).
+ * @param file The file to attach.
+ * @returns Promise that resolves to true if successful.
  */
-export const attachFileToChatInput = async (file: File): Promise<boolean> => {
+export const attachFileToChatInput = async (chatInputElement: HTMLElement | null, file: File): Promise<boolean> => {
+  if (!chatInputElement) {
+    logMessage('attachFileToChatInput (OpenRouter): chatInputElement not provided.');
+    return false;
+  }
   try {
-    // Find the OpenRouter input element
-    const chatInput = findChatInputElement();
-
-    if (!chatInput) {
-      logMessage('Could not find OpenRouter input element for file attachment');
-      return false;
-    }
-
     // Create a DataTransfer object
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
@@ -268,11 +158,11 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
     });
 
     // Prevent default on dragover to enable drop
-    chatInput.addEventListener('dragover', e => e.preventDefault(), { once: true });
-    chatInput.dispatchEvent(dragOverEvent);
+    chatInputElement.addEventListener('dragover', (e: DragEvent) => e.preventDefault(), { once: true });
+    chatInputElement.dispatchEvent(dragOverEvent);
 
     // Simulate the drop event
-    chatInput.dispatchEvent(dropEvent);
+    chatInputElement.dispatchEvent(dropEvent);
 
     logMessage(`Attached file ${file.name} to OpenRouter input`);
     return true;
@@ -285,218 +175,42 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
 };
 
 /**
- * Submit the current chat input (equivalent to pressing Enter)
- * @returns True if submission was successful, false otherwise
+ * Submit the OpenRouter chat input.
+ * @param chatInputElement The chat input HTMLElement.
+ * @param submitButtonElement The submit button HTMLElement.
+ * @param simulateEnterFn Function to simulate Enter key (from BaseAdapter).
+ * @returns True if submission was attempted, false otherwise.
  */
-export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
-  return new Promise(resolve => {
-    try {
-      // Try to use the cached input element first, then fall back to finding it again
-      const chatInput = lastFoundInputElement || findChatInputElement();
-
-      if (!chatInput) {
-        logMessage('Could not find OpenRouter chat input to submit');
-        resolve(false);
-        return;
-      }
-
-      // Define a function to find the submit button
-      const findSubmitButton = (): HTMLButtonElement | null => {
-        const submitButton =
-          document.querySelector('button[aria-label="Send message"]') ||
-          document.querySelector('button[data-testid="send-button"]') ||
-          document.querySelector('button[aria-label="Send prompt"]') ||
-          // Try to find button with paper airplane icon (common pattern in OpenRouter)
-          document.querySelector('button svg[data-icon="paper-airplane"]')?.closest('button') ||
-          document.querySelector('button svg path[d*="M12 3.5"]')?.closest('button') ||
-          // Look for any button near the input area that looks like a submit button
-          chatInput.closest('form')?.querySelector('button[type="submit"]') ||
-          chatInput.closest('div')?.querySelector('button:last-child');
-
-        return submitButton as HTMLButtonElement | null;
-      };
-
-      // Try to find and check the submit button
-      const submitButton = findSubmitButton();
-
-      if (submitButton) {
-        logMessage(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
-
-        // Function to check if button is enabled and click it
-        const tryClickingButton = () => {
-          const button = findSubmitButton();
-          if (!button) {
-            logMessage('Submit button no longer found');
-            resolve(false);
-            return;
-          }
-
-          // Check if the button is disabled
-          const isDisabled =
-            button.disabled ||
-            button.getAttribute('disabled') !== null ||
-            button.getAttribute('aria-disabled') === 'true' ||
-            button.classList.contains('disabled');
-
-          if (!isDisabled) {
-            logMessage('Submit button is enabled, clicking it');
-            button.click();
-            resolve(true);
-          } else {
-            logMessage('Submit button is disabled, waiting...');
-          }
-        };
-
-        // Set up a timer to periodically check if the button becomes enabled
-        let elapsedTime = 0;
-        const checkInterval = 200; // Check every 200ms
-
-        const intervalId = setInterval(() => {
-          elapsedTime += checkInterval;
-
-          tryClickingButton();
-
-          // If we've waited too long, try alternative methods
-          if (elapsedTime >= maxWaitTime) {
-            clearInterval(intervalId);
-            logMessage(`Button remained disabled for ${maxWaitTime}ms, trying alternative methods`);
-
-            // Method 2: Look for the form and submit it directly
-            const form = chatInput.closest('form');
-            if (form) {
-              logMessage('Found form element, submitting it');
-              const submitEvent = new SubmitEvent('submit', { bubbles: true, cancelable: true });
-              form.dispatchEvent(submitEvent);
-              resolve(true);
-              return;
-            }
-
-            // Method 3: Simulate Enter key press
-            logMessage('Simulating Enter key press as fallback');
-
-            // Focus the textarea first
-            chatInput.focus();
-
-            // Create and dispatch keydown event (Enter key)
-            const keydownEvent = new KeyboardEvent('keydown', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-              composed: true, // This enables the event to cross the shadow DOM boundary
-            });
-
-            // Create and dispatch keypress event
-            const keypressEvent = new KeyboardEvent('keypress', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-            });
-
-            // Create and dispatch keyup event
-            const keyupEvent = new KeyboardEvent('keyup', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-            });
-
-            // Dispatch all events in sequence
-            const keydownResult = chatInput.dispatchEvent(keydownEvent);
-            const keypressResult = chatInput.dispatchEvent(keypressEvent);
-            const keyupResult = chatInput.dispatchEvent(keyupEvent);
-
-            logMessage(
-              `Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`,
-            );
-            resolve(true);
-          }
-        }, checkInterval);
-
-        // Initial check - maybe it's already enabled
-        tryClickingButton();
-
-        // If the button is already enabled and clicked, clear the interval
-        if (submitButton && !submitButton.disabled) {
-          clearInterval(intervalId);
-        }
-      } else {
-        // If no button found, proceed with alternative methods immediately
-        logMessage('No submit button found, trying alternative methods');
-
-        // Method 2: Look for the form and submit it directly
-        const form = chatInput.closest('form');
-        if (form) {
-          logMessage('Found form element, submitting it');
-          const submitEvent = new SubmitEvent('submit', { bubbles: true, cancelable: true });
-          form.dispatchEvent(submitEvent);
-          resolve(true);
-          return;
-        }
-
-        // Method 3: Simulate Enter key press
-        logMessage('Simulating Enter key press as fallback');
-
-        // Focus the textarea first
-        chatInput.focus();
-
-        // Create and dispatch keydown event (Enter key)
-        const keydownEvent = new KeyboardEvent('keydown', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        });
-
-        // Create and dispatch keypress event
-        const keypressEvent = new KeyboardEvent('keypress', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        });
-
-        // Create and dispatch keyup event
-        const keyupEvent = new KeyboardEvent('keyup', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        });
-
-        // Dispatch all events in sequence
-        const keydownResult = chatInput.dispatchEvent(keydownEvent);
-        const keypressResult = chatInput.dispatchEvent(keypressEvent);
-        const keyupResult = chatInput.dispatchEvent(keyupEvent);
-
-        logMessage(
-          `Attempted to submit chat input via key simulation (keydown: ${keydownResult}, keypress: ${keypressResult}, keyup: ${keyupResult})`,
-        );
-        resolve(true);
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error submitting chat input: ${errorMessage}`);
-      console.error('Error submitting chat input:', error);
-      resolve(false);
+export const submitChatInput = async (
+  chatInputElement: HTMLElement | null,
+  submitButtonElement: HTMLElement | null,
+  simulateEnterFn: (element: HTMLElement) => void,
+): Promise<boolean> => {
+  try {
+    if (
+      submitButtonElement &&
+      !(submitButtonElement as HTMLButtonElement).disabled &&
+      submitButtonElement.getAttribute('aria-disabled') !== 'true'
+    ) {
+      logMessage('OpenRouter submit button found and enabled, clicking it.');
+      submitButtonElement.click();
+      return true;
     }
-  });
+
+    logMessage('OpenRouter submit button not found or disabled. Falling back to Enter key simulation.');
+    if (chatInputElement) {
+      simulateEnterFn(chatInputElement);
+      return true;
+    }
+
+    logMessage('OpenRouter chat input element not found for Enter key simulation.');
+    return false;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logMessage(`Error submitting OpenRouter chat input: ${errorMessage}`);
+    console.error('Error submitting OpenRouter chat input:', error);
+    return false; // Corrected: return false directly
+    // Removed incorrect resolve call from the Promise-based version
+  }
+  // Removed });
 };

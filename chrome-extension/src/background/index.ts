@@ -1,7 +1,7 @@
 import 'webextension-polyfill';
 import { exampleThemeStorage } from '@extension/storage';
 import {
-  runWithSSE,
+  initializeAndConnectClient, // Renamed from runWithSSE
   isMcpServerConnected,
   forceReconnectToMcpServer,
   checkMcpServerConnection,
@@ -121,7 +121,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
   );
 
   try {
-    await runWithSSE(uri);
+    await initializeAndConnectClient(uri);
 
     console.log('MCP client connected successfully');
     mcpInterface.updateConnectionStatus(true);

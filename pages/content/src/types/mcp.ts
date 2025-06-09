@@ -35,8 +35,8 @@ export type ConnectionStatusCallback = (isConnected: boolean) => void;
 // Request tracking for tool calls
 export interface ToolCallRequest {
   requestId: string;
-  toolName: string;
-  args: { [key: string]: unknown };
+  toolName?: string; // Optional: Name of the tool, if applicable
+  args?: { [key: string]: unknown }; // Optional: Arguments for the tool call, if applicable
   callback: ToolCallCallback;
   timestamp: number;
 }

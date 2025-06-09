@@ -265,7 +265,7 @@ const PerformanceUtils = {
   batchStreamingUpdate: (paramId: string, operation: () => void): void => {
     const existing = streamingDebouncers.get(paramId);
     if (existing) {
-      clearTimeout(existing);
+      window.clearTimeout(existing);
     }
 
     streamingDebouncers.set(
@@ -282,7 +282,7 @@ const PerformanceUtils = {
   cleanupTimeout: (key: string): void => {
     const timeoutId = activeTimeouts.get(key);
     if (timeoutId) {
-      clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId);
       activeTimeouts.delete(key);
     }
   },
@@ -305,7 +305,7 @@ const ScrollUtils = {
     const onScroll = () => {
       (element as any)._userHasScrolled = true;
 
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
       scrollTimeout = window.setTimeout(() => {
         const isNearBottom = element.scrollTop >= element.scrollHeight - element.clientHeight - 50;
         if (isNearBottom) {
@@ -316,7 +316,7 @@ const ScrollUtils = {
 
     const cleanup = () => {
       element.removeEventListener('scroll', onScroll);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
       (element as any)._scrollInitialized = false;
     };
 
@@ -673,7 +673,7 @@ const BlockElementUtils = {
         });
 
         // Hide after animation completes
-        setTimeout(() => {
+        window.setTimeout(() => {
           if (!blockDiv.classList.contains('expanded')) {
             expandableContent.style.display = 'none';
           }
@@ -752,7 +752,7 @@ const ParamElementUtils = {
     if (currentText !== displayValue) {
       if (isStreaming && displayValue.length > currentText.length + 50) {
         preElement.style.opacity = '0.85';
-        setTimeout(() => {
+        window.setTimeout(() => {
           preElement.textContent = displayValue;
           preElement.style.opacity = '1';
         }, 8);
@@ -810,7 +810,7 @@ const ParamElementUtils = {
       );
     } else {
       if (paramNameElement.classList.contains('streaming-param-name')) {
-        setTimeout(() => {
+        window.setTimeout(() => {
           paramNameElement.classList.remove('streaming-param-name');
           paramValueElement.removeAttribute('data-streaming');
           paramValueElement.removeAttribute('data-streaming-styled');
@@ -821,7 +821,7 @@ const ParamElementUtils = {
         }, 100);
       }
 
-      setTimeout(() => ParamElementUtils.checkAndApplyOverflow(paramValueElement), 200);
+      window.setTimeout(() => ParamElementUtils.checkAndApplyOverflow(paramValueElement), 200);
     }
   },
 
@@ -917,7 +917,8 @@ const AutoExecutionUtils = {
 
   findReplacementBlock: (functionDetails: any): HTMLDivElement | null => {
     const potentialBlocks = document.querySelectorAll<HTMLDivElement>('.function-block');
-    for (const block of potentialBlocks) {
+    for (const block of Array.from(potentialBlocks)) {
+      // Fixed TS2488
       const preElement = block.querySelector('pre');
       if (!preElement?.textContent) continue;
 
@@ -1009,7 +1010,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   }
 
   const rawContent = block.textContent?.trim() || '';
-  const { tag, content } = extractLanguageTag(rawContent);
+  const { tag, content } = extractLanguageTag(rawContent); // content seems unused here
   const { functionName, callId, parameters: partialParameters } = CacheUtils.parseContentEfficiently(block, rawContent);
 
   const blockDiv = existingDiv || DOMUtils.createElement<HTMLDivElement>('div');
@@ -1288,7 +1289,8 @@ export const createOrUpdateParamElement = (
     if (paramValueElement.textContent !== displayValue) {
       if (paramValueElement.textContent && paramValueElement.textContent.length > 0) {
         paramValueElement.style.opacity = '0.9';
-        setTimeout(() => {
+        window.setTimeout(() => {
+          // Use window.setTimeout
           paramValueElement.textContent = displayValue;
           paramValueElement.style.opacity = '1';
         }, 50);
@@ -1307,7 +1309,7 @@ export const performanceCleanup = {
   clearAllCaches: (): void => {
     renderedFunctionBlocks.clear();
     pendingDOMUpdates.clear();
-    activeTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    activeTimeouts.forEach(timeoutId => window.clearTimeout(timeoutId)); // Use window.clearTimeout
     activeTimeouts.clear();
   },
 
@@ -1319,7 +1321,7 @@ export const performanceCleanup = {
     timeoutKeysToClean.forEach(key => {
       const timeoutId = activeTimeouts.get(key);
       if (timeoutId) {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId); // Use window.clearTimeout
         activeTimeouts.delete(key);
       }
     });

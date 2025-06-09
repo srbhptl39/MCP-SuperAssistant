@@ -169,7 +169,8 @@ function detectThemeWithScoring(): { theme: ThemeMode; confidence: number; score
 
     // 3. Meta tags detection
     const metaTags = document.querySelectorAll('meta[name*="theme"], meta[name*="color-scheme"]');
-    metaTags.forEach(meta => {
+    Array.from(metaTags).forEach(meta => {
+      // Fixed TS2488
       const content = meta.getAttribute('content')?.toLowerCase();
       if (content?.includes('dark')) darkScore += weights.metaTags;
       if (content?.includes('light')) lightScore += weights.metaTags;
@@ -190,10 +191,11 @@ function detectThemeWithScoring(): { theme: ThemeMode; confidence: number; score
     const backgroundAnalysis = { darkCount: 0, lightCount: 0, totalAnalyzed: 0 };
 
     for (const element of elementsToAnalyze) {
+      // This loop is fine
       if (!element) continue;
 
       try {
-        const style = window.getComputedStyle(element);
+        const style = window.getComputedStyle(element as HTMLElement); // Cast to HTMLElement
         const bgColor = style.backgroundColor;
 
         if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
@@ -266,9 +268,10 @@ function detectThemeWithScoring(): { theme: ThemeMode; confidence: number; score
 
     const textAnalysis = { lightTextCount: 0, darkTextCount: 0 };
 
-    textElements.forEach(element => {
+    Array.from(textElements).forEach(element => {
+      // Fixed TS2488 (though textElements was already an array due to .filter)
       try {
-        const color = window.getComputedStyle(element as HTMLElement).color;
+        const color = window.getComputedStyle(element as HTMLElement).color; // Cast to HTMLElement
         const brightness = getColorBrightness(color);
         if (brightness !== null) {
           if (brightness > 180) textAnalysis.lightTextCount++;
@@ -399,8 +402,8 @@ function getColorBrightness(colorValue: string): number | null {
  */
 function detectWebsiteSpecificTheme(): ThemeMode | null {
   const hostname = window.location.hostname.toLowerCase();
-  const pathname = window.location.pathname.toLowerCase();
-  const search = window.location.search.toLowerCase();
+  // const pathname = window.location.pathname.toLowerCase(); // Unused
+  // const search = window.location.search.toLowerCase(); // Unused
 
   // GitHub
   if (hostname.includes('github.com')) {
@@ -546,10 +549,11 @@ export function detectTheme(): ThemeMode {
     }
 
     // Check for meta tags
-    const metaTags = document.querySelectorAll(
+    const metaTagsNodeList = document.querySelectorAll(
       'meta[name*="theme"], meta[name*="color-scheme"], meta[name*="theme-color"]',
     );
-    for (const meta of metaTags) {
+    for (const meta of Array.from(metaTagsNodeList)) {
+      // Fixed TS2488
       const content = meta.getAttribute('content')?.toLowerCase();
       if (content?.includes('dark')) {
         logThemeDetection('Dark theme detected from meta tags');
@@ -672,6 +676,7 @@ export function detectTheme(): ThemeMode {
     const backgroundAnalysisResults: Array<{ name: string; brightness: number; isDark: boolean }> = [];
 
     for (const { element, name } of elementsToCheck) {
+      // This loop is fine
       try {
         if (!element) continue;
 
@@ -762,7 +767,8 @@ export function detectTheme(): ThemeMode {
     }
 
     // Enhanced text color contrast analysis
-    const textElements = [
+    const textElementsToAnalyze = [
+      // Renamed to avoid conflict with textElements in outer scope if any
       document.querySelector('h1, h2, h3'),
       document.querySelector('p'),
       document.querySelector('a'),
@@ -774,7 +780,8 @@ export function detectTheme(): ThemeMode {
     let lightTextCount = 0;
     let darkTextCount = 0;
 
-    for (const element of textElements.slice(0, 5)) {
+    for (const element of textElementsToAnalyze.slice(0, 5)) {
+      // This loop is fine
       try {
         const computedStyle = window.getComputedStyle(element);
         const textColor = computedStyle.color;
@@ -886,11 +893,12 @@ export function startThemeMonitoring(): void {
     return; // Already monitoring
   }
 
-  let debounceTimeout: number;
+  let debounceTimeout: number; // Ensure this is typed as number
 
   const checkThemeChange = () => {
-    clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
+    window.clearTimeout(debounceTimeout); // Use window.clearTimeout
+    debounceTimeout = window.setTimeout(() => {
+      // Use window.setTimeout
       const newThemeState = getCurrentThemeState();
 
       // Check if theme has actually changed
@@ -1068,7 +1076,7 @@ export function startThemeMonitoring(): void {
       themeVariableWatcher.style.width = themeVariableWatcher.style.width === '1px' ? '2px' : '1px';
     };
 
-    setInterval(triggerObservation, 1000); // Check every second
+    window.setInterval(triggerObservation, 1000); // Check every second using window.setInterval
     variableObserver.observe(themeVariableWatcher);
 
     (window as any)._themeVariableWatcher = {

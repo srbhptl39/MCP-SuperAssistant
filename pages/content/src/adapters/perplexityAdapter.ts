@@ -61,118 +61,106 @@
 
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
-import { insertToolResultToChatInput } from '../components/websites/perplexity';
+import {
+  getPerplexityChatInputSelectors,
+  getPerplexitySubmitButtonSelectors,
+  getPerplexityFileInputSelectors,
+  insertToolResultToChatInput, // Takes element, result
+  submitChatInput, // Takes input and button elements, and simulateEnterFn
+  attachFileToChatInput, // Takes elements, file
+} from '../components/websites/perplexity/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { attachFileToChatInput, submitChatInput } from '../components/websites/perplexity/chatInputHandler';
-import { initPerplexityComponents } from './adaptercomponents';
+import { initPerplexityComponents } from './adaptercomponents/perplexity';
 
 export class PerplexityAdapter extends BaseAdapter {
   name = 'Perplexity';
   hostname = ['perplexity.ai'];
-
-  // Property to store the last URL
-  private lastUrl: string = '';
-  // Property to store the interval ID
-  private urlCheckInterval: number | null = null;
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('perplexity');
     logMessage('Created Perplexity sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for Perplexity
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for Perplexity
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[PerplexityAdapter] URL changed to: ${newUrl}`);
+    initPerplexityComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility based on new URL
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    // this.checkCurrentUrl();
-
-    // Initialize Perplexity UI components (toggle buttons)
-    initPerplexityComponents();
-
-    // Start URL checking to handle navigation within Perplexity
-    // if (!this.urlCheckInterval) {
-    //   this.lastUrl = window.location.href;
-    //   this.urlCheckInterval = window.setInterval(() => {
-    //     const currentUrl = window.location.href;
-
-    //     if (currentUrl !== this.lastUrl) {
-    //       logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-    //       this.lastUrl = currentUrl;
-    //       initPerplexityComponents();
-    //       // Check if we should show or hide the sidebar based on URL
-    //       const excludedUrls = [
-    //         'https://www.perplexity.ai/abcd',
-    //         // 'https://www.perplexity.ai/library'
-    //       ];
-
-    //       const includedPatterns = [
-    //         /^https:\/\/www\.perplexity\.ai\/search\/.*/
-    //       ];
-
-    //       // Check if current URL is excluded
-    //       const isExcluded = excludedUrls.some(url => currentUrl === url);
-
-    //       // Check if current URL matches included patterns
-    //       const isIncluded = includedPatterns.some(pattern => pattern.test(currentUrl));
-
-    //       if (isExcluded && !isIncluded) {
-    //         // Keep sidebar visible but clear detected tools for excluded URLs
-    //         if (this.sidebarManager) {
-    //           logMessage('On excluded Perplexity URL, keeping sidebar visible but clearing detected tools');
-    //           // Make sure sidebar is visible
-    //           if (!this.sidebarManager.getIsVisible()) {
-    //             this.sidebarManager.show();
-    //           }
-    //           // Tools will be cleared automatically by mcptooldetect.ts
-    //         }
-    //       } else {
-    //         // Show sidebar for included URLs
-    //         if (this.sidebarManager && !this.sidebarManager.getIsVisible()) {
-    //           logMessage('Showing sidebar for included Perplexity URL');
-    //           this.sidebarManager.showWithToolOutputs();
-    //         }
-    //       }
-    //     }
-    //   }, 1000); // Check every second
-    // }
+    initPerplexityComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   cleanup(): void {
-    // Clear the URL check interval
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the base implementation
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the Perplexity input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into Perplexity input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getPerplexityChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      // Use the refactored chatInputHandler function
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`PerplexityAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('PerplexityAdapter: Fallback to BaseAdapter.insertText');
+        // Fallback to BaseAdapter's insertText
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('PerplexityAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the Perplexity input form
    */
-  triggerSubmission(): void {
-    // Use the function to submit the form
-    submitChatInput()
-      .then((success: boolean) => {
-        logMessage(`Triggered Perplexity form submission: ${success ? 'success' : 'failed'}`);
-      })
-      .catch((error: Error) => {
-        logMessage(`Error triggering Perplexity form submission: ${error}`);
-      });
+  async triggerSubmission(): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getPerplexityChatInputSelectors());
+    }
+    const submitButton = this.findElement(getPerplexitySubmitButtonSelectors());
+
+    // Use the refactored submitChatInput from chatInputHandler
+    const success = await submitChatInput(this.currentChatInputElement, submitButton, this.simulateEnterKey.bind(this));
+    logMessage(`PerplexityAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success) {
+      logMessage('PerplexityAdapter: Submission via handler failed or reported false.');
+      // If specific handler fails, and we have an input, try generic enter simulation
+      if (this.currentChatInputElement) {
+        logMessage('PerplexityAdapter: Attempting generic Enter key simulation as last resort.');
+        this.simulateEnterKey(this.currentChatInputElement);
+      }
+    }
   }
 
   /**
@@ -180,7 +168,10 @@ export class PerplexityAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
-    return true;
+    // Perplexity generally supports file uploads.
+    // A more robust check could be finding the actual file input or attach button.
+    const fileInputElement = this.findElement(getPerplexityFileInputSelectors());
+    return !!fileInputElement;
   }
 
   /**
@@ -189,12 +180,17 @@ export class PerplexityAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
+    const fileInputElement = this.findElement(getPerplexityFileInputSelectors()) as HTMLInputElement | null;
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getPerplexityChatInputSelectors());
+    }
+
     try {
-      const result = await attachFileToChatInput(file);
-      return result;
+      // Use the refactored chatInputHandler function
+      return await attachFileToChatInput(fileInputElement, this.currentChatInputElement, file);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to Perplexity input: ${errorMessage}`);
+      logMessage(`PerplexityAdapter: Error attaching file: ${errorMessage}`);
       console.error('Error in adapter when attaching file to Perplexity input:', error);
       return false;
     }

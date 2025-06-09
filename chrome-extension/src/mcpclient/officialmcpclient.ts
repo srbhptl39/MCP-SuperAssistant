@@ -35,10 +35,7 @@ class PersistentMcpClient {
   private serverUrl: string = '';
   private isConnected: boolean = false;
   private connectionPromise: Promise<Client> | null = null;
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 3; // Reduced from 5 to 3
-  private reconnectDelay: number = 2000;
-  private reconnectTimeoutId: NodeJS.Timeout | null = null;
+  // private reconnectAttempts: number = 0; // Removed: Not used by PersistentMcpClient's current logic
   private lastConnectionCheck: number = 0;
   private connectionCheckInterval: number = 30000; // 30 seconds
   private primitives: Primitive[] | null = null;
@@ -106,7 +103,7 @@ class PersistentMcpClient {
     // Create a new connection promise
     console.log(`[PersistentMcpClient] Creating new connection to ${uri}`);
     this.connectionPromise = this.createConnection(uri);
-    
+
     try {
       const result = await this.connectionPromise;
       return result;
@@ -159,17 +156,21 @@ class PersistentMcpClient {
       });
 
       const transport = new SSEClientTransport(baseUrl);
-      
+
       // Add timeout to prevent hanging connections
       const connectionTimeout = 10000; // 10 seconds
       const connectionPromise = client.connect(transport);
-      
+
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
-          reject(new Error(`Connection timeout after ${connectionTimeout}ms. The server may be slow to respond or the SSE endpoint may not be functioning properly.`));
+          reject(
+            new Error(
+              `Connection timeout after ${connectionTimeout}ms. The server may be slow to respond or the SSE endpoint may not be functioning properly.`,
+            ),
+          );
         }, connectionTimeout);
       });
-      
+
       // Race between connection and timeout
       await Promise.race([connectionPromise, timeoutPromise]);
 
@@ -179,8 +180,7 @@ class PersistentMcpClient {
       this.client = client;
       this.transport = transport;
 
-      // Reset reconnect attempts on successful connection
-      this.reconnectAttempts = 0;
+      // Reset reconnect attempts on successful connection (reconnectAttempts removed)
       this.consecutiveFailures = 0;
       this.lastConnectionError = null;
       this.isConnected = true;
@@ -197,43 +197,26 @@ class PersistentMcpClient {
       this.transport = null;
       this.connectionPromise = null;
 
-      // Enhanced error categorization for better user feedback
-      let enhancedErrorMessage = errorMessage;
-      if (errorMessage.includes('404') || errorMessage.includes('404 page not found')) {
-        enhancedErrorMessage =
-          'Server URL not found (404). Please check if the MCP server is running at the correct URL and verify the server configuration.';
-      } else if (errorMessage.includes('403')) {
-        enhancedErrorMessage = 'Access forbidden (403). Please check server permissions and authentication settings.';
-      } else if (errorMessage.includes('429') || errorMessage.includes('HTTP 429')) {
-        enhancedErrorMessage =
-          'Rate limited (429). The server is temporarily blocking requests due to too many attempts. Please wait a moment and try again.';
-      } else if (errorMessage.includes('405') || errorMessage.includes('Method Not Allowed')) {
-        enhancedErrorMessage =
-          'Method not allowed (405). The server is available but may not support the requested HTTP method. This is usually a temporary issue.';
-      } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
-        enhancedErrorMessage =
-          'Server error detected. The MCP server may be experiencing issues. Please try again later or contact your server administrator.';
+      // Simplified error categorization
+      let enhancedErrorMessage = `Connection failed: ${errorMessage}`;
+      if (
+        errorMessage.includes('404') ||
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('MCP endpoints not found')
+      ) {
+        enhancedErrorMessage = 'Server not found (404) or MCP endpoints missing. Check URL and server status.';
       } else if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('Connection refused')) {
-        enhancedErrorMessage =
-          'Connection refused. Please verify the MCP server is running and accessible at the configured URL.';
+        enhancedErrorMessage = 'Connection refused. Ensure server is running and accessible.';
       } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
-        enhancedErrorMessage =
-          'Connection timeout. The server may be slow to respond or unreachable. Please check your network connection and server status.';
-      } else if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo ENOTFOUND')) {
-        enhancedErrorMessage = 'Server not found. Please check the server URL and your network connection.';
+        enhancedErrorMessage = 'Connection timeout. Server might be slow or unreachable.';
+      } else if (errorMessage.includes('403')) {
+        enhancedErrorMessage = 'Access forbidden (403). Check server permissions.';
+      } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
+        enhancedErrorMessage = 'Server error (5xx). Check server logs.';
       } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('SSE error')) {
-        enhancedErrorMessage =
-          'SSE connection failed. The server may be unreachable or not responding to Server-Sent Events. Please check if the MCP server is running and accessible.';
-      } else if (errorMessage.includes('MCP endpoints not found')) {
-        enhancedErrorMessage =
-          'MCP endpoints not found (404). The server is running but does not have MCP service endpoints available. Please verify this is an MCP server.';
-      } else if (errorMessage.includes('MCP server may be experiencing issues')) {
-        enhancedErrorMessage =
-          'The MCP server is experiencing internal errors. Please check server logs or contact the server administrator.';
-      } else if (errorMessage.includes('MCP endpoints are not accessible')) {
-        enhancedErrorMessage =
-          'MCP service endpoints are not accessible. The server is running but MCP services may not be properly configured.';
+        enhancedErrorMessage = 'SSE connection failed. Server may be unreachable or not configured for SSE.';
       }
+      // For other errors, the generic message "Connection failed: ${errorMessage}" will be used.
 
       this.lastConnectionError = enhancedErrorMessage;
       this.consecutiveFailures++;
@@ -259,7 +242,7 @@ class PersistentMcpClient {
    */
   public async disconnect(): Promise<void> {
     const spinner = createSpinner(`Disconnecting from MCP server...`);
-    
+
     try {
       // Attempt to close the client if we have one
       if (this.client) {
@@ -272,7 +255,7 @@ class PersistentMcpClient {
           spinner.success(`Cleaned up connection state (close failed but state reset)`);
         }
       }
-      
+
       // Also try to close the transport directly if we have one
       if (this.transport) {
         try {
@@ -284,7 +267,7 @@ class PersistentMcpClient {
           console.warn('[PersistentMcpClient] Transport close failed, but continuing cleanup:', transportError);
         }
       }
-      
+
       if (!this.client && !this.transport) {
         spinner.success(`No active connection to disconnect`);
       }
@@ -298,37 +281,23 @@ class PersistentMcpClient {
       this.client = null;
       this.transport = null;
       this.connectionPromise = null;
-      
-      // Clear any pending reconnect
-      if (this.reconnectTimeoutId) {
-        clearTimeout(this.reconnectTimeoutId);
-        this.reconnectTimeoutId = null;
-      }
-      
+
+      // Clear any pending reconnect (reconnectTimeoutId was removed)
       console.log('[PersistentMcpClient] Connection state fully reset');
     }
   }
 
   /**
-   * Schedule a reconnection attempt
-   * CRITICAL: No automatic reconnection - all reconnection is user-driven
+   * NOTE: Automatic reconnection logic was removed. User-driven reconnection is handled by forceReconnect.
+   * The scheduleReconnect method is kept private and minimal if any internal logic might use it,
+   * but it doesn't schedule actual timers.
    */
   private scheduleReconnect(): void {
-    // Clear any existing reconnect timeout
-    if (this.reconnectTimeoutId) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
-    }
-
     // Log that we're not automatically reconnecting
-    console.log('[PersistentMcpClient] No automatic reconnection - reconnection is user-driven only');
-
-    // Reset reconnect attempts counter to ensure we don't hit the max limit
-    // This allows user-initiated reconnects to always work
-    this.reconnectAttempts = 0;
-
-    // Do not schedule any automatic reconnection
-    // All reconnection must be explicitly initiated by the user through the UI
+    console.log(
+      '[PersistentMcpClient] scheduleReconnect called, but automatic reconnection is disabled. User must drive reconnection.',
+    );
+    // Reset reconnect attempts counter, could be useful if UI shows this (reconnectAttempts removed)
   }
 
   /**
@@ -467,7 +436,9 @@ class PersistentMcpClient {
 
       // Check if this is a connection-related error that requires cleanup
       if (this.isConnectionError(errorMessage)) {
-        console.warn('[PersistentMcpClient] Connection error detected during primitives fetch, marking as disconnected');
+        console.warn(
+          '[PersistentMcpClient] Connection error detected during primitives fetch, marking as disconnected',
+        );
         this.isConnected = false;
         this.client = null;
         this.transport = null;
@@ -547,11 +518,11 @@ class PersistentMcpClient {
    */
   public async forceReconnect(uri?: string): Promise<void> {
     console.log('[PersistentMcpClient] Force reconnect initiated');
-    
+
     // Reset failure counters to allow user-initiated reconnects
     this.consecutiveFailures = 0;
     this.lastConnectionError = null;
-    this.reconnectAttempts = 0;
+    // this.reconnectAttempts = 0; // reconnectAttempts removed
 
     // Clear the primitives cache to ensure we get fresh data from the new server
     this.clearCache();
@@ -559,26 +530,22 @@ class PersistentMcpClient {
     // Force complete state reset first - don't rely on disconnect() alone
     console.log('[PersistentMcpClient] Resetting connection state');
     this.isConnected = false;
-    
+
     // If we have an active connection promise, try to abort it
     if (this.connectionPromise) {
       console.log('[PersistentMcpClient] Aborting existing connection promise');
       this.connectionPromise = null;
     }
-    
+
     // Store references to clean up
     const clientToClose = this.client;
     const transportToClose = this.transport;
-    
+
     // Clear references immediately to prevent race conditions
     this.client = null;
     this.transport = null;
-    
-    // Clear any pending reconnect timers
-    if (this.reconnectTimeoutId) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
-    }
+
+    // Clear any pending reconnect timers (reconnectTimeoutId was removed)
 
     // Now attempt cleanup of old connections in background
     // Don't wait for this to complete as it might hang
@@ -613,17 +580,17 @@ class PersistentMcpClient {
         if (client) {
           await Promise.race([
             client.close(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Client close timeout')), 5000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Client close timeout')), 5000)),
           ]);
         }
-        
+
         if (transport && 'close' in transport && typeof transport.close === 'function') {
           await Promise.race([
             transport.close(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Transport close timeout')), 5000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Transport close timeout')), 5000)),
           ]);
         }
-        
+
         console.log('[PersistentMcpClient] Old connection cleaned up successfully');
       } catch (error) {
         console.warn('[PersistentMcpClient] Old connection cleanup failed (non-blocking):', error);
@@ -693,13 +660,9 @@ class PersistentMcpClient {
     this.connectionPromise = null;
     this.lastConnectionError = null;
     this.lastConnectionCheck = 0;
-    
-    // Clear any pending reconnect timers
-    if (this.reconnectTimeoutId) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
-    }
-    
+
+    // Clear any pending reconnect timers (reconnectTimeoutId was removed)
+
     // Don't reset failure counters here - those should persist for user feedback
     console.log('[PersistentMcpClient] Connection state reset complete');
   }
@@ -710,20 +673,20 @@ class PersistentMcpClient {
    */
   public abortConnection(): void {
     console.log('[PersistentMcpClient] Aborting current connection');
-    
+
     // Store references for background cleanup
     const clientToClose = this.client;
     const transportToClose = this.transport;
-    
+
     // Immediately reset state
     this.isConnected = false;
     this.client = null;
     this.transport = null;
     this.connectionPromise = null;
-    
+
     // Clean up old connections in background
     this.cleanupOldConnection(clientToClose, transportToClose);
-    
+
     console.log('[PersistentMcpClient] Connection aborted');
   }
 }
@@ -753,137 +716,8 @@ function prettyPrint(obj: any): void {
   console.log(JSON.stringify(obj, null, 2));
 }
 
-/**
- * Utility function to check if an MCP server is available at the specific endpoint
- * @param url The complete MCP URL to check (including endpoint path)
- * @param requiresActiveClient Whether to require an active client connection (default: false)
- * @returns Promise that resolves to true if MCP server is available at this endpoint, false otherwise
- */
-async function isServerAvailable(url: string, requiresActiveClient: boolean = false): Promise<boolean> {
-  // If requiresActiveClient is true, check if we have an active client connection
-  // and verify the hostname is still reachable
-  if (requiresActiveClient) {
-    // First check if we have an active client connection
-    const hasActiveClient = persistentClient.getConnectionStatus() && !!persistentClient.getClient();
-    if (!hasActiveClient) {
-      return false;
-    }
-
-    // If we have an active client, verify the hostname/domain is still reachable
-    // This provides a basic connectivity check without testing the specific MCP endpoint
-    try {
-      const parsedUrl = new URL(url);
-      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}${parsedUrl.port ? ':' + parsedUrl.port : ''}`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000); // Shorter timeout for hostname check
-
-      try {
-        const response = await fetch(baseUrl, {
-          method: 'HEAD',
-          signal: controller.signal,
-          mode: 'no-cors', // Use no-cors for basic connectivity check
-        });
-
-        console.log(`Hostname ${baseUrl} is reachable for active client`);
-        return true;
-      } catch (fetchError) {
-        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
-
-        // For no-cors requests, most responses will throw, so we need to be more lenient
-        if (
-          errorMessage.includes('ECONNREFUSED') ||
-          errorMessage.includes('ENOTFOUND') ||
-          errorMessage.includes('ERR_INTERNET_DISCONNECTED')
-        ) {
-          console.log(`Hostname ${baseUrl} is not reachable: ${errorMessage}`);
-          return false;
-        } else {
-          // Other errors might indicate the server is actually reachable
-          console.log(`Hostname ${baseUrl} appears reachable despite error: ${errorMessage}`);
-          return true;
-        }
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } catch (error) {
-      console.log(`Error checking hostname availability for active client: ${error}`);
-      return false;
-    }
-  }
-
-  try {
-    // Parse the URL to get hostname and port
-    const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname;
-    const port = parsedUrl.port || (parsedUrl.protocol === 'https:' ? '443' : '80');
-
-    // Create an abort controller with timeout to prevent long waits
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-
-    try {
-      // Check the exact MCP endpoint, not just the hostname
-      // This is more accurate for MCP availability
-      const response = await fetch(url, {
-        method: 'HEAD',
-        signal: controller.signal,
-        mode: 'cors', // Use CORS since MCP requires it
-      });
-
-      // Check for successful responses or expected MCP-related status codes
-      if (response.ok || response.status === 200) {
-        console.log(`MCP endpoint ${url} is available (status: ${response.status})`);
-        return true;
-      } else if (response.status === 405) {
-        // Method not allowed usually means the endpoint exists but doesn't support HEAD
-        // This is common for MCP endpoints
-        console.log(`MCP endpoint ${url} exists but doesn't support HEAD (405) - considering available`);
-        return true;
-      } else if (response.status === 404) {
-        console.log(`MCP endpoint ${url} not found (404) - not available`);
-        return false;
-      } else if (response.status === 403) {
-        console.log(`MCP endpoint ${url} forbidden (403) - considering unavailable`);
-        return false;
-      } else if (response.status >= 500) {
-        console.log(`MCP endpoint ${url} server error (${response.status}) - considering unavailable`);
-        return false;
-      } else {
-        // For other status codes, be conservative and consider available
-        console.log(`MCP endpoint ${url} returned status ${response.status} - considering available`);
-        return true;
-      }
-    } catch (fetchError) {
-      const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
-
-      // Network-level errors indicate the endpoint is not available
-      if (
-        errorMessage.includes('Failed to fetch') ||
-        errorMessage.includes('NetworkError') ||
-        errorMessage.includes('ECONNREFUSED') ||
-        errorMessage.includes('ENOTFOUND') ||
-        errorMessage.includes('CORS error') ||
-        errorMessage.includes('ERR_INTERNET_DISCONNECTED')
-      ) {
-        console.log(`MCP endpoint ${url} is not reachable: ${errorMessage}`);
-        return false;
-      } else {
-        // For other errors, be conservative and consider the endpoint potentially available
-        console.log(
-          `MCP endpoint ${url} check failed with non-network error: ${errorMessage} - considering potentially available`,
-        );
-        return true;
-      }
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  } catch (error) {
-    // This catch block handles URL parsing errors and other issues
-    console.log(`Error checking MCP endpoint availability for ${url}:`, error);
-    return false;
-  }
-}
+// isServerAvailable function was removed as per refactoring plan.
+// checkMcpServerConnection relies on internal client state and is preferred.
 
 async function listPrimitives(client: Client): Promise<Primitive[]> {
   const capabilities = client.getServerCapabilities() as ServerCapabilities;
@@ -925,11 +759,7 @@ const persistentClient = PersistentMcpClient.getInstance();
  * @param args The arguments to pass to the tool as an object with string keys
  * @returns Promise that resolves to the result of the tool call
  */
-export async function callToolWithBackwardsCompatibility(
-  uri: string,
-  toolName: string,
-  args: { [key: string]: unknown },
-): Promise<any> {
+export async function invokeMcpTool(uri: string, toolName: string, args: { [key: string]: unknown }): Promise<any> {
   try {
     // Connect to the server if not already connected (with SSE transport)
     await persistentClient.connect(uri);
@@ -943,30 +773,19 @@ export async function callToolWithBackwardsCompatibility(
 }
 
 /**
- * Legacy alias for backwards compatibility
- * @deprecated Use callToolWithBackwardsCompatibility instead
- */
-export async function callToolWithSSE(uri: string, toolName: string, args: { [key: string]: unknown }): Promise<any> {
-  return callToolWithBackwardsCompatibility(uri, toolName, args);
-}
-
-/**
- * Get all primitives from the MCP server using backwards compatible connection
+ * Get all primitives from the MCP server.
  * @param uri The URI of the MCP server
  * @param forceRefresh Whether to force a refresh and ignore the cache
  * @returns Promise that resolves to an array of primitives (resources, tools, and prompts)
  */
-export async function getPrimitivesWithBackwardsCompatibility(
-  uri: string,
-  forceRefresh: boolean = false,
-): Promise<Primitive[]> {
+export async function fetchMcpPrimitives(uri: string, forceRefresh: boolean = false): Promise<Primitive[]> {
   try {
     // Connect to the server if not already connected (with SSE transport)
     await persistentClient.connect(uri);
 
     // Clear cache if force refresh is requested
     if (forceRefresh) {
-      console.log('[getPrimitivesWithBackwardsCompatibility] Force refresh requested, clearing cache');
+      console.log('[fetchMcpPrimitives] Force refresh requested, clearing cache');
       persistentClient.clearCache();
     }
 
@@ -976,14 +795,6 @@ export async function getPrimitivesWithBackwardsCompatibility(
     console.error('Error getting primitives:', error);
     throw error;
   }
-}
-
-/**
- * Legacy alias for backwards compatibility
- * @deprecated Use getPrimitivesWithBackwardsCompatibility instead
- */
-export async function getPrimitivesWithSSE(uri: string, forceRefresh: boolean = false): Promise<Primitive[]> {
-  return getPrimitivesWithBackwardsCompatibility(uri, forceRefresh);
 }
 
 /**
@@ -1099,7 +910,7 @@ async function callTool(client: Client, toolName: string, args: { [key: string]:
  * @param uri The URI of the MCP server
  * @returns Promise that resolves when the connection is established
  */
-export async function runWithBackwardsCompatibility(uri: string): Promise<void> {
+export async function initializeAndConnectClient(uri: string): Promise<void> {
   try {
     console.log(`Attempting to connect to MCP server with SSE transport: ${uri}`);
 
@@ -1123,13 +934,7 @@ export async function runWithBackwardsCompatibility(uri: string): Promise<void> 
   }
 }
 
-/**
- * Legacy alias for backwards compatibility
- * @deprecated Use runWithBackwardsCompatibility instead
- */
-export async function runWithSSE(uri: string): Promise<void> {
-  return runWithBackwardsCompatibility(uri);
-}
-
-// Export the callTool function for direct use
-export { callTool, prettyPrint, createSpinner, listPrimitives };
+// Export the core client interaction functions and utilities
+export { prettyPrint, createSpinner, listPrimitives };
+// Note: The internal helper 'callTool' (within PersistentMcpClient class) is distinct
+// from the exported 'invokeMcpTool' function.

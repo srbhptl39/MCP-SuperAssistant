@@ -173,102 +173,99 @@ setupSidebarRecovery();
 function collectDemographicData(): { [key: string]: any } {
   try {
     const userAgent = navigator.userAgent;
-    const language = navigator.language;
+    const language = navigator.language || '';
 
-    // Parse browser and OS information from user agent
     let browser = 'Unknown';
     let browserVersion = 'Unknown';
     let os = 'Unknown';
-    let osVersion = 'Unknown';
+    let osVersion = 'Unknown'; // Stores OS version, especially for mobile
 
-    // Detect browser
-    if (userAgent.indexOf('Firefox') > -1) {
+    // Simplified browser detection
+    if (userAgent.includes('Firefox/')) {
       browser = 'Firefox';
-      const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Edg') > -1) {
+      browserVersion = userAgent.match(/Firefox\/(\d+\.\d+)/)?.[1] || 'Unknown';
+    } else if (userAgent.includes('Edg/')) {
       browser = 'Edge';
-      const match = userAgent.match(/Edg\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Chrome') > -1) {
+      browserVersion = userAgent.match(/Edg\/(\d+\.\d+)/)?.[1] || 'Unknown';
+    } else if (userAgent.includes('Chrome/') && !userAgent.includes('Edg/')) {
       browser = 'Chrome';
-      const match = userAgent.match(/Chrome\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Safari') > -1) {
+      browserVersion = userAgent.match(/Chrome\/(\d+\.\d+)/)?.[1] || 'Unknown';
+    } else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/') && !userAgent.includes('Edg/')) {
       browser = 'Safari';
-      const match = userAgent.match(/Version\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
-      browser = 'Internet Explorer';
-      const match = userAgent.match(/(?:MSIE |rv:)(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
+      browserVersion = userAgent.match(/Version\/(\d+\.\d+)/)?.[1] || 'Unknown';
     }
+    // IE detection removed for simplification
 
-    // Detect OS
-    if (userAgent.indexOf('Windows') > -1) {
+    // Simplified OS detection
+    if (userAgent.includes('Windows NT')) {
       os = 'Windows';
-      const match = userAgent.match(/Windows NT (\d+\.\d+)/);
-      const ntVersion = match && match[1] ? match[1] : 'Unknown';
-      // Map Windows NT version to Windows version
-      const windowsVersions: { [key: string]: string } = {
-        '10.0': '10/11',
-        '6.3': '8.1',
-        '6.2': '8',
-        '6.1': '7',
-        '6.0': 'Vista',
-        '5.2': 'XP x64',
-        '5.1': 'XP',
-      };
-      osVersion = windowsVersions[ntVersion] || ntVersion;
-    } else if (userAgent.indexOf('Mac') > -1) {
+      // osVersion for Windows is not collected for simplicity
+    } else if (userAgent.includes('Mac OS X')) {
       os = 'macOS';
-      const match = userAgent.match(/Mac OS X ([\d_]+)/);
-      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
-    } else if (userAgent.indexOf('Linux') > -1) {
+      // osVersion for macOS is not collected for simplicity
+    } else if (userAgent.includes('Linux') && !userAgent.includes('Android')) {
       os = 'Linux';
-      const match = userAgent.match(/Linux ([\w\d\.]+)/);
-      osVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Android') > -1) {
+      // osVersion for Linux is not collected for simplicity
+    } else if (userAgent.includes('Android')) {
       os = 'Android';
-      const match = userAgent.match(/Android ([\d\.]+)/);
-      osVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('iOS') > -1 || userAgent.indexOf('iPhone') > -1 || userAgent.indexOf('iPad') > -1) {
+      osVersion = userAgent.match(/Android ([\d\.]+)/)?.[1] || 'Unknown';
+      // Attempt to identify mobile browser more specifically
+      if (userAgent.includes('Chrome/')) {
+        browser = 'Chrome Mobile'; // browserVersion from generic Chrome regex might be okay
+      } else if (userAgent.includes('Firefox/')) {
+        browser = 'Firefox Mobile'; // browserVersion from generic Firefox regex might be okay
+      } else {
+        browser = 'Android Browser'; // Generic fallback
+        browserVersion = osVersion; // Fallback browser version to OS version if specific browser not identified
+      }
+    } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
       os = 'iOS';
-      const match = userAgent.match(/OS ([\d_]+)/);
-      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
+      osVersion = userAgent.match(/OS ([\d_]+)/)?.[1].replace(/_/g, '.') || 'Unknown';
+      // iOS browser is typically Safari, version often tied to OS or in 'Version/X.X'
+      if (userAgent.includes('CriOS/')) {
+        // Chrome on iOS
+        browser = 'Chrome iOS';
+        browserVersion = userAgent.match(/CriOS\/(\d+\.\d+)/)?.[1] || 'Unknown';
+      } else if (userAgent.includes('FxiOS/')) {
+        // Firefox on iOS
+        browser = 'Firefox iOS';
+        browserVersion = userAgent.match(/FxiOS\/(\d+\.\d+)/)?.[1] || 'Unknown';
+      } else {
+        browser = 'Mobile Safari'; // Default for iOS
+        // browserVersion for Mobile Safari might be from generic Safari 'Version/' regex or OS version
+        if (browserVersion === 'Unknown' && osVersion !== 'Unknown') {
+          // browserVersion = osVersion; // Fallback if not found via Version/
+        }
+      }
     }
 
-    // Determine device type
-    let deviceType = 'desktop';
-    if (/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)) {
-      deviceType = /iPad|tablet/i.test(userAgent) ? 'tablet' : 'mobile';
-    }
-
-    // Get screen information
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-    const screenResolution = `${screenWidth}x${screenHeight}`;
-    const pixelRatio = window.devicePixelRatio || 1;
-
-    // Get country/region (this will be limited and may need server-side enrichment)
-    // For privacy reasons, we're just using the language as a proxy
-    const region = language.split('-')[1] || language;
-
-    return {
+    const data: { [key: string]: any } = {
       browser,
       browser_version: browserVersion,
       operating_system: os,
-      os_version: osVersion,
       language,
-      region,
-      screen_resolution: screenResolution,
-      pixel_ratio: pixelRatio,
-      device_type: deviceType,
+      screen_resolution: `${window.screen.width}x${window.screen.height}`,
+      device_type: /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)
+        ? /iPad|tablet/i.test(userAgent)
+          ? 'tablet'
+          : 'mobile'
+        : 'desktop',
     };
+
+    // Only add os_version if it's for a mobile OS and meaningfully determined
+    if ((os === 'Android' || os === 'iOS') && osVersion !== 'Unknown') {
+      data.os_version = osVersion;
+    }
+    // Fields like pixelRatio and region (derived from language) remain removed.
+
+    return data;
   } catch (error) {
     console.error('[Analytics] Error collecting demographic data:', error);
     return {
       error: 'Failed to collect demographic data',
+      browser: 'Unknown',
+      operating_system: 'Unknown',
+      language: navigator.language || 'Unknown',
     };
   }
 }

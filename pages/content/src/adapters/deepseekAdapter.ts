@@ -7,59 +7,55 @@
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
 import {
-  insertToolResultToChatInput,
-  attachFileToChatInput,
-  submitChatInput,
+  getDeepSeekChatInputSelectors,
+  getDeepSeekSubmitButtonSelectors,
+  getDeepSeekFileInputSelectors,
+  insertToolResultToChatInput, // takes element, result
+  submitChatInput, // takes inputEl, buttonEl, simulateEnterFn
+  attachFileToChatInput, // takes fileInputEl, file
 } from '../components/websites/deepseek/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { initDeepSeekComponents } from './adaptercomponents';
+import { initDeepSeekComponents } from './adaptercomponents/deepseek';
 
 export class DeepSeekAdapter extends BaseAdapter {
   name = 'DeepSeek';
-  hostname = ['chat.deepseek.com']; // Support deepseek.com
-  // URL patterns to only activate on specific paths
-  urlPatterns = [
-    /https?:\/\/(?:www\.)?(?:chat\.deepseek\.com)/, // chat.deepseek.com URL
-  ];
-
-  // Properties to track navigation
-  private lastUrl: string = '';
-  private urlCheckInterval: number | null = null;
+  hostname = ['chat.deepseek.com'];
+  urlPatterns = [/https?:\/\/(?:www\.)?(?:chat\.deepseek\.com)/];
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('deepseek');
     logMessage('Created DeepSeek sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for Deepseek
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for Deepseek
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[DeepSeekAdapter] URL changed to: ${newUrl}`);
+    initDeepSeekComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    this.checkCurrentUrl();
-
-    initDeepSeekComponents();
-
-    // Start URL checking to handle navigation within DeepSeek
-    if (!this.urlCheckInterval) {
-      this.lastUrl = window.location.href;
-      this.urlCheckInterval = window.setInterval(() => {
-        const currentUrl = window.location.href;
-
-        if (currentUrl !== this.lastUrl) {
-          logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-          this.lastUrl = currentUrl;
-
-          initDeepSeekComponents();
-
-          // Check if we should show or hide the sidebar based on URL
-          this.checkCurrentUrl();
-        }
-      }, 1000); // Check every second
-    }
+    initDeepSeekComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   /**
@@ -67,32 +63,49 @@ export class DeepSeekAdapter extends BaseAdapter {
    */
   cleanup(): void {
     logMessage('Cleaning up DeepSeek adapter');
-
-    // Clear interval for URL checking
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the parent cleanup method
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the DeepSeek input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into DeepSeek input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getDeepSeekChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`DeepSeekAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('DeepSeekAdapter: Fallback to BaseAdapter.insertText');
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('DeepSeekAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the DeepSeek input form
    */
-  triggerSubmission(): void {
-    submitChatInput();
-    logMessage('Triggered DeepSeek form submission');
+  async triggerSubmission(): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getDeepSeekChatInputSelectors());
+    }
+    const submitButton = this.findElement(getDeepSeekSubmitButtonSelectors());
+
+    const success = await submitChatInput(this.currentChatInputElement, submitButton, this.simulateEnterKey.bind(this));
+    logMessage(`DeepSeekAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success && this.currentChatInputElement) {
+      logMessage('DeepSeekAdapter: Submission via handler failed, trying generic Enter.');
+      this.simulateEnterKey(this.currentChatInputElement);
+    } else if (!success) {
+      logMessage('DeepSeekAdapter: Submission failed and no input element to fall back to for Enter key simulation.');
+    }
   }
 
   /**
@@ -100,7 +113,8 @@ export class DeepSeekAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
-    return true;
+    const fileInputElement = this.findElement(getDeepSeekFileInputSelectors());
+    return !!fileInputElement;
   }
 
   /**
@@ -109,12 +123,16 @@ export class DeepSeekAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
+    const fileInputElement = this.findElement(getDeepSeekFileInputSelectors()) as HTMLInputElement | null;
+    if (!fileInputElement) {
+      logMessage('DeepSeekAdapter: File input element not found.');
+      return false;
+    }
     try {
-      const result = await attachFileToChatInput(file);
-      return result;
+      return attachFileToChatInput(fileInputElement, file);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to DeepSeek input: ${errorMessage}`);
+      logMessage(`DeepSeekAdapter: Error attaching file: ${errorMessage}`);
       console.error('Error in adapter when attaching file to DeepSeek input:', error);
       return false;
     }

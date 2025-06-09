@@ -1,26 +1,46 @@
 import {
-  callToolWithSSE,
-  getPrimitivesWithSSE,
+  invokeMcpTool,
+  fetchMcpPrimitives,
   isMcpServerConnected,
   forceReconnectToMcpServer,
   checkMcpServerConnection,
 } from './officialmcpclient';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
-// Define the Primitive type locally since it's not exported from officialmcpclient
+// Define the Primitive type locally
 type PrimitiveType = 'resource' | 'tool' | 'prompt';
 type PrimitiveValue = {
   name: string;
   description?: string;
   uri?: string;
-  inputSchema?: any;
-  arguments?: any[];
+  inputSchema?: Record<string, unknown>;
+  arguments?: unknown[];
 };
 type Primitive = {
   type: PrimitiveType;
   value: PrimitiveValue;
 };
+
+// Define a more specific type for messages from content scripts
+interface ContentScriptMessage {
+  type: string;
+  command?: string; // For messages handled by chrome.runtime.onMessage
+  requestId?: string;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  uri?: string;
+  forceRefresh?: boolean;
+  config?: { uri: string };
+  timestamp?: number; // For HEARTBEAT
+  forceCheck?: boolean; // For CHECK_CONNECTION
+  status?: string; // For RECONNECT_STATUS
+  success?: boolean; // For RECONNECT_RESULT
+  isConnected?: boolean; // For RECONNECT_RESULT and CONNECTION_STATUS
+  errorType?: string;
+  errorMessage?: string;
+  eventName?: string; // For analytics
+  eventParams?: Record<string, unknown>; // For analytics
+  [key: string]: any; // Allow other properties, but try to define known ones
+}
 
 /**
  * Class that manages communication between background script and content scripts
@@ -215,7 +235,7 @@ class McpInterface {
       if (hasFreshCache) {
         // Use cached primitives for verification
         const toolExists = this.toolDetailsCache.primitives.some(
-          primitive => primitive.type === 'tool' && primitive.value.name === toolName,
+          (primitive: Primitive) => primitive.type === 'tool' && primitive.value.name === toolName,
         );
 
         return {
@@ -229,22 +249,24 @@ class McpInterface {
       console.log(`[MCP Interface] Performing lightweight verification for tool '${toolName}'`);
 
       // Get fresh primitives but don't update the main cache to avoid race conditions
-      const primitives = await getPrimitivesWithSSE(this.serverUrl, false);
+      const primitives: Primitive[] = await fetchMcpPrimitives(this.serverUrl, false);
 
-      const toolExists = primitives.some(primitive => primitive.type === 'tool' && primitive.value.name === toolName);
+      const toolExists = primitives.some(
+        (primitive: Primitive) => primitive.type === 'tool' && primitive.value.name === toolName,
+      );
 
       if (toolExists) {
         return { exists: true, reason: 'Verified with server', cached: false };
       } else {
         // Generate a helpful list of available tools for debugging
         const availableTools = primitives
-          .filter(p => p.type === 'tool')
-          .map(p => p.value.name)
+          .filter((p: Primitive) => p.type === 'tool')
+          .map((p: Primitive) => p.value.name) // Ensure p is typed here if not inferred
           .slice(0, 5); // Limit to first 5 tools
 
         const toolList =
           availableTools.length > 0
-            ? ` Available tools include: ${availableTools.join(', ')}${primitives.filter(p => p.type === 'tool').length > 5 ? '...' : ''}`
+            ? ` Available tools include: ${availableTools.join(', ')}${primitives.filter((p: Primitive) => p.type === 'tool').length > 5 ? '...' : ''}` // Ensure p is typed here
             : ' No tools are currently available from the server.';
 
         return {
@@ -267,7 +289,7 @@ class McpInterface {
   /**
    * Handle messages from content scripts
    */
-  private handleMessage(connectionId: string, message: any): void {
+  private async handleMessage(connectionId: string, message: ContentScriptMessage): Promise<void> {
     console.log(`[MCP Interface] Received message from ${connectionId}:`, message.type);
 
     // Update the last active timestamp for this connection
@@ -313,17 +335,19 @@ class McpInterface {
   /**
    * Send heartbeat response back to the content script
    */
-  private sendHeartbeatResponse(connectionId: string, timestamp: number): void {
+  private sendHeartbeatResponse(connectionId: string, timestamp: number | undefined): void {
     const port = this.connections.get(connectionId);
     if (port) {
       try {
         port.postMessage({
           type: 'HEARTBEAT_RESPONSE',
-          timestamp,
+          timestamp: timestamp !== undefined ? timestamp : Date.now(), // Provide a default if undefined
           serverTimestamp: Date.now(),
         });
       } catch (error) {
-        console.error(`[MCP Interface] Error sending heartbeat response to ${connectionId}:`, error);
+        // Explicitly type error
+        const typedError = error instanceof Error ? error : new Error(String(error));
+        console.error(`[MCP Interface] Error sending heartbeat response to ${connectionId}:`, typedError);
         // Remove the connection if we can't send messages to it
         this.connections.delete(connectionId);
         this.connectionLastActiveTimestamps.delete(connectionId);
@@ -334,7 +358,7 @@ class McpInterface {
   /**
    * Handle tool call requests from content scripts with enhanced verification
    */
-  private async handleToolCall(connectionId: string, message: any): Promise<void> {
+  private async handleToolCall(connectionId: string, message: ContentScriptMessage): Promise<void> {
     const { requestId, toolName, args } = message;
     const port = this.connections.get(connectionId);
 
@@ -383,7 +407,7 @@ class McpInterface {
       if (args && typeof args === 'object' && !Array.isArray(args)) {
         try {
           // Deep clone and sanitize the arguments
-          sanitizedArgs = JSON.parse(JSON.stringify(args));
+          sanitizedArgs = JSON.parse(JSON.stringify(args)) as { [key: string]: unknown };
           console.log(`[MCP Interface] Sanitized args:`, sanitizedArgs);
         } catch (sanitizeError) {
           console.error(`[MCP Interface] Error sanitizing arguments:`, sanitizeError);
@@ -396,8 +420,10 @@ class McpInterface {
           return;
         }
       } else if (args === null || args === undefined) {
-        sanitizedArgs = {};
+        sanitizedArgs = {}; // Default to empty object if args are null or undefined
       } else {
+        // This case should ideally not be reached if types are enforced earlier,
+        // but it's a safeguard.
         console.error(`[MCP Interface] Invalid arguments type for tool ${toolName}:`, typeof args, args);
         this.sendError(
           connectionId,
@@ -409,7 +435,7 @@ class McpInterface {
       }
 
       // Call the tool with enhanced error handling
-      const result = await callToolWithSSE(this.serverUrl, toolName, sanitizedArgs);
+      const result = await invokeMcpTool(this.serverUrl, toolName, sanitizedArgs);
 
       console.log(`[MCP Interface] Tool call ${requestId} completed successfully`);
 
@@ -593,7 +619,7 @@ class McpInterface {
   /**
    * Handle get tool details requests from content scripts with caching
    */
-  private async handleGetToolDetails(connectionId: string, message: any): Promise<void> {
+  private async handleGetToolDetails(connectionId: string, message: ContentScriptMessage): Promise<void> {
     const { requestId, forceRefresh } = message;
     const port = this.connections.get(connectionId);
 
@@ -658,41 +684,32 @@ class McpInterface {
       if (this.toolDetailsCache.inProgress && this.toolDetailsCache.fetchPromise) {
         console.log(`[MCP Interface] Waiting for in-progress fetch to complete for request ${requestId}`);
         try {
-          const primitives = await this.toolDetailsCache.fetchPromise;
-
+          const primitivesFromCache = await this.toolDetailsCache.fetchPromise;
           // Filter to only include tools
-          const tools = primitives.filter(p => p.type === 'tool');
-
-          // Send the result back to the content script
-          port.postMessage({
-            type: 'TOOL_DETAILS_RESULT',
-            result: tools,
-            requestId,
-          });
-
+          const toolsFromCache = primitivesFromCache.filter(p => p.type === 'tool');
+          port.postMessage({ type: 'TOOL_DETAILS_RESULT', result: toolsFromCache, requestId });
           console.log(
-            `[MCP Interface] Tool details request ${requestId} completed successfully with ${tools.length} tools (from shared request)`,
+            `[MCP Interface] Tool details request ${requestId} completed successfully with ${toolsFromCache.length} tools (from shared request)`,
           );
           return;
         } catch (error) {
-          console.error(`[MCP Interface] Shared request failed, will attempt new request:`, error);
-          // Continue to create a new request below
+          // Type annotation for error
+          console.error(`[MCP Interface] Shared request failed for ${requestId}, will attempt new request:`, error);
         }
       }
 
       // Start a new fetch request
       this.toolDetailsCache.inProgress = true;
-      this.toolDetailsCache.fetchPromise = this.getAvailableToolsFromServer(!!forceRefresh);
+      const fetchPrimitivesPromise = this.getAvailableToolsFromServer(!!forceRefresh);
+      this.toolDetailsCache.fetchPromise = fetchPrimitivesPromise; // Store the promise
 
-      // Get the primitives from the server
-      const primitives = await this.toolDetailsCache.fetchPromise;
+      const primitives = await fetchPrimitivesPromise; // Await the local promise variable
 
-      // Update the cache
-      this.toolDetailsCache.primitives = primitives;
+      // Update the cache (only if successful)
+      this.toolDetailsCache.primitives = primitives; // Store all primitives
       this.toolDetailsCache.lastFetch = Date.now();
 
-      // Filter to only include tools
-      const tools = primitives.filter(p => p.type === 'tool');
+      const tools = primitives.filter(p => p.type === 'tool'); // Filter for sending
 
       // Send the result back to the content script
       port.postMessage({
@@ -734,7 +751,7 @@ class McpInterface {
   /**
    * Handle force reconnect requests from content scripts
    */
-  private async handleForceReconnect(connectionId: string, message: any): Promise<void> {
+  private async handleForceReconnect(connectionId: string, message: ContentScriptMessage): Promise<void> {
     const { requestId } = message;
     const port = this.connections.get(connectionId);
 
@@ -867,27 +884,23 @@ class McpInterface {
   private async getAvailableToolsFromServer(forceRefresh: boolean = false): Promise<Primitive[]> {
     try {
       console.log(`[MCP Interface] Getting available primitives from server (forceRefresh: ${forceRefresh})`);
-
-      // Use getPrimitivesWithSSE to get all primitives directly using the persistent connection
-      const primitives = await getPrimitivesWithSSE(this.serverUrl, forceRefresh);
-
+      const primitives = await fetchMcpPrimitives(this.serverUrl, forceRefresh);
       console.log(`[MCP Interface] Found ${primitives.length} primitives`);
       return primitives;
     } catch (error) {
-      console.error('[MCP Interface] Failed to get available primitives:', error);
+      // Added type annotation for error
+      const typedError = error instanceof Error ? error : new Error(String(error));
+      console.error('[MCP Interface] Failed to get available primitives:', typedError);
 
-      // Check if this is a connection failure
-      if (error instanceof Error && error.message.includes('Could not connect to server')) {
-        // Mark as disconnected and don't retry immediately
+      if (
+        typedError.message.includes('Could not connect to server') ||
+        typedError.message.includes('Failed to fetch')
+      ) {
         this.isConnected = false;
         this.broadcastConnectionStatus();
-
-        // Re-throw with a more user-friendly message
         throw new Error('Unable to connect to MCP server. Please check your server configuration and try again.');
       }
-
-      // Return an empty array instead of throwing to be more resilient
-      return [];
+      return []; // Return empty for other errors to be resilient
     }
   }
 
@@ -997,7 +1010,7 @@ class McpInterface {
   /**
    * Handle get server config requests from content scripts
    */
-  private async handleGetServerConfig(connectionId: string, message: any): Promise<void> {
+  private async handleGetServerConfig(connectionId: string, message: ContentScriptMessage): Promise<void> {
     const { requestId } = message;
     const port = this.connections.get(connectionId);
 
@@ -1050,7 +1063,7 @@ class McpInterface {
   /**
    * Handle update server config requests from content scripts
    */
-  private async handleUpdateServerConfig(connectionId: string, message: any): Promise<void> {
+  private async handleUpdateServerConfig(connectionId: string, message: ContentScriptMessage): Promise<void> {
     const { requestId, config } = message;
     const port = this.connections.get(connectionId);
 

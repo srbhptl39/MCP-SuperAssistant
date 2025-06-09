@@ -6,57 +6,59 @@
 
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
-import { insertToolResultToChatInput, attachFileToChatInput, submitChatInput } from '../components/websites/grok';
+import {
+  getGrokChatInputSelectors,
+  getGrokSubmitButtonSelectors,
+  getGrokFileInputSelectors,
+  insertToolResultToChatInput, // takes element, result
+  submitChatInput, // takes inputEl, buttonEl, simulateEnterFn
+  attachFileToChatInput, // takes fileInputEl, file
+} from '../components/websites/grok/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { initGrokComponents } from './adaptercomponents';
+import { initGrokComponents } from './adaptercomponents/grok';
 
 export class GrokAdapter extends BaseAdapter {
   name = 'Grok';
   hostname = ['x.com', 'grok.com']; // Support both x.com and grok.com
-  // URL patterns to only activate on specific paths
   urlPatterns = [
     /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/i\/grok/, // x.com/i/grok path
     /https?:\/\/(?:www\.)?grok\.com/, // Any grok.com URL
   ];
-
-  // Properties to track navigation
-  private lastUrl: string = '';
-  private urlCheckInterval: number | null = null;
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('grok');
     logMessage('Created Grok sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for Grok
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for Grok
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[GrokAdapter] URL changed to: ${newUrl}`);
+    initGrokComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    this.checkCurrentUrl();
-
-    initGrokComponents();
-
-    // Start URL checking to handle navigation within Grok
-    if (!this.urlCheckInterval) {
-      this.lastUrl = window.location.href;
-      this.urlCheckInterval = window.setInterval(() => {
-        const currentUrl = window.location.href;
-
-        if (currentUrl !== this.lastUrl) {
-          logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-          this.lastUrl = currentUrl;
-
-          initGrokComponents();
-
-          // Check if we should show or hide the sidebar based on URL
-          this.checkCurrentUrl();
-        }
-      }, 1000); // Check every second
-    }
+    initGrokComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   /**
@@ -64,32 +66,49 @@ export class GrokAdapter extends BaseAdapter {
    */
   cleanup(): void {
     logMessage('Cleaning up Grok adapter');
-
-    // Clear interval for URL checking
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the parent cleanup method
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the Grok input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into Grok input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getGrokChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`GrokAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('GrokAdapter: Fallback to BaseAdapter.insertText');
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('GrokAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the Grok input form
    */
-  triggerSubmission(): void {
-    submitChatInput();
-    logMessage('Triggered Grok form submission');
+  async triggerSubmission(): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getGrokChatInputSelectors());
+    }
+    const submitButton = this.findElement(getGrokSubmitButtonSelectors());
+
+    const success = await submitChatInput(this.currentChatInputElement, submitButton, this.simulateEnterKey.bind(this));
+    logMessage(`GrokAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success && this.currentChatInputElement) {
+      logMessage('GrokAdapter: Submission via handler failed, trying generic Enter.');
+      this.simulateEnterKey(this.currentChatInputElement);
+    } else if (!success) {
+      logMessage('GrokAdapter: Submission failed and no input element to fall back to for Enter key simulation.');
+    }
   }
 
   /**
@@ -97,7 +116,9 @@ export class GrokAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
-    return true;
+    // Check for the presence of a file input element
+    const fileInputElement = this.findElement(getGrokFileInputSelectors());
+    return !!fileInputElement;
   }
 
   /**
@@ -106,12 +127,16 @@ export class GrokAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
+    const fileInputElement = this.findElement(getGrokFileInputSelectors()) as HTMLInputElement | null;
+    if (!fileInputElement) {
+      logMessage('GrokAdapter: File input element not found.');
+      return false;
+    }
     try {
-      const result = await attachFileToChatInput(file);
-      return result;
+      return attachFileToChatInput(fileInputElement, file);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to Grok input: ${errorMessage}`);
+      logMessage(`GrokAdapter: Error attaching file: ${errorMessage}`);
       console.error('Error in adapter when attaching file to Grok input:', error);
       return false;
     }

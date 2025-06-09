@@ -409,8 +409,10 @@ export const injectTailwindToShadowDom = async (shadowRoot: ShadowRoot): Promise
       logMessage('Successfully injected Tailwind CSS using Constructable Stylesheets');
     } catch (constructableError) {
       // 3. Fallback to style element for Firefox and older browsers
-      logMessage(`Constructable Stylesheets not supported, falling back to style element: ${constructableError instanceof Error ? constructableError.message : String(constructableError)}`);
-      
+      logMessage(
+        `Constructable Stylesheets not supported, falling back to style element: ${constructableError instanceof Error ? constructableError.message : String(constructableError)}`,
+      );
+
       const styleElement = document.createElement('style');
       styleElement.textContent = cssText;
       shadowRoot.appendChild(styleElement);

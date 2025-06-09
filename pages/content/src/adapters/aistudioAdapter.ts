@@ -6,88 +6,100 @@
 
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
-import { insertToolResultToChatInput } from '../components/websites/aistudio';
+import {
+  getAiStudioChatInputSelectors,
+  getAiStudioSubmitButtonSelectors,
+  insertToolResultToChatInput, // takes element, result
+  submitChatInput, // takes inputElement, buttonElement, simulateEnterFn
+  attachFileToChatInput, // takes element, file
+} from '../components/websites/aistudio/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { attachFileToChatInput, submitChatInput } from '../components/websites/aistudio/chatInputHandler';
-import { initAIStudioComponents } from './adaptercomponents';
+import { initAIStudioComponents } from './adaptercomponents/aistudio';
 
 export class AiStudioAdapter extends BaseAdapter {
   name = 'AiStudio';
   hostname = ['aistudio.google.com'];
-
-  // Property to store the last URL
-  private lastUrl: string = '';
-  // Property to store the interval ID
-  private urlCheckInterval: number | null = null;
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('aistudio');
     logMessage('Created AiStudio sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for AiStudio
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for AiStudio
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[AiStudioAdapter] URL changed to: ${newUrl}`);
+    initAIStudioComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    // this.checkCurrentUrl();
-
-    // Initialize AI Studio components
-    initAIStudioComponents();
-
-    // Start URL checking to handle navigation within AiStudio
-    // if (!this.urlCheckInterval) {
-    //   this.lastUrl = window.location.href;
-    //   this.urlCheckInterval = window.setInterval(() => {
-    //     const currentUrl = window.location.href;
-
-    //     if (currentUrl !== this.lastUrl) {
-    //       logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-    //       this.lastUrl = currentUrl;
-
-    //       initAIStudioComponents();
-    //       // Check if we should show or hide the sidebar based on URL
-    //       this.checkCurrentUrl();
-    //     }
-    //   }, 1000); // Check every second
-    // }
+    initAIStudioComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   cleanup(): void {
-    // Clear interval for URL checking
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the parent cleanup method
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the AiStudio input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into AiStudio input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getAiStudioChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`AiStudioAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('AiStudioAdapter: Fallback to BaseAdapter.insertText');
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('AiStudioAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the AiStudio input form
    */
-  triggerSubmission(): void {
-    // Use the function to submit the form
-    submitChatInput()
-      .then((success: boolean) => {
-        logMessage(`Triggered AiStudio form submission: ${success ? 'success' : 'failed'}`);
-      })
-      .catch((error: Error) => {
-        logMessage(`Error triggering AiStudio form submission: ${error}`);
-      });
+  async triggerSubmission(): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getAiStudioChatInputSelectors());
+    }
+    const submitButton = this.findElement(getAiStudioSubmitButtonSelectors());
+
+    const success = await submitChatInput(this.currentChatInputElement, submitButton, this.simulateEnterKey.bind(this));
+    logMessage(`AiStudioAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success && this.currentChatInputElement) {
+      logMessage('AiStudioAdapter: Submission via handler failed and no button found, trying generic Enter.');
+      this.simulateEnterKey(this.currentChatInputElement);
+    } else if (!success) {
+      logMessage('AiStudioAdapter: Submission failed and no input element to fall back to for Enter key simulation.');
+    }
   }
 
   /**
@@ -95,6 +107,10 @@ export class AiStudioAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
+    // AI Studio's file upload is typically done via a button that opens a file picker,
+    // or by drag/drop. We'll assume true for now as it's a common feature.
+    // A more specific check could be to find an "Upload" button or a drop zone.
+    // For now, returning true as per the original adapter.
     return true;
   }
 
@@ -104,13 +120,24 @@ export class AiStudioAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
-    try {
-      const result = await attachFileToChatInput(file);
-      return result;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to AiStudio input: ${errorMessage}`);
-      console.error('Error in adapter when attaching file to AiStudio input:', error);
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getAiStudioChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      try {
+        return await attachFileToChatInput(this.currentChatInputElement, file);
+      } catch (err) {
+        // Changed error to err
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        logMessage(`AiStudioAdapter: Error attaching file: ${errorMessage}`);
+        console.error('Error in adapter when attaching file to AiStudio input:', err); // Changed error to err
+        return false;
+      }
+    } else {
+      logMessage('AiStudioAdapter: Chat input element not found for file attachment.');
+      // console.error('Error in adapter when attaching file to AiStudio input:', error); // This line had 'error' which was not defined here.
+      console.error('AiStudioAdapter: Chat input element not found, cannot attach file.');
       return false;
     }
   }

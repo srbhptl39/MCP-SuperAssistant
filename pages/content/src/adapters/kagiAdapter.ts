@@ -6,57 +6,58 @@
 
 import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
-import { insertToolResultToChatInput, attachFileToChatInput, submitChatInput } from '../components/websites/kagi';
+import {
+  getKagiChatInputSelectors,
+  getKagiSubmitButtonSelectors,
+  getKagiFileInputSelectors,
+  insertToolResultToChatInput, // takes element, result
+  submitChatInput, // takes inputEl, buttonEl, simulateEnterFn
+  attachFileToChatInput, // takes fileInputEl, file
+} from '../components/websites/kagi/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { initKagiComponents } from './adaptercomponents';
+import { initKagiComponents } from './adaptercomponents/kagi';
 
 export class KagiAdapter extends BaseAdapter {
   name = 'Kagi';
-  hostname = ['kagi.com']; // kagi.com
-  // URL patterns to only activate on specific paths
-  // https://kagi.com/assistant/
+  hostname = ['kagi.com'];
   urlPatterns = [
-    /https?:\/\/(?:www\.)?kagi\.com\/assistant/, // Any kagi.com URL
+    /https?:\/\/(?:www\.)?kagi\.com\/assistant/, // Only activate on /assistant path
   ];
-
-  // Properties to track navigation
-  private lastUrl: string = '';
-  private urlCheckInterval: number | null = null;
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('kagi');
     logMessage('Created Kagi sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for Kagi
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for Kagi
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[KagiAdapter] URL changed to: ${newUrl}`);
+    initKagiComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    this.checkCurrentUrl();
-
-    initKagiComponents();
-
-    // Start URL checking to handle navigation within Kagi
-    if (!this.urlCheckInterval) {
-      this.lastUrl = window.location.href;
-      this.urlCheckInterval = window.setInterval(() => {
-        const currentUrl = window.location.href;
-
-        if (currentUrl !== this.lastUrl) {
-          logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-          this.lastUrl = currentUrl;
-
-          initKagiComponents();
-
-          // Check if we should show or hide the sidebar based on URL
-          this.checkCurrentUrl();
-        }
-      }, 1000); // Check every second
-    }
+    initKagiComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   /**
@@ -64,32 +65,49 @@ export class KagiAdapter extends BaseAdapter {
    */
   cleanup(): void {
     logMessage('Cleaning up Kagi adapter');
-
-    // Clear interval for URL checking
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the parent cleanup method
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the Kagi input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into Kagi input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getKagiChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`KagiAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('KagiAdapter: Fallback to BaseAdapter.insertText');
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('KagiAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the Kagi input form
    */
-  triggerSubmission(): void {
-    submitChatInput();
-    logMessage('Triggered Kagi form submission');
+  async triggerSubmission(): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getKagiChatInputSelectors());
+    }
+    const submitButton = this.findElement(getKagiSubmitButtonSelectors());
+
+    const success = await submitChatInput(this.currentChatInputElement, submitButton, this.simulateEnterKey.bind(this));
+    logMessage(`KagiAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success && this.currentChatInputElement) {
+      logMessage('KagiAdapter: Submission via handler failed, trying generic Enter.');
+      this.simulateEnterKey(this.currentChatInputElement);
+    } else if (!success) {
+      logMessage('KagiAdapter: Submission failed and no input element to fall back to for Enter key simulation.');
+    }
   }
 
   /**
@@ -97,7 +115,8 @@ export class KagiAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
-    return true;
+    const fileInputElement = this.findElement(getKagiFileInputSelectors());
+    return !!fileInputElement;
   }
 
   /**
@@ -106,12 +125,16 @@ export class KagiAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
+    const fileInputElement = this.findElement(getKagiFileInputSelectors()) as HTMLInputElement | null;
+    if (!fileInputElement) {
+      logMessage('KagiAdapter: File input element not found.');
+      return false;
+    }
     try {
-      const result = await attachFileToChatInput(file);
-      return result;
+      return attachFileToChatInput(fileInputElement, file);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to Kagi input: ${errorMessage}`);
+      logMessage(`KagiAdapter: Error attaching file: ${errorMessage}`);
       console.error('Error in adapter when attaching file to Kagi input:', error);
       return false;
     }

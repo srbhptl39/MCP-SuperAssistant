@@ -63,7 +63,8 @@ const getTargetElements = (): HTMLElement[] => {
     try {
       // Handle standard CSS selector
       const matches = document.querySelectorAll(selector);
-      for (const match of matches) {
+      for (const match of Array.from(matches)) {
+        // Added Array.from()
         if (match instanceof HTMLElement) {
           elements.push(match);
         }
@@ -136,7 +137,8 @@ const handleMultiClassSelector = (selector: string, elements: HTMLElement[]): vo
   const allElements = document.querySelectorAll(elementType);
 
   // Filter elements that have all the specified classes
-  for (const element of allElements) {
+  for (const element of Array.from(allElements)) {
+    // Added Array.from()
     if (classNames.every(className => element.classList.contains(className))) {
       if (element instanceof HTMLElement && !elements.includes(element)) {
         elements.push(element);
@@ -166,7 +168,8 @@ const handleFallbackSelector = (selector: string, elements: HTMLElement[]): void
   const allElements = document.querySelectorAll(elementType);
 
   // Check each element for the required classes
-  for (const element of allElements) {
+  for (const element of Array.from(allElements)) {
+    // Added Array.from()
     // For complex selectors, we'll be more lenient and match if ANY of the classes match
     const hasAnyClass = classes.some(cls => element.classList.contains(cls));
 

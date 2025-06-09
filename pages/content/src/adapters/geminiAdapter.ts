@@ -9,9 +9,14 @@ import { BaseAdapter } from './common';
 import { logMessage } from '../utils/helpers';
 import {
   insertToolResultToChatInput,
-  submitChatInput,
-  supportsFileUpload as geminiSupportsFileUpload,
-  attachFileToChatInput as geminiAttachFileToChatInput,
+  getGeminiChatInputSelectors,
+  getGeminiSubmitButtonSelectors,
+  getGeminiFileUploadButtonSelectors,
+  getGeminiDropZoneSelectors,
+  // insertToolResultToChatInput, // Removed duplicate, it's already imported above
+  submitChatInput, // Takes buttonElement
+  supportsFileUpload as geminiSupportsFileUploadInternal, // Renamed to avoid clash
+  attachFileToChatInput as geminiAttachFileToChatInput, // Takes element, file
 } from '../components/websites/gemini/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
 import { registerSiteAdapter } from '../utils/siteAdapter';
@@ -21,74 +26,94 @@ import { initGeminiComponents } from './adaptercomponents/gemini';
 export class GeminiAdapter extends BaseAdapter {
   name = 'Gemini';
   hostname = ['gemini.google.com'];
-
-  // Properties to track navigation
-  private lastUrl: string = '';
-  private urlCheckInterval: number | null = null;
+  private currentChatInputElement: HTMLElement | null = null;
 
   constructor() {
     super();
-    // Create the sidebar manager instance
     this.sidebarManager = SidebarManager.getInstance('gemini');
     logMessage('Created Gemini sidebar manager instance');
+  }
+
+  // Implement abstract methods from BaseAdapter
+  protected getChatInputSelectors(): string[] {
+    // TODO: Implement actual selectors for Gemini
+    return [];
+  }
+
+  protected getSubmitButtonSelectors(): string[] {
+    // TODO: Implement actual selectors for Gemini
+    return [];
   }
 
   protected initializeSidebarManager(): void {
     this.sidebarManager.initialize();
   }
 
+  /** Implements abstract method from BaseAdapter */
+  protected onUrlChanged(newUrl: string): void {
+    logMessage(`[GeminiAdapter] URL changed to: ${newUrl}`);
+    initGeminiComponents(); // Re-initialize MCP Popover button
+    this.checkCurrentUrl(); // Update sidebar visibility
+    this.currentChatInputElement = null; // Reset cached input element
+  }
+
   protected initializeObserver(forceReset: boolean = false): void {
-    // Check the current URL immediately
-    // this.checkCurrentUrl();
-
-    // Initialize Gemini components
-    initGeminiComponents();
-
-    // Start URL checking to handle navigation within Gemini
-    if (!this.urlCheckInterval) {
-      this.lastUrl = window.location.href;
-      this.urlCheckInterval = window.setInterval(() => {
-        const currentUrl = window.location.href;
-
-        if (currentUrl !== this.lastUrl) {
-          logMessage(`URL changed from ${this.lastUrl} to ${currentUrl}`);
-          this.lastUrl = currentUrl;
-
-          initGeminiComponents();
-
-          // Check if we should show or hide the sidebar based on URL
-          this.checkCurrentUrl();
-        }
-      }, 1000); // Check every second
-    }
+    initGeminiComponents(); // For MCP Popover
+    this.startUrlMonitoring(); // Start BaseAdapter's URL monitoring
+    this.checkCurrentUrl(); // Initial check for sidebar
   }
 
   cleanup(): void {
-    // Clear interval for URL checking
-    if (this.urlCheckInterval) {
-      window.clearInterval(this.urlCheckInterval);
-      this.urlCheckInterval = null;
-    }
-
-    // Call the parent cleanup method
-    super.cleanup();
+    super.cleanup(); // This will call stopUrlMonitoring()
+    this.currentChatInputElement = null;
   }
 
   /**
    * Insert text into the Gemini input field
    * @param text Text to insert
    */
-  insertTextIntoInput(text: string): void {
-    insertToolResultToChatInput(text);
-    logMessage(`Inserted text into Gemini input: ${text.substring(0, 20)}...`);
+  async insertTextIntoInput(text: string): Promise<void> {
+    if (!this.currentChatInputElement) {
+      this.currentChatInputElement = this.findElement(getGeminiChatInputSelectors());
+    }
+
+    if (this.currentChatInputElement) {
+      // Use the refactored chatInputHandler function
+      const success = insertToolResultToChatInput(this.currentChatInputElement, text);
+      logMessage(`GeminiAdapter: Inserted text via chatInputHandler: ${success}`);
+      if (!success) {
+        logMessage('GeminiAdapter: Fallback to BaseAdapter.insertText');
+        // Fallback to BaseAdapter's insertText if chatInputHandler's version fails or is not suitable
+        super.insertText(this.currentChatInputElement, text);
+      }
+    } else {
+      logMessage('GeminiAdapter: Could not find chat input element to insert text.');
+    }
   }
 
   /**
    * Trigger submission of the Gemini input form
    */
-  triggerSubmission(): void {
-    submitChatInput();
-    logMessage('Triggered Gemini form submission');
+  async triggerSubmission(): Promise<void> {
+    const submitButton = this.findElement(getGeminiSubmitButtonSelectors());
+    const success = submitChatInput(submitButton); // submitChatInput from handler now takes the element
+    logMessage(`GeminiAdapter: Triggered submission via chatInputHandler: ${success}`);
+
+    if (!success && this.currentChatInputElement) {
+      // Fallback: if button click failed or button not found, try simulating enter on the input
+      logMessage('GeminiAdapter: Submit button click failed or button not found, trying simulateEnterKey.');
+      if (!this.currentChatInputElement) {
+        // Ensure it's found if not already
+        this.currentChatInputElement = this.findElement(getGeminiChatInputSelectors());
+      }
+      if (this.currentChatInputElement) {
+        this.simulateEnterKey(this.currentChatInputElement);
+      } else {
+        logMessage('GeminiAdapter: Cannot simulate Enter, input element not found.');
+      }
+    } else if (!success) {
+      logMessage('GeminiAdapter: Submission failed and no input element to fall back to for Enter key simulation.');
+    }
   }
 
   /**
@@ -96,7 +121,12 @@ export class GeminiAdapter extends BaseAdapter {
    * @returns true if file upload is supported
    */
   supportsFileUpload(): boolean {
-    return geminiSupportsFileUpload();
+    // Use findElement with selectors from chatInputHandler
+    const uploadButton = this.findElement(getGeminiFileUploadButtonSelectors());
+    const dropZone = this.findElement(getGeminiDropZoneSelectors());
+    // geminiSupportsFileUploadInternal might be a more complex check,
+    // but for now, element presence is a good indicator.
+    return !!(uploadButton || dropZone) || geminiSupportsFileUploadInternal();
   }
 
   /**
@@ -105,12 +135,17 @@ export class GeminiAdapter extends BaseAdapter {
    * @returns Promise that resolves to true if successful
    */
   async attachFile(file: File): Promise<boolean> {
+    const dropZone = this.findElement(getGeminiDropZoneSelectors());
+    if (!dropZone) {
+      logMessage('GeminiAdapter: Drop zone not found for file attachment.');
+      return false;
+    }
     try {
-      const result = await geminiAttachFileToChatInput(file);
-      return result;
+      // Use the refactored chatInputHandler function
+      return await geminiAttachFileToChatInput(dropZone, file);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logMessage(`Error in adapter when attaching file to Gemini input: ${errorMessage}`);
+      logMessage(`GeminiAdapter: Error attaching file: ${errorMessage}`);
       console.error('Error in adapter when attaching file to Gemini input:', error);
       return false;
     }
