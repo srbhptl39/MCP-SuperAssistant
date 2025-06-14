@@ -39,6 +39,11 @@ const initialUserPreferences: UserPreferences = {
   notifications: true,
   theme: 'system', // Default theme
   language: navigator.language || 'en-US',
+  isPushMode: false,
+  sidebarWidth: 320,
+  isMinimized: false,
+  customInstructions: '',
+  customInstructionsEnabled: false,
 };
 
 const initialState: Omit<UIState, 'toggleSidebar' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme'> = {
@@ -155,7 +160,7 @@ export const useUIStore = create<UIState>()(
 // Sync theme from app.store's globalSettings if it changes there
 // This creates a two-way sync if app.store also updates its globalSettings.theme from ui.store.preferences.theme
 // Ensure this logic is robust or handled by a single source of truth for theme.
-const unSubAppStore = useAppStore.subscribe(
+useAppStore.subscribe(
   (state: AppState, prevState: AppState) => {
     const newTheme = state.globalSettings.theme;
     const oldTheme = prevState.globalSettings.theme;

@@ -52,6 +52,11 @@ export interface UserPreferences {
   notifications: boolean;
   theme: 'light' | 'dark' | 'system';
   language: string;
+  isPushMode: boolean;
+  sidebarWidth: number;
+  isMinimized: boolean;
+  customInstructions: string;
+  customInstructionsEnabled: boolean;
 }
 
 export interface Notification {

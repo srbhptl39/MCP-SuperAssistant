@@ -1,6 +1,7 @@
 import type React from 'react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useBackgroundCommunication } from '../hooks/backgroundCommunication';
+import { useConnectionStatus, useServerConfig } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
@@ -11,27 +12,37 @@ interface ServerStatusProps {
 }
 
 const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) => {
-  // Use local status state to ensure UI stability even with external status issues
-  const [status, setStatus] = useState<string>(initialStatus || 'unknown');
+  // Use Zustand hooks for connection status and server config
+  const {
+    status: connectionStatus,
+    isConnected,
+    isReconnecting: storeIsReconnecting,
+    error: connectionError
+  } = useConnectionStatus();
+
+  const { config: serverConfig, setConfig: setServerConfig } = useServerConfig();
+
+  // Local UI state
   const [showDetails, setShowDetails] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [lastReconnectTime, setLastReconnectTime] = useState<string>('');
-  const [serverUri, setServerUri] = useState<string>('');
+  const [serverUri, setServerUri] = useState<string>(serverConfig.uri || '');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
-  const [isEditingUri, setIsEditingUri] = useState<boolean>(false); // Track if user is actively editing the URI
-  const [lastErrorMessage, setLastErrorMessage] = useState<string>(''); // Store the last detailed error message
+  const [isEditingUri, setIsEditingUri] = useState<boolean>(false);
+  const [lastErrorMessage, setLastErrorMessage] = useState<string>('');
 
   // Animation states
-  const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [settingsAnimating, setSettingsAnimating] = useState(false);
   const [detailsAnimating, setDetailsAnimating] = useState(false);
 
-  // Get communication methods with error handling
+  // Get communication methods with error handling (still needed for some operations)
   const communicationMethods = useBackgroundCommunication();
+
+  // Use connection status from store, fallback to prop
+  const status = connectionStatus || initialStatus || 'unknown';
 
   // Destructure with fallbacks in case useBackgroundCommunication fails
   const forceReconnect = useCallback(async () => {
@@ -100,42 +111,43 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     [communicationMethods],
   );
 
-  // CRITICAL FIX: Force the component to ALWAYS use the initialStatus prop directly
-  // This ensures the UI always reflects the actual server status without any conditions
+  // Update server URI when config changes
   useEffect(() => {
-    // Always log the status for debugging
-    logMessage(
-      `[ServerStatus] Props received initialStatus: "${initialStatus}", current UI status: "${status}", isReconnecting: ${isReconnecting}`,
-    );
+    if (serverConfig.uri && !isEditingUri) {
+      setServerUri(serverConfig.uri);
+    }
+  }, [serverConfig.uri, isEditingUri]);
 
-    // Don't update status if we're in the middle of saving configuration to prevent flickers
-    if (isReconnecting) {
-      logMessage(`[ServerStatus] Skipping status update during reconnection process`);
+  // Update status message based on connection state from store
+  useEffect(() => {
+    // During reconnection, don't override the status message
+    if (isReconnecting || storeIsReconnecting) {
       return;
     }
 
-    // ALWAYS update the status from props, but only when not reconnecting
-    if (initialStatus && initialStatus !== status) {
-      logMessage(`[ServerStatus] FORCE UPDATING status from "${status}" to "${initialStatus}"`);
-
-      // Simple status update without excessive animation
-      setStatus(initialStatus);
-
-      // Update status message based on the new status only if not reconnecting
-      if (initialStatus === 'disconnected') {
-        setStatusMessage('Server disconnected. Click the refresh button to reconnect.');
-      } else if (initialStatus === 'connected') {
-        setStatusMessage('Connected to MCP server');
-        // Brief success indication only for connection
-        if (status !== 'connected') {
-          setShowSuccessAnimation(true);
-          setTimeout(() => setShowSuccessAnimation(false), 1000);
-        }
-      } else if (initialStatus === 'error') {
-        setStatusMessage('Server connection error. Please check your configuration.');
+    if (hasBackgroundError) {
+      setStatusMessage('Extension background services unavailable. Try reloading the page.');
+    } else {
+      switch (status) {
+        case 'connected':
+          setStatusMessage('MCP Server is connected and ready');
+          // Brief success indication for new connections
+          if (!isConnected) {
+            setShowSuccessAnimation(true);
+            setTimeout(() => setShowSuccessAnimation(false), 1000);
+          }
+          break;
+        case 'disconnected':
+          setStatusMessage('MCP Server is unavailable. Some features will be limited.');
+          break;
+        case 'error':
+          setStatusMessage(connectionError || 'Error connecting to extension services. Try reloading the page.');
+          break;
+        default:
+          setStatusMessage('Checking MCP Server status...');
       }
     }
-  }, [initialStatus, status, isReconnecting]); // Include isReconnecting to prevent updates during save
+  }, [status, connectionError, hasBackgroundError, isReconnecting, storeIsReconnecting, isConnected]);
 
   // Check for background communication issues
   useEffect(() => {
@@ -149,7 +161,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       if (!methodsAvailable && !hasBackgroundError) {
         setHasBackgroundError(true);
-        setStatus('error');
         setStatusMessage('Extension background services unavailable. Try reloading the page.');
       } else if (methodsAvailable && hasBackgroundError) {
         // Background methods have become available again
@@ -267,10 +278,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         await new Promise(resolve => setTimeout(resolve, remainingTime));
       }
 
-      // Update local status based on reconnection result
-      setStatus(success ? 'connected' : 'disconnected');
-
-      // Set appropriate status message
+      // Set appropriate status message based on reconnection result
       if (success) {
         setStatusMessage('Successfully reconnected to MCP server');
         logMessage('[ServerStatus] Reconnection successful, fetching fresh tool list');
@@ -318,8 +326,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       } else {
         setStatusMessage(`Connection failed: ${errorMessage}`);
       }
-
-      setStatus('error');
     } finally {
       setIsReconnecting(false);
     }
@@ -380,24 +386,15 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     try {
       logMessage(`[ServerStatus] Saving server URI: ${serverUri}`);
 
+      // Update server config using Zustand store
+      setServerConfig({ uri: serverUri });
+
+      // Also update via background communication for backward compatibility
       await updateServerConfig({ uri: serverUri });
       logMessage('[ServerStatus] Server config updated successfully');
 
       // Clear the editing flag since we successfully saved
       setIsEditingUri(false);
-
-      // Get fresh config to ensure consistency (but don't update UI immediately)
-      try {
-        const freshConfig = await getServerConfig(true);
-        if (freshConfig && freshConfig.uri) {
-          setServerUri(freshConfig.uri);
-          logMessage(`[ServerStatus] Updated serverUri to stored value: ${freshConfig.uri}`);
-        }
-      } catch (fetchError) {
-        logMessage(
-          `[ServerStatus] Error fetching fresh config after save: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`,
-        );
-      }
 
       // Trigger reconnect
       const success = await forceReconnect();
@@ -415,7 +412,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       // Single final UI update to prevent flickers
       if (success) {
         setStatusMessage('Successfully connected to MCP server');
-        setStatus('connected');
 
         // Refresh tools silently without UI updates
         try {
@@ -428,7 +424,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         }
       } else {
         setStatusMessage('Failed to connect to new MCP server');
-        setStatus('disconnected');
       }
 
       // Close settings on success
@@ -445,7 +440,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       const errorMessage = error instanceof Error ? error.message : String(error);
       setLastErrorMessage(errorMessage);
       setStatusMessage(`Configuration failed: ${errorMessage}`);
-      setStatus('error');
       logMessage(`[ServerStatus] Save config error: ${errorMessage}`);
       // Keep settings open on error
     } finally {

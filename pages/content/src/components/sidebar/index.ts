@@ -7,6 +7,7 @@
 
 import { SidebarManager } from './SidebarManager';
 import { BaseSidebarManager } from './base/BaseSidebarManager';
+import ToolExecutionButton from './ToolExecutionButton';
 import type { SiteType } from './base/BaseSidebarManager';
 
 // Inject React error handlers to catch and log React errors
@@ -47,7 +48,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Export components and utilities
-export { BaseSidebarManager, SidebarManager };
+export { BaseSidebarManager, SidebarManager, ToolExecutionButton };
 
 // Export types
 export type { SiteType };

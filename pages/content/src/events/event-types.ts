@@ -3,8 +3,9 @@ import type { AdapterConfig } from '../plugins/plugin-types'; // Added for plugi
 
 export interface EventMap {
   // App lifecycle events
-  'app:initialized': { version: string; timestamp: number };
-  'app:shutdown': { reason: string };
+  'app:initialized': { version: string; timestamp: number; initializationTime?: number };
+  'app:initialization-failed': { error: Error; timestamp: number; initializationTime?: number };
+  'app:shutdown': { reason: string; timestamp?: number };
   'app:site-changed': { site: string; hostname: string };
   'app:settings-updated': { settings: Partial<GlobalSettings> };
 
@@ -48,12 +49,29 @@ export interface EventMap {
   // Performance events
   'performance:measurement': { name: string; duration: number; timestamp: number; context?: Record<string, any> };
   'performance:memory-usage': { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number };
+  'performance:memory-leak-detected': { snapshots: any[]; trend: number[] };
+  'performance:slow-operation': { name: string; duration: number; timestamp: number; context?: Record<string, any> };
 
   // Error events
   'error:unhandled': { error: Error; context?: string | Record<string, any> };
   'error:recovery-attempted': { error: string | Error; strategy: string };
-  'error:circuit-breaker-opened': { service: string; failureCount: number; duration?: number };
-  'error:circuit-breaker-closed': { service: string };
+  'error:circuit-breaker-opened': { operation: string; state: string; error: Error; failureCount: number; nextAttemptTime: number; stats: any };
+  'error:circuit-breaker-closed': { operation: string; state: string; stats: any };
+  'error:circuit-breaker-blocked': { operation: string; state: string; nextAttemptTime: number; error: Error };
+  'error:circuit-breaker-half-open': { operation: string; state: string };
+  'error:circuit-breaker-forced-open': { state: string; nextAttemptTime: number };
+  'error:circuit-breaker-forced-closed': { state: string };
+
+  // Context bridge events
+  'context:message-received': { message: any; sender: any };
+  'context:tab-updated': { tabId: number; url: string; changeInfo: any };
+  'context:broadcast': { event: string; data: any; excludeOrigin?: string };
+
+  // Additional error and recovery events
+  'error:breadcrumb': { message: string; category: string; data?: Record<string, any>; timestamp: number };
+  'error:pattern-detected': { pattern: string; count: number; error: Error; context: any };
+  'component:reset': { component?: string };
+  'app:fallback-mode': { reason: string };
   
   // Test event (example from migration guide)
   'test:event': Record<string, never> | object | undefined;

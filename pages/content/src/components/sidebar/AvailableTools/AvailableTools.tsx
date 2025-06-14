@@ -1,10 +1,12 @@
 import type React from 'react';
 import { useState, useEffect } from 'react';
 import type { Tool } from '@src/types/mcp';
+import { useAvailableTools, useToolExecution } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
+import ToolExecutionButton from '../ToolExecutionButton';
 
 interface AvailableToolsProps {
   tools: Tool[];
@@ -14,16 +16,20 @@ interface AvailableToolsProps {
 }
 
 const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRefresh, isRefreshing }) => {
+  // Use Zustand hooks for tool management
+  const { tools: storeTools } = useAvailableTools();
+  const { executions, isExecuting } = useToolExecution();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Use tools from store if available, fallback to props
+  const effectiveTools = storeTools.length > 0 ? storeTools : tools;
+
   // Mark component as loaded after initial render
-  // This ensures we show proper UI even if tools array is empty
-  // due to background connection issues
   useEffect(() => {
-    // Use a small timeout to allow for potential async loading
     const timeoutId = setTimeout(() => {
       setIsLoaded(true);
     }, 300);
@@ -50,8 +56,8 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     logMessage(`[AvailableTools] Component ${!isExpanded ? 'expanded' : 'collapsed'}`);
   };
 
-  // Filter tools (handle empty array case)
-  const filteredTools = (tools || []).filter(
+  // Filter tools using effective tools (store or props)
+  const filteredTools = (effectiveTools || []).filter(
     tool =>
       tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tool.description && tool.description.toLowerCase().includes(searchTerm.toLowerCase())),
@@ -225,13 +231,16 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                         <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-60 overflow-y-auto rounded border border-slate-200 dark:border-slate-700">
                           {(() => {
                             try {
-                              const schemaObject =
-                                typeof tool.schema === 'string' ? JSON.parse(tool.schema) : tool.schema;
+                              // Handle both schema formats (mcp.Tool and stores.Tool)
+                              const schema = (tool as any).schema || (tool as any).input_schema;
+                              if (!schema) return 'No schema available';
+
+                              const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
                               return JSON.stringify(schemaObject, null, 2);
                             } catch (error) {
-                              console.error('Error processing tool schema:', error, tool.schema);
-                              // Fallback to displaying the raw string or an error message
-                              return typeof tool.schema === 'string' ? tool.schema : 'Invalid schema format';
+                              console.error('Error processing tool schema:', error);
+                              const schema = (tool as any).schema || (tool as any).input_schema;
+                              return typeof schema === 'string' ? schema : 'Invalid schema format';
                             }
                           })()}
                         </pre>

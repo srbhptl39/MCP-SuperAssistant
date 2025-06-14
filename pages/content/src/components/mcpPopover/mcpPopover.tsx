@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { generateInstructions } from '../sidebar/Instructions/instructionGenerator';
+import { useCurrentAdapter, useAvailableTools } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 
@@ -509,6 +510,10 @@ const ToggleItem: React.FC<ToggleItemProps> = ({ id, label, checked, disabled, o
 export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, customInstructions }) => {
   const isDarkMode = useThemeDetector();
 
+  // Use Zustand hooks for adapter and tools
+  const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
+  const { tools: availableTools } = useAvailableTools();
+
   // Color scheme for the popover
   const theme = {
     // Background colors
@@ -545,7 +550,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const lastToolsJson = useRef(JSON.stringify((window as any).availableTools || []));
+  const lastToolsJson = useRef(JSON.stringify(availableTools || []));
   const pollRef = useRef<number | null>(null);
 
   // Update state from manager
@@ -582,14 +587,14 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
     }
   };
 
-  // Poll for availableTools changes
+  // Poll for availableTools changes using store data
   useEffect(() => {
     function getCurrentInstructions() {
-      const tools = ((window as any).availableTools || []) as Array<{
-        name: string;
-        schema: string;
-        description: string;
-      }>;
+      const tools = availableTools.map(tool => ({
+        name: tool.name,
+        schema: (tool as any).schema || JSON.stringify((tool as any).input_schema || {}),
+        description: tool.description || ''
+      }));
       return generateInstructions(tools);
     }
 
@@ -600,7 +605,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
     }
 
     pollRef.current = window.setInterval(() => {
-      const currentToolsJson = JSON.stringify((window as any).availableTools || []);
+      const currentToolsJson = JSON.stringify(availableTools || []);
       if (currentToolsJson !== lastToolsJson.current && !customInstructions && !instructionsState.instructions) {
         const newInstructions = getCurrentInstructions();
         updateInstructions(newInstructions);
@@ -610,7 +615,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [customInstructions]);
+  }, [customInstructions, availableTools]);
 
   // New effect to update instructions when customInstructions changes
   useEffect(() => {
@@ -648,43 +653,45 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
       setTimeout(() => setCopyStatus('Copy'), 1200);
     }
   };
-  const handleInsert = () => {
-    const adapter = (window as any).mcpAdapter;
-    if (adapter && typeof adapter.insertTextIntoInput === 'function') {
-      adapter.insertTextIntoInput(instructions);
-      setInsertStatus('Inserted!');
-      setTimeout(() => setInsertStatus('Insert'), 1200);
+  const handleInsert = async () => {
+    if (isAdapterActive && activePlugin) {
+      try {
+        const success = await insertText(instructions);
+        if (success) {
+          setInsertStatus('Inserted!');
+        } else {
+          setInsertStatus('No Adapter');
+        }
+      } catch (error) {
+        setInsertStatus('No Adapter');
+      }
     } else {
       setInsertStatus('No Adapter');
-      setTimeout(() => setInsertStatus('Insert'), 1200);
     }
+    setTimeout(() => setInsertStatus('Insert'), 1200);
   };
   const handleAttach = async () => {
-    const adapter = (window as any).mcpAdapter;
-    if (
-      adapter &&
-      typeof adapter.supportsFileUpload === 'function' &&
-      adapter.supportsFileUpload() &&
-      typeof adapter.attachFile === 'function'
-    ) {
-      const isPerplexity = adapter.name === 'Perplexity';
-      const isGemini = adapter.name === 'Gemini';
+    if (isAdapterActive && activePlugin && activePlugin.capabilities.includes('file-attachment')) {
+      const isPerplexity = activePlugin.name === 'Perplexity';
+      const isGemini = activePlugin.name === 'Gemini';
       const fileType = isPerplexity || isGemini ? 'text/plain' : 'text/markdown';
       const fileExtension = isPerplexity || isGemini ? '.txt' : '.md';
       const fileName = `mcp_superassistant_instructions${fileExtension}`;
       const file = new File([instructions], fileName, { type: fileType });
       try {
-        await adapter.attachFile(file);
-        setAttachStatus('Attached!');
-        setTimeout(() => setAttachStatus('Attach'), 1200);
+        const success = await attachFile(file);
+        if (success) {
+          setAttachStatus('Attached!');
+        } else {
+          setAttachStatus('Error');
+        }
       } catch {
         setAttachStatus('Error');
-        setTimeout(() => setAttachStatus('Attach'), 1200);
       }
     } else {
       setAttachStatus('No File');
-      setTimeout(() => setAttachStatus('Attach'), 1200);
     }
+    setTimeout(() => setAttachStatus('Attach'), 1200);
   };
 
   // Popover show/hide logic

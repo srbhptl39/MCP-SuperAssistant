@@ -1,10 +1,10 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateInstructions } from './instructionGenerator';
+import { useUserPreferences } from '../../../hooks';
 import { Typography } from '../ui';
 import { cn } from '@src/lib/utils';
 import { logMessage } from '@src/utils/helpers';
-import { getSidebarPreferences, saveSidebarPreferences, type SidebarPreferences } from '@src/utils/storage';
 
 // Create a global shared state for instructions
 export const instructionsState = {
@@ -79,6 +79,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, loading,
 };
 
 const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools }) => {
+  // Use Zustand hooks for user preferences
+  const { preferences, updatePreferences } = useUserPreferences();
+
   const [instructions, setInstructions] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [isInserting, setIsInserting] = useState(false);
@@ -88,31 +91,21 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   const [insertSuccess, setInsertSuccess] = useState(false);
   const [attachSuccess, setAttachSuccess] = useState(false);
 
-  // Custom instructions state
-  const [customInstructions, setCustomInstructions] = useState('');
-  const [customInstructionsEnabled, setCustomInstructionsEnabled] = useState(false);
+  // Custom instructions state - get from preferences
+  const [customInstructions, setCustomInstructions] = useState(preferences.customInstructions || '');
+  const [customInstructionsEnabled, setCustomInstructionsEnabled] = useState(preferences.customInstructionsEnabled || false);
   const [isEditingCustom, setIsEditingCustom] = useState(false);
-  const [preferences, setPreferences] = useState<SidebarPreferences | null>(null);
 
   // Memoize tools to prevent unnecessary regeneration
   const toolsSignature = useMemo(() => {
     return tools.map(tool => tool.name).join(',');
   }, [tools]);
 
-  // Load preferences on mount
+  // Update local state when preferences change
   useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const prefs = await getSidebarPreferences();
-        setPreferences(prefs);
-        setCustomInstructions(prefs.customInstructions);
-        setCustomInstructionsEnabled(prefs.customInstructionsEnabled);
-      } catch (error) {
-        logMessage(`Error loading preferences: ${error}`);
-      }
-    };
-    loadPreferences();
-  }, []);
+    setCustomInstructions(preferences.customInstructions || '');
+    setCustomInstructionsEnabled(preferences.customInstructionsEnabled || false);
+  }, [preferences]);
 
   // Generate instructions with custom instructions
   const generateCurrentInstructions = useCallback(() => {
@@ -121,7 +114,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   // Update instructions when tools or custom instructions change
   useEffect(() => {
-    if (tools.length > 0 && preferences !== null) {
+    if (tools.length > 0) {
       logMessage('Generating instructions based on updated tools and custom instructions');
       const newInstructions = generateCurrentInstructions();
       setInstructions(newInstructions);
@@ -132,7 +125,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     return () => {
       logMessage('Cleaning up instruction generator effect');
     };
-  }, [toolsSignature, customInstructions, customInstructionsEnabled, preferences, generateCurrentInstructions]);
+  }, [toolsSignature, customInstructions, customInstructionsEnabled, generateCurrentInstructions]);
 
   // Update global state when local state changes
   useEffect(() => {
@@ -237,27 +230,25 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   const handleCustomInstructionsToggle = useCallback(async (enabled: boolean) => {
     setCustomInstructionsEnabled(enabled);
     try {
-      await saveSidebarPreferences({ customInstructionsEnabled: enabled });
+      updatePreferences({ customInstructionsEnabled: enabled });
       logMessage(`Custom instructions ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       logMessage(`Error saving custom instructions toggle: ${error}`);
     }
-  }, []);
+  }, [updatePreferences]);
 
   const handleCustomInstructionsSave = useCallback(async () => {
     setIsEditingCustom(false);
     try {
-      await saveSidebarPreferences({ customInstructions });
+      updatePreferences({ customInstructions });
       logMessage('Custom instructions saved');
     } catch (error) {
       logMessage(`Error saving custom instructions: ${error}`);
     }
-  }, [customInstructions]);
+  }, [customInstructions, updatePreferences]);
 
   const handleCustomInstructionsCancel = useCallback(() => {
-    if (preferences) {
-      setCustomInstructions(preferences.customInstructions);
-    }
+    setCustomInstructions(preferences.customInstructions || '');
     setIsEditingCustom(false);
   }, [preferences]);
 

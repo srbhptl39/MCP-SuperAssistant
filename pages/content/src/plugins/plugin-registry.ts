@@ -41,7 +41,12 @@ class PluginRegistry {
       const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
       globalErrorHandler.handleError(
         error as Error,
-        { source: '[PluginRegistry]', operation: 'initialization', details: { pluginCount: this.plugins.size, errorMessage } }
+        { 
+          component: 'plugin-registry',
+          operation: 'initialization', 
+          source: '[PluginRegistry]',
+          details: { pluginCount: this.plugins.size, errorMessage } 
+        }
       );
       throw new Error(`Plugin registry initialization failed: ${errorMessage}`);
     }
@@ -111,7 +116,12 @@ class PluginRegistry {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       globalErrorHandler.handleError(
         error as Error,
-        { source: '[PluginRegistry]', operation: 'registration', details: { pluginName, error: errorMessage } }
+        { 
+          component: 'plugin-registry',
+          operation: 'registration', 
+          source: '[PluginRegistry]',
+          details: { pluginName, error: errorMessage } 
+        }
       );
       eventBus.emit('adapter:error', { name: pluginName, error: errorMessage });
 
@@ -146,7 +156,12 @@ class PluginRegistry {
       const errorMessage = error instanceof Error ? error.message : 'Unknown unregistration error';
       globalErrorHandler.handleError(
         error as Error,
-        { source: '[PluginRegistry]', operation: 'unregistration', details: { pluginName, error: errorMessage } }
+        { 
+          component: 'plugin-registry',
+          operation: 'unregistration', 
+          source: '[PluginRegistry]',
+          details: { pluginName, error: errorMessage } 
+        }
       );
       throw error;
     }
@@ -208,7 +223,12 @@ class PluginRegistry {
       
       globalErrorHandler.handleError(
         error as Error,
-        { source: '[PluginRegistry]', operation: 'activation', details: { pluginName, error: errorMessage } }
+        { 
+          component: 'plugin-registry',
+          operation: 'activation', 
+          source: '[PluginRegistry]',
+          details: { pluginName, error: errorMessage } 
+        }
       );
 
       eventBus.emit('plugin:activation-failed', { name: pluginName, error: errorMessage });
@@ -239,7 +259,12 @@ class PluginRegistry {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown deactivation error';
       
-      globalErrorHandler.handleError(error as Error, { source: '[PluginRegistry]', operation: 'deactivation', details: { pluginName, error: errorMessage } });
+      globalErrorHandler.handleError(error as Error, { 
+        component: 'plugin-registry',
+        operation: 'deactivation', 
+        source: '[PluginRegistry]',
+        details: { pluginName, error: errorMessage } 
+      });
       // Force deactivation even on error
       this.activePlugin = null;
       

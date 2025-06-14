@@ -2,35 +2,28 @@
  * Content Script
  *
  * This is the entry point for the content script that runs on web pages.
- * Tailwind CSS is imported for future styling needs.
+ * Now uses the comprehensive Session 10 initialization system.
  */
 
 import './tailwind-input.css';
-// import { sendAnalyticsEvent, trackError } from '../../../../chrome-extension/utils/analytics'; // Removed direct import
 import { logMessage } from '@src/utils/helpers';
 import { mcpHandler } from '@src/utils/mcpHandler';
+
+// Import the new initialization system
+import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
 
 // Import the render script functions
 import {
   initialize as initializeRenderer,
   startDirectMonitoring,
   stopDirectMonitoring,
-  processFunctionCalls as renderFunctionCalls, // Expose a function to trigger rendering
-  checkForUnprocessedFunctionCalls, // Allow checking for missed calls
-  configureFunctionCallRenderer, // Allow configuration from sidebar/background
+  processFunctionCalls as renderFunctionCalls,
+  checkForUnprocessedFunctionCalls,
+  configureFunctionCallRenderer,
 } from '@src/render_prescript/src/index';
 
-// Import the adapter registry
+// Import the adapter registry (legacy)
 import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
-
-// Import the new plugin system
-import { initializePluginRegistry } from '@src/plugins';
-
-// Import the app initializer
-import { initializeApp } from './initializer';
-
-// Import and register all site adapters
-import './adapters';
 
 // Add this as a global recovery mechanism for the sidebar
 function setupSidebarRecovery(): void {
@@ -94,12 +87,11 @@ function setupSidebarRecovery(): void {
 const initializedAdapters = new Set<string>();
 
 /**
- * Content Script Entry Point
+ * Content Script Entry Point - Session 10 Implementation
  */
-logMessage('Content script loaded');
+logMessage('Content script loaded - initializing with Session 10 architecture');
 
 // Initialize URL change tracking for demographic analytics
-// We'll use a polling approach to detect URL changes and send analytics via message passing
 let lastUrl = window.location.href;
 const demographicData = collectDemographicData();
 
@@ -324,27 +316,34 @@ function collectDemographicData(): { [key: string]: any } {
   }
 })();
 
-// Initialize the new plugin system in parallel
-(function initializePluginSystem() {
+// Initialize the new application architecture (Session 10)
+(async function initializeNewArchitecture() {
   try {
-    // Initialize using the new structured approach
-    initializeApp()
-      .then(() => {
-        logMessage('Application (including plugin system) initialized successfully');
-      })
-      .catch((error) => {
-        console.error('Failed to initialize application with plugin system:', error);
-        // Fallback to direct plugin registry initialization
-        return initializePluginRegistry()
-          .then(() => {
-            logMessage('Plugin registry initialized successfully (fallback)');
-          })
-          .catch((fallbackError) => {
-            console.error('Failed to initialize plugin registry (fallback):', fallbackError);
-          });
-      });
+    logMessage('Starting comprehensive application initialization...');
+    
+    // Initialize the complete application with all core services
+    await applicationInit();
+    
+    logMessage('Application initialized successfully with Session 10 architecture');
+    
+    // Expose initialization utilities for debugging
+    if (process.env.NODE_ENV === 'development') {
+      (window as any).appInitUtils = initializationUtils;
+      logMessage('Initialization utilities exposed on window.appInitUtils');
+    }
+    
   } catch (error) {
-    console.error('Error initializing plugin system:', error);
+    console.error('Failed to initialize application with Session 10 architecture:', error);
+    
+    // Fallback to basic functionality if available
+    logMessage('Attempting fallback initialization...');
+    try {
+      // Basic renderer initialization as fallback
+      initializeRenderer();
+      logMessage('Fallback renderer initialization completed');
+    } catch (fallbackError) {
+      console.error('Fallback initialization also failed:', fallbackError);
+    }
   }
 })();
 
@@ -513,17 +512,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// Handle page unload to clean up resources
-window.addEventListener('beforeunload', () => {
-  // Clean up site adapter resources
-  const currentHostname = window.location.hostname;
-  const adapter = adapterRegistry.getAdapter(currentHostname);
-  if (adapter) {
-    adapter.cleanup();
-  }
+// Handle page unload to clean up resources (Session 10)
+window.addEventListener('beforeunload', async () => {
+  logMessage('Page unloading - starting comprehensive cleanup...');
+  
+  try {
+    // Use the comprehensive cleanup from Session 10
+    await applicationCleanup();
+    
+    // Legacy adapter cleanup for compatibility
+    const currentHostname = window.location.hostname;
+    const adapter = adapterRegistry.getAdapter(currentHostname);
+    if (adapter) {
+      adapter.cleanup();
+    }
 
-  // Clear the initialized adapters set
-  initializedAdapters.clear();
+    // Clear the initialized adapters set
+    initializedAdapters.clear();
+    
+    logMessage('Comprehensive cleanup completed');
+  } catch (error) {
+    console.error('Error during comprehensive cleanup:', error);
+  }
 });
 
 // Expose mcpHandler to the global window object for renderer access

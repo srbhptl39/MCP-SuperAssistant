@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSiteAdapter } from '@src/adapters/adapterRegistry';
+import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
@@ -45,6 +46,19 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
   const adapter = useSiteAdapter();
 
+  // Use Zustand hooks for state management
+  const { theme, setTheme } = useTheme();
+  const {
+    isVisible: sidebarVisible,
+    isMinimized: storeSidebarMinimized,
+    width: storeSidebarWidth,
+    toggleSidebar,
+    resizeSidebar,
+    setSidebarVisibility
+  } = useSidebarState();
+  const { preferences, updatePreferences } = useUserPreferences();
+  const { status: connectionStatus } = useConnectionStatus();
+
   // No error states that could block rendering
   const [initializationError, setInitializationError] = useState<string | null>(null);
 
@@ -52,7 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   const communicationMethods = useBackgroundCommunication();
 
   // Always render immediately - use safe defaults for all communication methods
-  const serverStatus = communicationMethods?.serverStatus || 'disconnected';
+  const serverStatus = connectionStatus || communicationMethods?.serverStatus || 'disconnected';
   const availableTools = communicationMethods?.availableTools || [];
   const sendMessage = communicationMethods?.sendMessage || (async () => 'Communication not available');
   const refreshTools = communicationMethods?.refreshTools || (async () => []);
@@ -122,17 +136,19 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     }
   }, [isInitiallyMinimized]);
 
-  const [isMinimized, setIsMinimized] = useState(isInitiallyMinimized);
+  // Use store values with fallbacks to initial preferences
+  const isMinimized = storeSidebarMinimized ?? (initialPreferences?.isMinimized ?? false);
+  const sidebarWidth = storeSidebarWidth || initialPreferences?.sidebarWidth || SIDEBAR_DEFAULT_WIDTH;
+  const isPushMode = preferences.isPushMode ?? initialPreferences?.isPushMode ?? false;
+  const autoSubmit = preferences.autoSubmit ?? initialPreferences?.autoSubmit ?? false;
+
+  // Local UI state that doesn't need to be in the store
   const [detectedTools, setDetectedTools] = useState<DetectedTool[]>([]);
   const [activeTab, setActiveTab] = useState<'availableTools' | 'instructions'>('availableTools');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(initialPreferences?.sidebarWidth || SIDEBAR_DEFAULT_WIDTH);
-  const [isPushMode, setIsPushMode] = useState(initialPreferences?.isPushMode || false);
-  const [autoSubmit, setAutoSubmit] = useState(initialPreferences?.autoSubmit || false);
-  const [theme, setTheme] = useState<Theme>(initialPreferences?.theme || 'system');
-  const [isTransitioning, setIsTransitioning] = useState(false); // Single state for all transitions
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isInputMinimized, setIsInputMinimized] = useState(false);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(initialPreferences !== null); // Start as loaded if we have initial preferences
+  const [preferencesLoaded, setPreferencesLoaded] = useState(initialPreferences !== null);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -223,15 +239,12 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
         const preferences = await getSidebarPreferences();
         logMessage(`[Sidebar] Loaded preferences: ${JSON.stringify(preferences)}`);
 
-        // Apply stored settings - use batched state updates
+        // Apply stored settings - now handled by the store
         logMessage(
           `[Sidebar] Applying preferences - isPushMode: ${preferences.isPushMode}, isMinimized: ${preferences.isMinimized}, sidebarWidth: ${preferences.sidebarWidth}`,
         );
-        setIsPushMode(preferences.isPushMode);
-        setSidebarWidth(preferences.sidebarWidth || SIDEBAR_DEFAULT_WIDTH);
-        setIsMinimized(preferences.isMinimized ?? false);
-        setAutoSubmit(preferences.autoSubmit || false);
-        setTheme(preferences.theme || 'system');
+        // Update preferences through the store
+        updatePreferences(preferences);
         previousWidthRef.current = preferences.sidebarWidth || SIDEBAR_DEFAULT_WIDTH;
 
         logMessage('[Sidebar] Preferences applied successfully');
@@ -271,7 +284,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     loadPreferences();
   }, [initialPreferences]); // Load preferences once on mount or when initialPreferences changes
 
-  // Save preferences when they change
+  // Save preferences when they change - now handled by the store
   useEffect(() => {
     // Skip saving on initial load when we're just restoring from storage
     if (isInitialLoadRef.current) return;
@@ -284,13 +297,15 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
         isMinimized,
         autoSubmit,
         theme,
+        customInstructions: preferences.customInstructions,
+        customInstructionsEnabled: preferences.customInstructionsEnabled,
       }).catch(error => {
         logMessage(`[Sidebar] Error saving preferences: ${error instanceof Error ? error.message : String(error)}`);
       });
     }, 300);
 
     return () => clearTimeout(saveTimeout);
-  }, [isPushMode, sidebarWidth, isMinimized, autoSubmit, theme]);
+  }, [isPushMode, sidebarWidth, isMinimized, autoSubmit, theme, preferences]);
 
   // useEffect(() => {
   //   // Function to update detected tools
@@ -467,7 +482,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       }, 100);
     }
 
-    setIsMinimized(!isMinimized);
+    toggleSidebar();
   };
 
   const toggleInputMinimize = () => setIsInputMinimized(prev => !prev);
@@ -503,7 +518,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       // Debounce the state update for better performance
       if (window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
-          setSidebarWidth(constrainedWidth);
+          resizeSidebar(constrainedWidth);
 
           // End resize after a short delay
           if (transitionTimerRef.current !== null) {
@@ -522,19 +537,19 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
           }, 200) as unknown as number;
         });
       } else {
-        setSidebarWidth(constrainedWidth);
+        resizeSidebar(constrainedWidth);
       }
     },
     [isPushMode],
   );
 
   const handlePushModeToggle = (checked: boolean) => {
-    setIsPushMode(checked);
+    updatePreferences({ isPushMode: checked });
     logMessage(`[Sidebar] Push mode ${checked ? 'enabled' : 'disabled'}`);
   };
 
   const handleAutoSubmitToggle = (checked: boolean) => {
-    setAutoSubmit(checked);
+    updatePreferences({ autoSubmit: checked });
     logMessage(`[Sidebar] Auto submit ${checked ? 'enabled' : 'disabled'}`);
   };
 
