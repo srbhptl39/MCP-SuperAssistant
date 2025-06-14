@@ -1,7 +1,7 @@
 import { initializeEventSystem } from './events/event-system';
 import { eventBus } from './events/event-bus';
 // import { initializeStores } from './stores'; // Placeholder - Adjust if store init is different
-import { initializePluginRegistry, cleanupPluginRegistry } from './plugins/plugin-registry';
+import { initializePluginRegistry, cleanupPluginSystem } from './plugins';
 
 /**
  * Main application initializer.
@@ -43,7 +43,7 @@ export async function initializeApp(): Promise<void> {
 export async function cleanupApp(): Promise<void> {
   console.info('[ApplicationInitializer] Starting application cleanup...');
   // Perform cleanup in reverse order of initialization
-  await cleanupPluginRegistry();
+  await cleanupPluginSystem();
   // cleanupEventSystem(); // This is already available from event-system.ts
   // await cleanupStores(); // Placeholder
   console.info('[ApplicationInitializer] Application cleaned up.');

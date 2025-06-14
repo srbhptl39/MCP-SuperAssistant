@@ -26,6 +26,9 @@ import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistr
 // Import the new plugin system
 import { initializePluginRegistry } from '@src/plugins';
 
+// Import the app initializer
+import { initializeApp } from './initializer';
+
 // Import and register all site adapters
 import './adapters';
 
@@ -324,12 +327,21 @@ function collectDemographicData(): { [key: string]: any } {
 // Initialize the new plugin system in parallel
 (function initializePluginSystem() {
   try {
-    initializePluginRegistry()
+    // Initialize using the new structured approach
+    initializeApp()
       .then(() => {
-        logMessage('Plugin registry initialized successfully');
+        logMessage('Application (including plugin system) initialized successfully');
       })
       .catch((error) => {
-        console.error('Failed to initialize plugin registry:', error);
+        console.error('Failed to initialize application with plugin system:', error);
+        // Fallback to direct plugin registry initialization
+        return initializePluginRegistry()
+          .then(() => {
+            logMessage('Plugin registry initialized successfully (fallback)');
+          })
+          .catch((fallbackError) => {
+            console.error('Failed to initialize plugin registry (fallback):', fallbackError);
+          });
       });
   } catch (error) {
     console.error('Error initializing plugin system:', error);
