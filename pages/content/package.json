@@ -29,17 +29,20 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fast-xml-parser": "^5.0.9",
+    "immer": "^10.1.1",
     "lucide-react": "^0.477.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "shadcn-ui": "^0.9.5",
     "tailwind-merge": "^2.5.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@extension/hmr": "workspace:*",
     "@extension/tsconfig": "workspace:*",
     "@extension/vite-config": "workspace:*",
+    "@types/chrome": "0.0.304",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@types/webextension-polyfill": "^0.12.3",
