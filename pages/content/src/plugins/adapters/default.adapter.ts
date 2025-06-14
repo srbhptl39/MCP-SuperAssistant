@@ -1,85 +1,179 @@
-import { BaseAdapterPlugin } from '../base.adapter';
-import type { AdapterConfig, PluginContext } from '../plugin-types';
-import { eventBus } from '../../events';
-
+import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability } from '../plugin-types';
 
 export class DefaultAdapter extends BaseAdapterPlugin {
-  public readonly name = 'DefaultAdapter';
-  public readonly version = '1.0.0';
-  public readonly hostnames: (string | RegExp)[] = [/.*/]; // Matches all hostnames
-  public readonly capabilities: AdapterCapability[] = ['text-insertion']; // Example capability
+  readonly name = 'DefaultAdapter';
+  readonly version = '1.0.0';
+  readonly hostnames = ['*'];
+  readonly capabilities: AdapterCapability[] = ['text-insertion', 'form-submission'];
 
-  protected config: AdapterConfig;
+  async insertText(text: string): Promise<boolean> {
+    const activeElement = document.activeElement;
 
-  constructor(context: PluginContext, config: AdapterConfig) {
-    super(context);
-    this.config = config;
-    console.log(`[${this.name}] Constructor called. Config:`, config);
+    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+      const inputElement = activeElement as HTMLInputElement | HTMLTextAreaElement;
+      inputElement.value = text;
+      
+      // Trigger input event to ensure reactivity
+      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      // Emit event for tracking
+      this.context.eventBus.emit('tool:execution-completed', {
+        execution: {
+          id: this.generateCallId(),
+          toolName: 'insertText',
+          parameters: { text },
+          result: { success: true, elementType: activeElement.tagName },
+          timestamp: Date.now(),
+          status: 'success'
+        }
+      });
+      
+      this.context.logger.info('Text inserted successfully into', activeElement.tagName);
+      return true;
+    }
+
+    // Try to find any contenteditable element
+    const editableElement = document.querySelector('[contenteditable="true"]') as HTMLElement;
+    if (editableElement) {
+      editableElement.textContent = text;
+      
+      // Trigger input event
+      editableElement.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      this.context.eventBus.emit('tool:execution-completed', {
+        execution: {
+          id: this.generateCallId(),
+          toolName: 'insertText',
+          parameters: { text },
+          result: { success: true, elementType: 'contenteditable' },
+          timestamp: Date.now(),
+          status: 'success'
+        }
+      });
+      
+      this.context.logger.info('Text inserted successfully into contenteditable element');
+      return true;
+    }
+
+    this.context.logger.warn('No suitable input element found for text insertion');
+    this.context.eventBus.emit('tool:execution-failed', {
+      toolName: 'insertText',
+      error: 'No suitable input element found',
+      callId: this.generateCallId()
+    });
+    
+    return false;
   }
 
-  async initialize(context: PluginContext): Promise<void> {
-    console.log(`[${this.name}] Initializing with context...`);
-    // this.context = context; // BaseAdapterPlugin constructor handles setting this.context.
-    // The context parameter here is the same instance.
-    // Additional initialization specific to DefaultAdapter can go here, using either `this.context` or the `context` param.
+  async submitForm(): Promise<boolean> {
+    const activeElement = document.activeElement;
+
+    // Try to submit form containing the active element
+    if (activeElement && (activeElement as HTMLInputElement).form) {
+      try {
+        const formElement = (activeElement as HTMLInputElement).form;
+        if (formElement) {
+          formElement.submit();
+          
+          this.context.eventBus.emit('tool:execution-completed', {
+            execution: {
+              id: this.generateCallId(),
+              toolName: 'submitForm',
+              parameters: {},
+              result: { success: true, method: 'activeElement.form' },
+              timestamp: Date.now(),
+              status: 'success'
+            }
+          });
+          
+          this.context.logger.info('Form submitted successfully via active element');
+          return true;
+        }
+      } catch (error) {
+        this.context.logger.error('Failed to submit form via active element:', error);
+      }
+    }
+
+    // Try to find and click a submit button
+    const submitButton = document.querySelector('button[type="submit"], input[type="submit"]') as HTMLButtonElement | HTMLInputElement;
+    if (submitButton) {
+      try {
+        submitButton.click();
+        
+        this.context.eventBus.emit('tool:execution-completed', {
+          execution: {
+            id: this.generateCallId(),
+            toolName: 'submitForm',
+            parameters: {},
+            result: { success: true, method: 'submitButton.click' },
+            timestamp: Date.now(),
+            status: 'success'
+          }
+        });
+        
+        this.context.logger.info('Form submitted successfully via submit button');
+        return true;
+      } catch (error) {
+        this.context.logger.error('Failed to submit form via submit button:', error);
+      }
+    }
+
+    // Try to find any form and submit it
+    const form = document.querySelector('form') as HTMLFormElement;
+    if (form) {
+      try {
+        form.submit();
+        
+        this.context.eventBus.emit('tool:execution-completed', {
+          execution: {
+            id: this.generateCallId(),
+            toolName: 'submitForm',
+            parameters: {},
+            result: { success: true, method: 'form.submit' },
+            timestamp: Date.now(),
+            status: 'success'
+          }
+        });
+        
+        this.context.logger.info('Form submitted successfully via form element');
+        return true;
+      } catch (error) {
+        this.context.logger.error('Failed to submit form via form element:', error);
+      }
+    }
+
+    this.context.logger.warn('No form found to submit');
+    this.context.eventBus.emit('tool:execution-failed', {
+      toolName: 'submitForm',
+      error: 'No form found to submit',
+      callId: this.generateCallId()
+    });
+    
+    return false;
   }
 
-  async activate(): Promise<void> {
-    console.log(`[${this.name}] Activating...`);
-    // Perform any setup specific to this adapter
-    // e.g., injecting UI elements, setting up listeners for page-specific events
-    this.isActive = true;
-    eventBus.emit('adapter:activated', { pluginName: this.name, timestamp: Date.now() });
-    console.log(`[${this.name}] Activated successfully.`);
+  protected async initializePlugin(): Promise<void> {
+    this.context.logger.info('Initializing DefaultAdapter...');
+    // Basic initialization for default adapter
   }
 
-  async deactivate(reason?: string): Promise<void> {
-    console.log(`[${this.name}] Deactivating... Reason: ${reason || 'N/A'}`);
-    // Perform any cleanup specific to this adapter
-    this.isActive = false;
-    eventBus.emit('adapter:deactivated', { pluginName: this.name, reason, timestamp: Date.now() });
-    console.log(`[${this.name}] Deactivated successfully.`);
+  protected async activatePlugin(): Promise<void> {
+    this.context.logger.info('Activating DefaultAdapter...');
+    // Set up any listeners or UI elements
   }
 
-  // Example: Implement a method from BaseAdapterPlugin or a new method
-  async getPageMetadata(): Promise<Record<string, any>> {
-    console.log(`[${this.name}] getPageMetadata called.`);
-    return {
-      title: document.title,
-      url: window.location.href,
-      adapterName: this.name,
-    };
+  protected async deactivatePlugin(): Promise<void> {
+    this.context.logger.info('Deactivating DefaultAdapter...');
+    // Clean up listeners or UI elements
   }
 
-  // You can override other methods from BaseAdapterPlugin if needed
-  // e.g., onMessage, detectTools, etc.
-
-  async cleanup(): Promise<void> {
-    console.log(`[${this.name}] Cleaning up...`);
-    // Perform any cleanup actions specific to this adapter
+  protected async cleanupPlugin(): Promise<void> {
+    this.context.logger.info('Cleaning up DefaultAdapter...');
+    // Final cleanup
   }
 
-  // Explicitly implement methods from AdapterPlugin if BaseAdapterPlugin's aren't automatically picked up
-  public isSupported(): boolean | Promise<boolean> {
-    return super.isSupported();
-  }
-
-  public getStatus(): 'active' | 'inactive' | 'error' | 'initializing' | 'disabled' | 'pending' {
-    return super.getStatus();
+  private generateCallId(): string {
+    return `default-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 }
-
-// Configuration for the DefaultAdapter
-export const defaultAdapterConfig: AdapterConfig = {
-  id: 'default-adapter',
-  name: 'Default Adapter',
-  description: 'A fallback adapter that matches any page.',
-  version: '1.0.0',
-  enabled: true, // Enable by default
-  priority: 99, // Low priority, acts as a fallback
-  settings: {
-    // Add any specific settings for this adapter
-    logLevel: 'info',
-  },
-};

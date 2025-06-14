@@ -93,7 +93,7 @@ export const useAdapterStore = create<AdapterState>()(
           try {
             console.log(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
             await currentActiveAdapter.instance?.deactivate();
-            eventBus.emit('adapter:deactivated', { name: currentActiveAdapter.plugin.name, reason: 'switching adapter' });
+            eventBus.emit('adapter:deactivated', { pluginName: currentActiveAdapter.plugin.name, reason: 'switching adapter', timestamp: Date.now() });
           } catch (e) {
             console.error(`[AdapterStore] Error deactivating previous adapter "${currentActiveAdapter.plugin.name}":`, e);
             // Continue activation of new adapter despite error in deactivating old one
@@ -123,7 +123,7 @@ export const useAdapterStore = create<AdapterState>()(
             registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg } // Update registration with instance and status
           });
           console.log(`[AdapterStore] Adapter "${name}" activated with capabilities:`, pluginReg.plugin.capabilities);
-          eventBus.emit('adapter:activated', { name, hostname: window.location.hostname }); // Hostname might need to be more specific
+          eventBus.emit('adapter:activated', { pluginName: name, timestamp: Date.now() });
           eventBus.emit('adapter:capability-changed', { name, capabilities: pluginReg.plugin.capabilities });
           return true;
         } catch (error: any) {
@@ -156,7 +156,7 @@ export const useAdapterStore = create<AdapterState>()(
             registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }
           });
           console.log(`[AdapterStore] Adapter "${name}" deactivated. Reason: ${reason || 'user action'}`);
-          eventBus.emit('adapter:deactivated', { name, reason: reason || 'user action' });
+          eventBus.emit('adapter:deactivated', { pluginName: name, reason: reason || 'user action', timestamp: Date.now() });
         } catch (error: any) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`[AdapterStore] Error deactivating adapter "${name}":`, error);

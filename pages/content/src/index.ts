@@ -23,6 +23,9 @@ import {
 // Import the adapter registry
 import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
 
+// Import the new plugin system
+import { initializePluginRegistry } from '@src/plugins';
+
 // Import and register all site adapters
 import './adapters';
 
@@ -315,6 +318,21 @@ function collectDemographicData(): { [key: string]: any } {
     }
   } catch (error) {
     console.error('Error initializing current adapter:', error);
+  }
+})();
+
+// Initialize the new plugin system in parallel
+(function initializePluginSystem() {
+  try {
+    initializePluginRegistry()
+      .then(() => {
+        logMessage('Plugin registry initialized successfully');
+      })
+      .catch((error) => {
+        console.error('Failed to initialize plugin registry:', error);
+      });
+  } catch (error) {
+    console.error('Error initializing plugin system:', error);
   }
 })();
 

@@ -4,6 +4,7 @@ import type { EventMap } from '../events';
 import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
+import { DefaultAdapter } from './adapters/default.adapter';
 
 class PluginRegistry {
   private plugins = new Map<string, PluginRegistration>();
@@ -327,9 +328,27 @@ class PluginRegistry {
   }
 
   private async registerBuiltInAdapters(): Promise<void> {
-    // TODO: Implement registration of built-in adapters as per session 5.
-    // For now, this is a placeholder.
-    console.log('[PluginRegistry] Built-in adapters will be registered here');
+    try {
+      // Register DefaultAdapter as fallback
+      const defaultAdapter = new DefaultAdapter();
+      await this.register(defaultAdapter, {
+        id: 'default-adapter',
+        name: 'Default Adapter',
+        description: 'A fallback adapter that works on any website',
+        version: '1.0.0',
+        enabled: true,
+        priority: 99, // Low priority, acts as fallback
+        settings: {
+          logLevel: 'info',
+        },
+      });
+      
+      console.log('[PluginRegistry] Successfully registered DefaultAdapter');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
+      console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
+      throw new Error(`Built-in adapter registration failed: ${errorMessage}`);
+    }
   }
 
   // Public getters
@@ -374,6 +393,51 @@ class PluginRegistry {
       registeredPluginsCount: this.plugins.size,
       plugins: Array.from(this.plugins.keys()),
     };
+  }
+
+  // Cleanup
+  async cleanup(): Promise<void> {
+    try {
+      // Deactivate current plugin
+      await this.deactivateCurrentPlugin();
+      
+      // Cleanup all registered plugins
+      for (const [name, registration] of this.plugins.entries()) {
+        try {
+          await registration.plugin.cleanup();
+          console.log(`[PluginRegistry] Cleaned up plugin: ${name}`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown cleanup error';
+          console.error(`[PluginRegistry] Failed to cleanup plugin ${name}:`, errorMessage);
+        }
+      }
+      
+      // Clear plugins map
+      this.plugins.clear();
+      
+      // Run context cleanup functions
+      if (this.context?.cleanupFunctions) {
+        for (const cleanup of this.context.cleanupFunctions) {
+          try {
+            cleanup();
+          } catch (error) {
+            console.error('[PluginRegistry] Error during context cleanup:', error);
+          }
+        }
+        this.context.cleanupFunctions = [];
+      }
+      
+      this.isInitialized = false;
+      this.activePlugin = null;
+      this.context = null;
+      this.initializationPromise = null;
+      
+      console.log('[PluginRegistry] Cleanup completed');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown cleanup error';
+      console.error('[PluginRegistry] Cleanup failed:', errorMessage);
+      throw error;
+    }
   }
 }
 
