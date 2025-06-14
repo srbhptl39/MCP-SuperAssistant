@@ -6,7 +6,7 @@ import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
-import ToolExecutionButton from '../ToolExecutionButton';
+
 
 interface AvailableToolsProps {
   tools: Tool[];

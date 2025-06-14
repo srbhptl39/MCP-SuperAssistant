@@ -6,6 +6,7 @@ import globalErrorHandler from '../core/error-handler';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
 import { ExampleForumAdapter } from './adapters/example-forum.adapter';
+import { GeminiAdapter } from './adapters/gemini.adapter';
 
 class PluginRegistry {
   private plugins = new Map<string, PluginRegistration>();
@@ -382,8 +383,23 @@ class PluginRegistry {
           logLevel: 'info',
         },
       });
+
+      // Register GeminiAdapter for Google Gemini
+      const geminiAdapter = new GeminiAdapter();
+      await this.register(geminiAdapter, {
+        id: 'gemini-adapter',
+        name: 'Gemini Adapter',
+        description: 'Specialized adapter for Google Gemini with chat input, form submission, and file attachment support',
+        version: '1.0.0',
+        enabled: true,
+        priority: 5, // High priority for Gemini
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
       
-      console.log('[PluginRegistry] Successfully registered DefaultAdapter and ExampleForumAdapter');
+      console.log('[PluginRegistry] Successfully registered DefaultAdapter, ExampleForumAdapter, and GeminiAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);

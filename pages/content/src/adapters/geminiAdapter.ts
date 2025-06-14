@@ -14,7 +14,7 @@ import {
   attachFileToChatInput as geminiAttachFileToChatInput,
 } from '../components/websites/gemini/chatInputHandler';
 import { SidebarManager } from '../components/sidebar';
-import { registerSiteAdapter } from '../utils/siteAdapter';
+// import { registerSiteAdapter } from '../utils/siteAdapter';
 import { adapterRegistry } from './adapterRegistry';
 import { initGeminiComponents } from './adaptercomponents/gemini';
 
@@ -176,7 +176,7 @@ export function registerGeminiAdapter() {
     logMessage(`Gemini adapter hostname: ${JSON.stringify(geminiAdapter.hostname)}`);
 
     // Register with both systems
-    registerSiteAdapter(geminiAdapter);
+    // registerSiteAdapter(geminiAdapter);
     adapterRegistry.registerAdapter(geminiAdapter);
 
     logMessage('Gemini adapter registered successfully!');

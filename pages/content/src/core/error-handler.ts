@@ -15,6 +15,7 @@ export interface ErrorContext {
   source?: string;
   details?: Record<string, any>;
   metadata?: Record<string, any>;
+  fromEventBus?: boolean; // Flag to prevent recursive error handling
 }
 
 export interface ErrorReport {
@@ -96,7 +97,16 @@ class GlobalErrorHandler {
   private setupEventBusIntegration(): void {
     // Listen for error events from other parts of the application
     eventBus.on('error:unhandled', ({ error, context }) => {
-      this.handleError(error, typeof context === 'string' ? { operation: context } : context || {});
+      try {
+        // Add a marker to prevent recursive handling
+        const contextWithMarker = typeof context === 'string'
+          ? { operation: context, fromEventBus: true }
+          : { ...context, fromEventBus: true };
+        this.handleError(error, contextWithMarker);
+      } catch (handlerError) {
+        // Prevent recursive error handling by just logging to console
+        console.error('[GlobalErrorHandler] Error in error:unhandled handler:', handlerError);
+      }
     });
 
     eventBus.on('plugin:activation-failed', ({ name, error }) => {
@@ -139,8 +149,15 @@ class GlobalErrorHandler {
     // Log the error
     this.logError(report);
 
-    // Emit error event
-    eventBus.emit('error:unhandled', { error, context });
+    // Don't emit error:unhandled event if we're already handling an error from the event bus
+    // This prevents recursive loops
+    if (!context.fromEventBus &&
+        context.operation !== 'event-listener-error:unhandled' &&
+        context.operation !== 'once-event-listener-error:unhandled' &&
+        context.operation !== 'wildcard-event-listener') {
+      // Emit error event
+      eventBus.emit('error:unhandled', { error, context });
+    }
 
     // Attempt recovery if circuit breaker is available
     if (this.circuitBreaker && severity === 'critical') {

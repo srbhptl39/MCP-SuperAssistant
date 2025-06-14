@@ -41,6 +41,31 @@ A specialized adapter for forum.example.com demonstrating site-specific function
 - `postReply(threadId: string, content: string)`: Post replies to forum threads
 - `extractThreadTitle()`: Extract thread titles from forum pages
 
+### `gemini.adapter.ts` - GeminiAdapter ✅
+**Status**: Fully implemented (Session 14)
+
+A specialized adapter for Google Gemini (gemini.google.com) with comprehensive chat functionality. Features:
+- **Hostnames**: `['gemini.google.com']`
+- **Capabilities**: `['text-insertion', 'form-submission', 'file-attachment', 'dom-manipulation']`
+- **Text Insertion**: Advanced text insertion into Gemini's custom chat input elements
+- **Form Submission**: Intelligent form submission using Gemini's custom submit button
+- **File Attachment**: Full file attachment support using drag-drop listener injection
+- **URL Tracking**: Automatic navigation tracking for single-page app behavior
+- **Event Handling**: Comprehensive tool execution tracking and error handling
+
+**Core Methods**:
+- `insertText(text: string)`: Inserts text into Gemini's chat input with proper event simulation
+- `submitForm()`: Submits chat messages using Gemini's specific submit button
+- `attachFile(file: File)`: Attaches files using drag-drop simulation and custom script injection
+- `isSupported()`: Checks if current page supports Gemini functionality
+- `supportsFileUpload()`: Verifies file upload capability based on DOM elements
+
+**Migration Notes**:
+- Migrated from legacy `/components/websites/gemini/` system
+- Maintains all functionality from original `chatInputHandler.ts`
+- Enhanced with proper event handling and error reporting
+- Integrated with plugin lifecycle management
+
 ### `base.adapter.ts` - BaseAdapterPlugin
 **Status**: Base class providing common functionality
 
@@ -287,7 +312,7 @@ window.__pluginSystem.getRegistry().getActivePlugin();
 
 ### Legacy System Integration
 - **PerplexityAdapter**: Migrate from legacy system
-- **GeminiAdapter**: Migrate from legacy system  
+- **GeminiAdapter**: ✅ **COMPLETED** - Migrated from legacy system with full functionality  
 - **ChatGPTAdapter**: Migrate from legacy system
 - **GrokAdapter**: Migrate from legacy system
 

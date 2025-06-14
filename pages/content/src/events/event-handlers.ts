@@ -79,8 +79,13 @@ class GlobalEventHandlers {
   // Error events
   this.unsubscribeFunctions.push(
     eventBus.on('error:unhandled', (data) => {
-      console.error('[GlobalEventHandlers] Event "error:unhandled":', data.error, 'Context:', data.context, 'Stack:', data.error?.stack);
-      // TODO: Integrate with a global error tracking service if available
+      try {
+        console.error('[GlobalEventHandlers] Event "error:unhandled":', data.error, 'Context:', data.context, 'Stack:', data.error?.stack);
+        // TODO: Integrate with a global error tracking service if available
+      } catch (handlerError) {
+        // Prevent recursive error handling by just logging to console without emitting events
+        console.error('[GlobalEventHandlers] Error in error:unhandled handler:', handlerError);
+      }
     })
   );
   this.unsubscribeFunctions.push(eventBus.on('error:circuit-breaker-opened', this._logEvent('error:circuit-breaker-opened')));

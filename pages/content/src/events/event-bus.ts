@@ -8,6 +8,7 @@ class TypedEventBus {
   private listeners = new Map<keyof EventMap, Set<TypedEventCallback<any>>>();
   private onceListeners = new Map<keyof EventMap, Set<TypedEventCallback<any>>>();
   private maxListeners: number = 50; // Default max listeners
+  private isEmittingErrorEvent = false; // Guard against recursive error events
 
   constructor(maxListeners?: number, maxHistorySize?: number) {
     if (maxListeners !== undefined) {
@@ -35,11 +36,18 @@ class TypedEventBus {
           (callback as TypedEventCallback<K>)(data);
         } catch (error) {
           console.error(`[EventBus] Error in listener for event "${String(event)}":`, error);
-          // Emit a specific error event for unhandled listener errors
-          this.emit('error:unhandled', { 
-            error: error as Error, 
-            context: `event-listener-${String(event)}` 
-          });
+          // Emit a specific error event for unhandled listener errors, but prevent recursion
+          if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
+            this.isEmittingErrorEvent = true;
+            try {
+              this.emit('error:unhandled', {
+                error: error as Error,
+                context: `event-listener-${String(event)}`
+              });
+            } finally {
+              this.isEmittingErrorEvent = false;
+            }
+          }
         }
       });
     }
@@ -54,10 +62,18 @@ class TypedEventBus {
           (callback as TypedEventCallback<K>)(data);
         } catch (error) {
           console.error(`[EventBus] Error in once listener for event "${String(event)}":`, error);
-          this.emit('error:unhandled', { 
-            error: error as Error, 
-            context: `once-event-listener-${String(event)}` 
-          });
+          // Emit a specific error event for unhandled listener errors, but prevent recursion
+          if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
+            this.isEmittingErrorEvent = true;
+            try {
+              this.emit('error:unhandled', {
+                error: error as Error,
+                context: `once-event-listener-${String(event)}`
+              });
+            } finally {
+              this.isEmittingErrorEvent = false;
+            }
+          }
         }
       });
     }
@@ -71,10 +87,17 @@ class TypedEventBus {
       } catch (error) {
         console.error(`[EventBus] Error in wildcard event listener:`, error);
         // Potentially emit 'error:unhandled' here too, if wildcard errors should be globally reported
-        this.emit('error:unhandled', { 
-          error: error as Error, 
-          context: `wildcard-event-listener` 
-        });
+        if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
+          this.isEmittingErrorEvent = true;
+          try {
+            this.emit('error:unhandled', {
+              error: error as Error,
+              context: `wildcard-event-listener`
+            });
+          } finally {
+            this.isEmittingErrorEvent = false;
+          }
+        }
       }
     });
 
