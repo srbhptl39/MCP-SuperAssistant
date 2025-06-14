@@ -16,11 +16,10 @@ import { eventBus } from '../events';
  */
 export class LegacyAdapterBridge {
   private plugin: AdapterPlugin | null = null;
-  private context: PluginContext | null = null;
 
-  constructor(plugin: AdapterPlugin, context: PluginContext) {
+  constructor(plugin: AdapterPlugin, _context: PluginContext) {
     this.plugin = plugin;
-    this.context = context;
+    // Context not currently used but kept for future extensibility
   }
 
   /**
@@ -44,24 +43,48 @@ export class LegacyAdapterBridge {
         }
       },
       toggleSidebar: () => {
-        // Emit sidebar toggle event to new architecture
-        eventBus.emit('ui:sidebar-toggle', { 
-          visible: true, 
-          reason: 'legacy-adapter-toggle' 
+        // Toggle sidebar through direct plugin call to avoid circular events
+        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
+          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+          if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
+            sidebarPlugin.toggleSidebar();
+          }
+        }).catch(error => {
+          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
         });
       },
       showSidebarWithToolOutputs: () => {
-        // Show sidebar through new UI store
-        eventBus.emit('ui:sidebar-toggle', { 
-          visible: true, 
-          reason: 'legacy-show-with-tools' 
+        // Show sidebar through direct plugin call to avoid circular events
+        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
+          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+          if (sidebarPlugin) {
+            if (sidebarPlugin.getStatus() === 'active') {
+              // Plugin is active, show sidebar directly
+              sidebarPlugin.showSidebar().catch((error: any) => {
+                console.warn('[MigrationBridge] Failed to show sidebar:', error);
+              });
+            } else {
+              // Plugin not active, activate it first
+              pluginRegistry.activatePlugin('sidebar-plugin').catch((error: any) => {
+                console.warn('[MigrationBridge] Failed to activate sidebar plugin:', error);
+              });
+            }
+          } else {
+            console.warn('[MigrationBridge] Sidebar plugin not found');
+          }
+        }).catch(error => {
+          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
         });
       },
       hideSidebar: () => {
-        // Hide sidebar through new UI store
-        eventBus.emit('ui:sidebar-toggle', { 
-          visible: false, 
-          reason: 'legacy-hide' 
+        // Hide sidebar through direct plugin call to avoid circular events
+        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
+          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+          if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
+            sidebarPlugin.hideSidebar();
+          }
+        }).catch(error => {
+          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
         });
       },
       supportsFileUpload: () => {

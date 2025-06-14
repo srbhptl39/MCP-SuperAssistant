@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useSiteAdapter } from '@src/adapters/adapterRegistry';
+import { useCurrentAdapter } from '@src/hooks/useAdapter';
 import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
@@ -44,7 +44,21 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     `[Sidebar] Component initializing with preferences: ${initialPreferences ? 'loaded' : 'null'} (ID: ${componentId.current})`,
   );
 
-  const adapter = useSiteAdapter();
+  const currentAdapter = useCurrentAdapter();
+
+  // Create a compatibility adapter for legacy components
+  const adapter = useMemo(() => ({
+    // Legacy methods for backward compatibility
+    insertTextIntoInput: (text: string) => currentAdapter.insertText(text),
+    triggerSubmission: () => currentAdapter.submitForm(),
+    supportsFileUpload: () => currentAdapter.hasCapability('file-attachment'),
+    attachFile: (file: File) => currentAdapter.attachFile(file),
+    // Pass through other properties that might be needed
+    name: currentAdapter.activeAdapterName || 'Unknown',
+    isReady: currentAdapter.isReady,
+    status: currentAdapter.status,
+    capabilities: currentAdapter.capabilities
+  }), [currentAdapter]);
 
   // Use Zustand hooks for state management
   const { theme, setTheme } = useTheme();
@@ -883,7 +897,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                   </Button>
                   <InputArea
                     onSubmit={async text => {
-                      adapter.insertTextIntoInput(text);
+                      await adapter.insertTextIntoInput(text);
                       await new Promise(resolve => setTimeout(resolve, 300));
                       await adapter.triggerSubmission();
                     }}

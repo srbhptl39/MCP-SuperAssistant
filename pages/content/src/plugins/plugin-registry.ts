@@ -7,6 +7,7 @@ import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, A
 import { DefaultAdapter } from './adapters/default.adapter';
 import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
+import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
   private plugins = new Map<string, PluginRegistration>();
@@ -362,6 +363,22 @@ class PluginRegistry {
 
   private async registerBuiltInAdapters(): Promise<void> {
     try {
+      // Register SidebarPlugin first (highest priority core functionality)
+      const sidebarPlugin = new SidebarPlugin();
+      await this.register(sidebarPlugin, {
+        id: 'sidebar-plugin',
+        name: 'Sidebar Plugin',
+        description: 'Universal sidebar management plugin that auto-shows on page load',
+        version: '1.0.0',
+        enabled: true,
+        priority: 1, // Highest priority for core UI functionality
+        settings: {
+          logLevel: 'info',
+          autoShow: true,
+          showDelay: 1000,
+        },
+      });
+
       // Register DefaultAdapter as fallback
       const defaultAdapter = new DefaultAdapter();
       await this.register(defaultAdapter, {
@@ -405,7 +422,7 @@ class PluginRegistry {
         },
       });
       
-      console.log('[PluginRegistry] Successfully registered DefaultAdapter, ExampleForumAdapter, and GeminiAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, and GeminiAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);

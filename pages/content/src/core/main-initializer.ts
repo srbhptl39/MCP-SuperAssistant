@@ -131,6 +131,25 @@ async function initializePluginSystem(): Promise<void> {
 }
 
 /**
+ * Activate sidebar plugin for universal sidebar functionality
+ */
+async function activateSidebarPlugin(): Promise<void> {
+  logger.log('Activating sidebar plugin...');
+
+  try {
+    await performanceMonitor.time('sidebar-plugin-activation', async () => {
+      // Activate the sidebar plugin which will auto-show the sidebar
+      await pluginRegistry.activatePlugin('sidebar-plugin');
+      logger.log('Sidebar plugin activated successfully.');
+    });
+  } catch (error) {
+    logger.error('Failed to activate sidebar plugin:', error);
+    // Don't throw - sidebar is not critical for app functionality
+    // The app can still work without the sidebar
+  }
+}
+
+/**
  * Initialize application state and trigger initial actions
  */
 async function initializeApplicationState(): Promise<void> {
@@ -197,6 +216,10 @@ export async function applicationInit(): Promise<void> {
     // Initialize plugin system
     await initializePluginSystem();
     performanceMonitor.mark('plugin-system-initialized');
+
+    // Activate sidebar plugin for universal sidebar functionality
+    await activateSidebarPlugin();
+    performanceMonitor.mark('sidebar-plugin-activated');
 
     // Initialize application state
     await initializeApplicationState();

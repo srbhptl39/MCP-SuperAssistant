@@ -57,6 +57,13 @@ export {
 // Utility hooks (re-export existing ones)
 export { useShadowDomStyles } from './useShadowDomStyles';
 
+// Sidebar plugin hooks
+export {
+  useSidebarPlugin,
+  useSidebarPluginStatus,
+  useSidebarPluginManagement
+} from './useSidebarPlugin';
+
 // TODO: Add these hooks when implemented
 // export { usePerformanceMonitor } from './usePerformance';
 // export { useErrorHandler } from './useErrorHandler';

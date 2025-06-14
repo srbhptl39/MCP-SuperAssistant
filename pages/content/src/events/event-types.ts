@@ -40,6 +40,8 @@ export interface EventMap {
   'plugin:registry-initialized': { timestamp: number; registeredPlugins: number };
   'plugin:registered': { name: string; version: string };
   'plugin:unregistered': { name: string };
+  'plugin:activated': { pluginName: string; timestamp: number };
+  'plugin:deactivated': { pluginName: string; timestamp: number };
   'plugin:activation-failed': { name: string; error: string | Error };
   'plugin:initialization-complete': { name: string };
   'plugin:activation-requested': { pluginName: string; timestamp: number };
