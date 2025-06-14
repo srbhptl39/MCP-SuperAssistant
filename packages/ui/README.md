@@ -1,6 +1,57 @@
-# UI Package
+# UI Package (`@extension/ui`)
 
-This package provides components that make up the UI.
+This package provides React components and styling utilities that make up the MCP SuperAssistant user interface, integrated with the modern plugin architecture and state management system.
+
+## Overview
+
+The UI package offers:
+- Pre-built React components with consistent styling
+- Tailwind CSS integration and theming
+- shadcn/ui component integration
+- Custom hooks for extension-specific functionality
+- Integration with the Zustand-based state management system
+
+## Integration with Extension Architecture
+
+### State Management Integration
+Components in this package are designed to work seamlessly with the content script's Zustand stores and React hooks:
+
+```tsx
+import { useStores, useAdapter } from '@extension/content';
+import { Button, Card } from '@extension/ui';
+
+export function ToolExecutionPanel() {
+  const { tools, isConnected } = useStores();
+  const { currentAdapter, executeAction } = useAdapter();
+  
+  return (
+    <Card className="p-4">
+      <Button 
+        onClick={() => executeAction('submitForm')}
+        disabled={!isConnected}
+      >
+        Execute Tool
+      </Button>
+    </Card>
+  );
+}
+```
+
+### Plugin System Integration
+UI components can leverage the plugin system for site-specific adaptations:
+
+```tsx
+import { useAdapter } from '@extension/content';
+
+export function AdaptiveButton() {
+  const { currentAdapter } = useAdapter();
+  
+  // Adapt button style based on current site adapter
+  const buttonStyle = currentAdapter?.getUITheme?.() || 'default';
+  
+  return <Button variant={buttonStyle}>Action</Button>;
+}
+```
 
 ## Installation
 

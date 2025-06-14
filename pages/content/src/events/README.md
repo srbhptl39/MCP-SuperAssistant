@@ -52,6 +52,44 @@ const unsubscribeAll = eventBus.onWildcard((payload) => {
 // unsubscribeAll();
 ```
 
+### Integration with Plugin System
+
+The event system integrates seamlessly with the plugin architecture:
+
+```typescript
+// Plugin events
+eventBus.emit('plugin:registered', { pluginId: 'default-adapter', capabilities: ['insertText'] });
+eventBus.emit('adapter:switched', { fromAdapter: 'default', toAdapter: 'gemini' });
+
+// Tool execution events
+eventBus.emit('tool:executed', { toolId: 'file-reader', result: 'success' });
+eventBus.emit('tool:error', { toolId: 'file-writer', error: 'Permission denied' });
+```
+
+### React Hook Integration
+
+The event system can be used within React components via the `useEventBus` hook:
+
+```typescript
+import { useEventBus } from '../hooks/useEventBus';
+
+function MyComponent() {
+  const { emit, on, off } = useEventBus();
+  
+  useEffect(() => {
+    const unsubscribe = on('adapter:switched', (data) => {
+      console.log('Adapter changed:', data.toAdapter);
+    });
+    
+    return unsubscribe;
+  }, [on]);
+  
+  return <button onClick={() => emit('ui:button-clicked', { buttonId: 'test' })}>
+    Click me
+  </button>;
+}
+```
+
 ### System Initialization
 
 The entire event system (bus + global handlers) is typically initialized at application startup by calling `initializeEventSystem()` from a higher-level initializer (like `src/initializer.ts`).

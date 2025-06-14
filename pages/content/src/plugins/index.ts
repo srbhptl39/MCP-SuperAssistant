@@ -2,6 +2,7 @@ export * from './plugin-types';
 export * from './plugin-registry';
 export { BaseAdapterPlugin } from './adapters/base.adapter';
 export { DefaultAdapter } from './adapters/default.adapter';
+export { ExampleForumAdapter } from './adapters/example-forum.adapter';
 export { createPluginContext } from './plugin-context';
 
 // Plugin initialization function

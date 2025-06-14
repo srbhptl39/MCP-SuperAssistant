@@ -5,6 +5,7 @@ import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
+import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 
 class PluginRegistry {
   private plugins = new Map<string, PluginRegistration>();
@@ -343,7 +344,21 @@ class PluginRegistry {
         },
       });
       
-      console.log('[PluginRegistry] Successfully registered DefaultAdapter');
+      // Register ExampleForumAdapter for forum.example.com
+      const exampleForumAdapter = new ExampleForumAdapter();
+      await this.register(exampleForumAdapter, {
+        id: 'example-forum-adapter',
+        name: 'Example Forum Adapter',
+        description: 'Specialized adapter for forum.example.com with forum-specific functionality',
+        version: '1.0.0',
+        enabled: true,
+        priority: 10, // Higher priority than default
+        settings: {
+          logLevel: 'info',
+        },
+      });
+      
+      console.log('[PluginRegistry] Successfully registered DefaultAdapter and ExampleForumAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
@@ -442,3 +457,110 @@ class PluginRegistry {
 }
 
 export const pluginRegistry = new PluginRegistry();
+
+// Initialization function for the application initializer
+export async function initializePluginRegistry(): Promise<void> {
+  const context: PluginContext = {
+    eventBus,
+    stores: {
+      // Placeholder store instances - these would be actual store instances in a full implementation
+      app: {},
+      connection: {},
+      tool: {},
+      ui: {},
+      adapter: {},
+    },
+    utils: {
+      createElement: <K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<string, any>, children?: (Node | string)[]) => {
+        const element = document.createElement(tag);
+        if (attrs) {
+          Object.entries(attrs).forEach(([key, value]) => {
+            element.setAttribute(key, String(value));
+          });
+        }
+        if (children) {
+          children.forEach(child => {
+            element.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+          });
+        }
+        return element;
+      },
+      waitForElement: async (selector: string, timeout: number = 5000, root: Document | Element = document) => {
+        return new Promise<HTMLElement | null>((resolve) => {
+          const element = root.querySelector(selector) as HTMLElement;
+          if (element) {
+            resolve(element);
+            return;
+          }
+          
+          const observer = new MutationObserver((mutations) => {
+            const element = root.querySelector(selector) as HTMLElement;
+            if (element) {
+              observer.disconnect();
+              resolve(element);
+            }
+          });
+          
+          observer.observe(root, { childList: true, subtree: true });
+          
+          setTimeout(() => {
+            observer.disconnect();
+            resolve(null);
+          }, timeout);
+        });
+      },
+      injectCSS: (css: string, id?: string) => {
+        const style = document.createElement('style');
+        style.textContent = css;
+        if (id) style.id = id;
+        document.head.appendChild(style);
+        return style;
+      },
+      observeChanges: (targetNode: Node, callback: MutationCallback, options: MutationObserverInit) => {
+        const observer = new MutationObserver(callback);
+        observer.observe(targetNode, options);
+        return observer;
+      },
+      debounce: <T extends (...args: any[]) => any>(func: T, delay: number) => {
+        let timeoutId: NodeJS.Timeout;
+        return ((...args: any[]) => {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => func(...args), delay);
+        }) as T;
+      },
+      throttle: <T extends (...args: any[]) => any>(func: T, delay: number) => {
+        let lastCall = 0;
+        return ((...args: any[]) => {
+          const now = Date.now();
+          if (now - lastCall >= delay) {
+            lastCall = now;
+            return func(...args);
+          }
+        }) as T;
+      },
+      getUniqueId: (prefix: string = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    },
+    chrome: typeof chrome !== 'undefined' ? {
+      runtime: chrome.runtime,
+      storage: chrome.storage,
+      tabs: chrome.tabs,
+    } : {
+      runtime: {} as typeof chrome.runtime,
+      storage: {} as typeof chrome.storage,
+    },
+    logger: {
+      debug: (...args: any[]) => console.debug('[Plugin]', ...args),
+      info: (...args: any[]) => console.info('[Plugin]', ...args),
+      warn: (...args: any[]) => console.warn('[Plugin]', ...args),
+      error: (...args: any[]) => console.error('[Plugin]', ...args),
+    },
+    cleanupFunctions: [],
+  };
+  
+  await pluginRegistry.initialize(context);
+}
+
+// Cleanup function for the application cleanup
+export async function cleanupPluginRegistry(): Promise<void> {
+  await pluginRegistry.cleanup();
+}
