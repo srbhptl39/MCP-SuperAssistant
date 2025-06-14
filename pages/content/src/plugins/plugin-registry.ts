@@ -28,25 +28,31 @@ class PluginRegistry {
     try {
       this.context = context;
       this.setupEventListeners();
-      
+
+      // Set initialized flag before registering built-in adapters
+      // This allows the register() method to work during initialization
+      this.isInitialized = true;
+
       // Register built-in adapters
       await this.registerBuiltInAdapters();
-      
-      this.isInitialized = true;
-      
+
       eventBus.emit('plugin:registry-initialized', { registeredPlugins: this.plugins.size, timestamp: Date.now() });
-      
+
       console.log('[PluginRegistry] Initialized with', this.plugins.size, 'plugins');
-      
+
     } catch (error) {
+      // Reset initialization flag on error
+      this.isInitialized = false;
+      this.context = null;
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
       globalErrorHandler.handleError(
         error as Error,
-        { 
+        {
           component: 'plugin-registry',
-          operation: 'initialization', 
+          operation: 'initialization',
           source: '[PluginRegistry]',
-          details: { pluginCount: this.plugins.size, errorMessage } 
+          details: { pluginCount: this.plugins.size, errorMessage }
         }
       );
       throw new Error(`Plugin registry initialization failed: ${errorMessage}`);
@@ -57,7 +63,7 @@ class PluginRegistry {
     if (!this.context) return;
 
     // Listen for site changes to auto-activate plugins
-    const unsubscribeSiteChange = eventBus.on('app:site-changed', async ({ site, hostname }: EventMap['app:site-changed']) => {
+    const unsubscribeSiteChange = eventBus.on('app:site-changed', async ({ hostname }: EventMap['app:site-changed']) => {
       await this.activatePluginForHostname(hostname);
     });
 
@@ -534,7 +540,7 @@ export async function initializePluginRegistry(): Promise<void> {
             return;
           }
           
-          const observer = new MutationObserver((mutations) => {
+          const observer = new MutationObserver(() => {
             const element = root.querySelector(selector) as HTMLElement;
             if (element) {
               observer.disconnect();
@@ -579,7 +585,7 @@ export async function initializePluginRegistry(): Promise<void> {
           }
         }) as T;
       },
-      getUniqueId: (prefix: string = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      getUniqueId: (prefix: string = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     },
     chrome: typeof chrome !== 'undefined' ? {
       runtime: chrome.runtime,

@@ -352,7 +352,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   private generateCallId(): string {
-    return `gemini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   // Event handlers

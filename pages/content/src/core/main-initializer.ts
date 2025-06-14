@@ -16,7 +16,7 @@ import {
   initializeAllStores,
 } from '../stores';
 import { globalErrorHandler, performanceMonitor, circuitBreaker, contextBridge } from '../core';
-import { initializePluginRegistry, cleanupPluginSystem, createPluginContext } from '../plugins';
+import { pluginRegistry, cleanupPluginSystem, createPluginContext } from '../plugins';
 import { initializeGlobalEventHandlers, cleanupGlobalEventHandlers } from '../events/event-handlers';
 import { logMessage } from '../utils/helpers';
 
@@ -123,8 +123,8 @@ async function initializePluginSystem(): Promise<void> {
     // Create plugin context - the function only takes plugin name
     const pluginContext = createPluginContext('system');
 
-    // Initialize plugin registry
-    await initializePluginRegistry();
+    // Initialize plugin registry with the context
+    await pluginRegistry.initialize(pluginContext);
 
     logger.log('Plugin system initialized successfully.');
   });
