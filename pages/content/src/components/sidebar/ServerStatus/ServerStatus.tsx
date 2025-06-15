@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import { useBackgroundCommunication } from '../hooks/backgroundCommunication';
+import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { useConnectionStatus, useServerConfig } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
@@ -39,7 +39,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [detailsAnimating, setDetailsAnimating] = useState(false);
 
   // Get communication methods with error handling (still needed for some operations)
-  const communicationMethods = useBackgroundCommunication();
+  const communicationMethods = useMcpCommunication();
 
   // Use connection status from store, fallback to prop
   const status = connectionStatus || initialStatus || 'unknown';
@@ -78,12 +78,12 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   );
 
   const getServerConfig = useCallback(
-    async (forceRefresh: boolean = false) => {
+    async () => {
       try {
         if (!communicationMethods.getServerConfig) {
           throw new Error('Communication method unavailable');
         }
-        return await communicationMethods.getServerConfig(forceRefresh);
+        return await communicationMethods.getServerConfig();
       } catch (error) {
         logMessage(`[ServerStatus] Get server config error: ${error instanceof Error ? error.message : String(error)}`);
         setHasBackgroundError(true);

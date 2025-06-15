@@ -6,7 +6,7 @@ import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
 import InputArea from './InputArea/InputArea';
-import { useBackgroundCommunication } from './hooks/backgroundCommunication';
+import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { logMessage, debugShadowDomStyles } from '@src/utils/helpers';
 import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } from './ui';
 import { cn } from '@src/lib/utils';
@@ -77,7 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   const [initializationError, setInitializationError] = useState<string | null>(null);
 
   // Get communication methods with guaranteed safe fallbacks
-  const communicationMethods = useBackgroundCommunication();
+  const communicationMethods = useMcpCommunication();
 
   // Always render immediately - use safe defaults for all communication methods
   const serverStatus = connectionStatus || communicationMethods?.serverStatus || 'disconnected';

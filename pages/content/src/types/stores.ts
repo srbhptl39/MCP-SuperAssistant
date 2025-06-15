@@ -20,6 +20,9 @@ export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'er
 export interface Tool {
   name: string;
   description: string;
+  // Legacy field used in some UI components
+  schema?: any;
+  // Newer field preferred going forward
   input_schema: any; // Keeping 'any' as per original spec, can be refined later
 }
 
