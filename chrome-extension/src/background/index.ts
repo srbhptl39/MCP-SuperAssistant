@@ -10,7 +10,6 @@ import {
   callToolWithBackwardsCompatibility,
   getPrimitivesWithBackwardsCompatibility
 } from '../mcpclient/officialmcpclient';
-import { mcpInterface } from '../mcpclient/mcpinterfaceToContentScript';
 import { sendAnalyticsEvent, trackError } from '../../utils/analytics';
 
 // Import message types for type safety
@@ -34,6 +33,95 @@ import type {
 
 // Default MCP server URL
 const DEFAULT_MCP_SERVER_URL = 'http://localhost:3006/sse';
+
+// Background script state management - replaces legacy mcpInterface
+let serverUrl: string = DEFAULT_MCP_SERVER_URL;
+let isConnected: boolean = false;
+let connectionCount: number = 0;
+let isInitialized: boolean = false;
+
+/**
+ * Initialize server URL from Chrome storage
+ * Replaces mcpInterface initialization functionality
+ */
+async function initializeServerUrl(): Promise<void> {
+  try {
+    const result = await chrome.storage.local.get('mcpServerUrl');
+    serverUrl = result.mcpServerUrl || DEFAULT_MCP_SERVER_URL;
+    isInitialized = true;
+    console.log('[Background] Server URL loaded from storage:', serverUrl);
+  } catch (error) {
+    console.warn('[Background] Failed to load server URL from storage, using default:', error);
+    serverUrl = DEFAULT_MCP_SERVER_URL;
+    isInitialized = true;
+  }
+}
+
+/**
+ * Wait for initialization to complete
+ * Replaces mcpInterface.waitForInitialization()
+ */
+async function waitForInitialization(): Promise<void> {
+  while (!isInitialized) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * Get the current server URL
+ * Replaces mcpInterface.getServerUrl()
+ */
+function getServerUrl(): string {
+  return serverUrl;
+}
+
+/**
+ * Update the server URL
+ * Replaces mcpInterface.updateServerUrl()
+ */
+function updateServerUrl(url: string): void {
+  serverUrl = url;
+  console.log('[Background] Server URL updated to:', url);
+}
+
+/**
+ * Get connection status
+ * Replaces mcpInterface.getConnectionStatus()
+ */
+function getConnectionStatus(): boolean {
+  return isConnected;
+}
+
+/**
+ * Update connection status
+ * Replaces mcpInterface.updateConnectionStatus()
+ */
+function updateConnectionStatus(status: boolean): void {
+  isConnected = status;
+  console.log('[Background] Connection status updated to:', status);
+}
+
+/**
+ * Get connection count
+ * Replaces mcpInterface.getConnectionCount()
+ */
+function getConnectionCount(): number {
+  return connectionCount;
+}
+
+/**
+ * Increment connection count
+ */
+function incrementConnectionCount(): void {
+  connectionCount++;
+}
+
+/**
+ * Decrement connection count
+ */
+function decrementConnectionCount(): void {
+  connectionCount = Math.max(0, connectionCount - 1);
+}
 
 // Define server connection state
 let isConnecting = false;
@@ -101,7 +189,7 @@ function categorizeToolError(error: Error): { isConnectionError: boolean; isTool
  * 
  * This function is called once when the extension starts and handles:
  * - Theme initialization
- * - MCP interface setup and server URL loading
+ * - Server URL loading from storage
  * - Initial connection status check and broadcast
  * - Asynchronous server connection attempt if needed
  * - Initial tools fetching and broadcast if connected
@@ -120,25 +208,28 @@ async function initializeExtension() {
     console.warn('Error initializing theme, continuing with defaults:', error);
   }
 
-  // Wait for the MCP interface to load its server URL from storage
-  await mcpInterface.waitForInitialization();
+  // Initialize server URL from storage
+  await initializeServerUrl();
 
-  // Get the loaded server URL from the interface
-  const serverUrl = mcpInterface.getServerUrl();
-  console.log('MCP Interface initialized with server URL:', serverUrl);
+  // Wait for initialization to complete
+  await waitForInitialization();
+
+  // Get the loaded server URL
+  const serverUrl = getServerUrl();
+  console.log('Background script initialized with server URL:', serverUrl);
 
   // Set initial connection status
-  mcpInterface.updateConnectionStatus(false);
+  updateConnectionStatus(false);
 
   console.log('Extension initialized successfully');
 
   // After initialization is complete, check and broadcast initial connection status
   setTimeout(async () => {
-    const serverUrl = mcpInterface.getServerUrl();
+    const serverUrl = getServerUrl();
     
     // Check initial connection status
     const isConnected = await checkMcpServerConnection();
-    mcpInterface.updateConnectionStatus(isConnected);
+    updateConnectionStatus(isConnected);
     
     // Broadcast initial status to any already-loaded content scripts
     broadcastConnectionStatusToContentScripts(isConnected);
@@ -195,7 +286,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
     await runWithSSE(uri);
 
     console.log('MCP client connected successfully');
-    mcpInterface.updateConnectionStatus(true);
+    updateConnectionStatus(true);
     broadcastConnectionStatusToContentScripts(true);
     
     // Also broadcast available tools after successful connection
@@ -221,7 +312,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
 
     // Only update connection status for actual connection errors
     if (errorCategory.isConnectionError) {
-      mcpInterface.updateConnectionStatus(false);
+      updateConnectionStatus(false);
       broadcastConnectionStatusToContentScripts(false, error.message || String(error));
     } else {
       console.log('Error categorized as tool-related, not updating connection status');
@@ -255,9 +346,9 @@ setInterval(async () => {
   }
 
   // Check current connection status
-  const wasConnected = mcpInterface.getConnectionStatus();
+  const wasConnected = getConnectionStatus();
   const isConnected = await checkMcpServerConnection();
-  mcpInterface.updateConnectionStatus(isConnected);
+  updateConnectionStatus(isConnected);
 
   // Broadcast status change if it changed
   if (wasConnected !== isConnected) {
@@ -268,7 +359,7 @@ setInterval(async () => {
     if (isConnected) {
       try {
         console.log('[Background] Periodic check: Connection established, fetching and broadcasting tools...');
-        const primitives = await getPrimitivesWithBackwardsCompatibility(mcpInterface.getServerUrl(), true);
+        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
         console.log(`[Background] Periodic check: Retrieved ${primitives.length} primitives`);
         
         const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
@@ -288,14 +379,14 @@ setInterval(async () => {
   if (!isConnected && !isConnecting) {
     connectionAttemptCount = 0; // Reset counter for periodic checks
     console.log('Periodic check: MCP server not connected, attempting to connect');
-    const serverUrl = mcpInterface.getServerUrl();
+    const serverUrl = getServerUrl();
     tryConnectToServer(serverUrl).catch(() => {});
   }
 }, PERIODIC_CHECK_INTERVAL);
 
 // Log active connections periodically
 setInterval(() => {
-  const connectionCount = mcpInterface.getConnectionCount();
+  const connectionCount = getConnectionCount();
   if (connectionCount > 0) {
     console.log(`Active MCP content script connections: ${connectionCount}`);
   }
@@ -442,7 +533,7 @@ async function handleMcpMessage(
         }
         
         console.log(`[Background] Calling tool: ${toolName}`);
-        result = await callToolWithBackwardsCompatibility(mcpInterface.getServerUrl(), toolName, args || {});
+        result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {});
         console.log(`[Background] Tool call completed: ${toolName}`);
         break;
       }
@@ -451,7 +542,7 @@ async function handleMcpMessage(
         console.log('[Background] Getting current connection status');
         
         // Double-check the connection status to ensure accuracy
-        const storedStatus = mcpInterface.getConnectionStatus();
+        const storedStatus = getConnectionStatus();
         const actualStatus = await checkMcpServerConnection();
         
         console.log(`[Background] Stored status: ${storedStatus}, Actual status: ${actualStatus}`);
@@ -459,7 +550,7 @@ async function handleMcpMessage(
         // Update stored status if they don't match
         if (storedStatus !== actualStatus) {
           console.log('[Background] Status mismatch detected, updating and broadcasting...');
-          mcpInterface.updateConnectionStatus(actualStatus);
+          updateConnectionStatus(actualStatus);
           broadcastConnectionStatusToContentScripts(actualStatus);
         }
         
@@ -476,7 +567,7 @@ async function handleMcpMessage(
         console.log(`[Background] Getting tools (forceRefresh: ${forceRefresh})`);
         
         try {
-          const primitives = await getPrimitivesWithBackwardsCompatibility(mcpInterface.getServerUrl(), forceRefresh);
+          const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), forceRefresh);
           console.log(`[Background] Retrieved ${primitives.length} primitives from server`);
           
           // Return only the tool primitives' value shape for UI consumption
@@ -502,7 +593,7 @@ async function handleMcpMessage(
           console.log('[Background] Starting force reconnection process...');
           
           // Set a reasonable timeout for the reconnection process
-          const reconnectionPromise = forceReconnectToMcpServer(mcpInterface.getServerUrl());
+          const reconnectionPromise = forceReconnectToMcpServer(getServerUrl());
           const timeoutPromise = new Promise<void>((_, reject) => 
             setTimeout(() => reject(new Error('Reconnection timeout after 20 seconds')), 20000)
           );
@@ -512,7 +603,7 @@ async function handleMcpMessage(
           
           // Update connection status
           const isConnected = await checkMcpServerConnection();
-          mcpInterface.updateConnectionStatus(isConnected);
+          updateConnectionStatus(isConnected);
           
           // Broadcast the new status to all content scripts
           broadcastConnectionStatusToContentScripts(isConnected);
@@ -521,7 +612,7 @@ async function handleMcpMessage(
           if (isConnected) {
             try {
               console.log('[Background] Fetching tools after successful reconnection...');
-              const primitives = await getPrimitivesWithBackwardsCompatibility(mcpInterface.getServerUrl(), true);
+              const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
               console.log(`[Background] Retrieved ${primitives.length} primitives after reconnection`);
               
               const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
@@ -539,7 +630,7 @@ async function handleMcpMessage(
           
           // Update connection status
           const isConnected = await checkMcpServerConnection();
-          mcpInterface.updateConnectionStatus(isConnected);
+          updateConnectionStatus(isConnected);
           
           // Broadcast the failure status
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -564,9 +655,9 @@ async function handleMcpMessage(
 
         console.log(`[Background] Updating server config to: ${config.uri}`);
         
-        // Update storage and MCP interface
+        // Update storage and background script state
         await chrome.storage.local.set({ mcpServerUrl: config.uri });
-        mcpInterface.updateServerUrl(config.uri);
+        updateServerUrl(config.uri);
         
         // Broadcast config update immediately
         broadcastConfigUpdateToContentScripts({ uri: config.uri });
@@ -577,7 +668,7 @@ async function handleMcpMessage(
             console.log('[Background] Starting async reconnection after config update...');
             await forceReconnectToMcpServer(config.uri);
             const isConnected = await checkMcpServerConnection();
-            mcpInterface.updateConnectionStatus(isConnected);
+            updateConnectionStatus(isConnected);
             broadcastConnectionStatusToContentScripts(isConnected);
             console.log(`[Background] Async reconnection completed, connected: ${isConnected}`);
             
@@ -595,7 +686,7 @@ async function handleMcpMessage(
           } catch (error) {
             console.warn('[Background] Async reconnect after config update failed:', error);
             const isConnected = await checkMcpServerConnection();
-            mcpInterface.updateConnectionStatus(isConnected);
+            updateConnectionStatus(isConnected);
             const errorMessage = error instanceof Error ? error.message : String(error);
             broadcastConnectionStatusToContentScripts(isConnected, errorMessage);
           }
