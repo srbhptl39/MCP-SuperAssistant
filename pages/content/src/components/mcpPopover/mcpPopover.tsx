@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { generateInstructions } from '../sidebar/Instructions/instructionGenerator';
-import { useCurrentAdapter, useAvailableTools } from '../../hooks';
+import { useCurrentAdapter, useUserPreferences } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 
@@ -435,7 +434,6 @@ interface MCPPopoverProps {
     setAutoExecute(enabled: boolean): void;
     updateUI(): void;
   };
-  customInstructions?: string;
 }
 
 interface ToggleItemProps {
@@ -507,12 +505,21 @@ const ToggleItem: React.FC<ToggleItemProps> = ({ id, label, checked, disabled, o
   );
 };
 
-export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, customInstructions }) => {
+export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) => {
   const isDarkMode = useThemeDetector();
 
-  // Use Zustand hooks for adapter and tools
+  // Use Zustand hooks for adapter and user preferences
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
-  const { tools: availableTools } = useAvailableTools();
+  const { preferences } = useUserPreferences();
+
+  // Debug: Log instructions state for debugging
+  useEffect(() => {
+    console.log(`[MCPPopover] Instructions state:`, {
+      hasInstructions: !!instructionsState.instructions,
+      instructionsLength: instructionsState.instructions.length,
+      preferences: preferences
+    });
+  }, [instructionsState.instructions, preferences]);
 
   // Color scheme for the popover
   const theme = {
@@ -543,86 +550,35 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
   };
   useInjectStyles();
   const [state, setState] = useState<MCPToggleState>(toggleStateManager.getState());
-  const [instructions, setInstructions] = useState(customInstructions || instructionsState.instructions || '');
+  // Instructions come directly from the global state (managed by Instructions panel in sidebar)
+  const [instructions, setInstructions] = useState(instructionsState.instructions || '');
   const [copyStatus, setCopyStatus] = useState<'Copy' | 'Copied!' | 'Error'>('Copy');
   const [insertStatus, setInsertStatus] = useState<'Insert' | 'Inserted!' | 'No Adapter'>('Insert');
   const [attachStatus, setAttachStatus] = useState<'Attach' | 'Attached!' | 'No File' | 'Error'>('Attach');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const lastToolsJson = useRef(JSON.stringify(availableTools || []));
-  const pollRef = useRef<number | null>(null);
 
   // Update state from manager
   const updateState = useCallback(() => {
     setState(toggleStateManager.getState());
   }, [toggleStateManager]);
 
-  // Subscribe to global instructions state changes
+  // Subscribe to global instructions state changes (Instructions panel is source of truth)
   useEffect(() => {
+    // Initial sync
+    setInstructions(instructionsState.instructions || '');
+    
     // Subscribe to changes in the global instructions state
     const unsubscribe = instructionsState.subscribe(newInstructions => {
-      // Only update if different from current instructions
-      if (newInstructions !== instructions) {
-        setInstructions(newInstructions);
-      }
+      setInstructions(newInstructions);
     });
 
     // Clean up subscription on unmount
     return () => {
       unsubscribe();
     };
-  }, [instructions]);
-
-  // Update instructions and sync with global state
-  const updateInstructions = (newInstructions: string) => {
-    // Only update if different from current instructions
-    if (newInstructions !== instructions) {
-      setInstructions(newInstructions);
-
-      // Don't update global state if we're already processing an update
-      if (!instructionsState.updating) {
-        instructionsState.setInstructions(newInstructions);
-      }
-    }
-  };
-
-  // Poll for availableTools changes using store data
-  useEffect(() => {
-    function getCurrentInstructions() {
-      const tools = availableTools.map(tool => ({
-        name: tool.name,
-        schema: (tool as any).schema || JSON.stringify((tool as any).input_schema || {}),
-        description: tool.description || ''
-      }));
-      return generateInstructions(tools);
-    }
-
-    // Only set generated instructions if customInstructions is not provided and instructionsState is empty
-    if (!customInstructions && !instructionsState.instructions) {
-      const newInstructions = getCurrentInstructions();
-      updateInstructions(newInstructions);
-    }
-
-    pollRef.current = window.setInterval(() => {
-      const currentToolsJson = JSON.stringify(availableTools || []);
-      if (currentToolsJson !== lastToolsJson.current && !customInstructions && !instructionsState.instructions) {
-        const newInstructions = getCurrentInstructions();
-        updateInstructions(newInstructions);
-        lastToolsJson.current = currentToolsJson;
-      }
-    }, 500);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [customInstructions, availableTools]);
-
-  // New effect to update instructions when customInstructions changes
-  useEffect(() => {
-    if (customInstructions !== undefined) {
-      updateInstructions(customInstructions);
-    }
-  }, [customInstructions]);
+  }, []);
 
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
@@ -841,7 +797,19 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, cust
                 border: `1px solid ${theme.borderColor}`,
                 boxShadow: theme.innerShadow,
               }}>
-              {instructions}
+              {instructions || (
+                <div style={{ 
+                  color: theme.secondaryText, 
+                  fontStyle: 'italic',
+                  padding: '10px',
+                  textAlign: 'center' 
+                }}>
+                  {!instructionsState.instructions 
+                    ? 'Loading instructions...' 
+                    : 'Generating instructions...'
+                  }
+                </div>
+              )}
             </div>
             <div
               style={{
