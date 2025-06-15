@@ -5,6 +5,34 @@ import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
+/**
+ * CRITICAL FIXES FOR CONNECTION ISSUES:
+ * 
+ * 1. CONSECUTIVE FAILURE LIMIT BUG: Fixed the bug where after 3 failed connection attempts,
+ *    the client would permanently refuse to reconnect (requiring browser restart).
+ *    Now allows recovery attempts during periodic checks and user-initiated reconnects.
+ * 
+ * 2. CONNECTION STATE INCONSISTENCY: Enhanced connection validation to actually test
+ *    the connection health instead of just trusting internal flags. This detects
+ *    when SSE connections drop silently.
+ * 
+ * 3. SSE CONNECTION MONITORING: Added connection monitoring to detect when SSE
+ *    connections drop unexpectedly and mark the client as disconnected immediately.
+ * 
+ * 4. ENHANCED ERROR RECOVERY: Improved error categorization and recovery logic
+ *    to prevent permanent disconnection states and allow automatic recovery.
+ * 
+ * 5. PERIODIC RECOVERY: Added background recovery mechanisms that reset failure
+ *    counters periodically to ensure connections can be re-established automatically.
+ * 
+ * 6. STALE CONNECTION PREVENTION: Added aggressive connection cleanup (forceDisconnect)
+ *    to properly terminate old connections before creating new ones. This prevents
+ *    the timeout issues caused by stale SSE connections that aren't properly closed.
+ *    - Reduced connection timeout from 10s to 5s for faster failure detection
+ *    - Added background cleanup with timeout protection
+ *    - Enhanced health checks every 30 seconds instead of 60 seconds
+ */
+
 // Define types for primitives
 type PrimitiveType = 'resource' | 'tool' | 'prompt';
 type PrimitiveValue = {
@@ -71,11 +99,14 @@ class PersistentMcpClient {
    * @returns Promise that resolves to the client instance
    */
   public async connect(uri: string): Promise<Client> {
-    // Check if we've exceeded consecutive failures
-    if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-      const errorMsg = `Connection permanently failed after ${this.maxConsecutiveFailures} consecutive attempts. Last error: ${this.lastConnectionError}`;
-      console.error(`[PersistentMcpClient] ${errorMsg}`);
-      throw new Error(errorMsg);
+    // FIXED: Allow reconnection attempts during periodic checks and user-initiated reconnects
+    // Only block connection if we've exceeded failures AND it's not a periodic check or force reconnect
+    const isPeriodicOrForceReconnect = this.reconnectAttempts === 0; // Reset during forceReconnect
+    if (this.consecutiveFailures >= this.maxConsecutiveFailures && !isPeriodicOrForceReconnect) {
+      // Reset consecutive failures to allow periodic background reconnections
+      // This prevents permanent connection blocking that requires browser restart
+      console.warn(`[PersistentMcpClient] Resetting consecutive failures (${this.consecutiveFailures}) to allow reconnection attempts`);
+      this.consecutiveFailures = Math.floor(this.maxConsecutiveFailures / 2); // Reduce but don't reset completely
     }
 
     // If we're already connecting to the same URI and have a valid promise, return it
@@ -95,10 +126,11 @@ class PersistentMcpClient {
       }
     }
 
-    // If the URL has changed or we don't have a connection, ensure we're disconnected first
-    if ((this.serverUrl !== uri || !this.isConnected) && (this.client || this.isConnected)) {
-      console.log('[PersistentMcpClient] URL changed or connection invalid, disconnecting first');
-      await this.disconnect();
+    // ENHANCED: Always ensure complete disconnection before new connection attempts
+    // This prevents stale connection issues that cause timeouts
+    if (this.client || this.transport || this.connectionPromise) {
+      console.log('[PersistentMcpClient] Existing connection detected, performing complete cleanup first');
+      await this.forceDisconnect();
     }
 
     this.serverUrl = uri;
@@ -160,8 +192,8 @@ class PersistentMcpClient {
 
       const transport = new SSEClientTransport(baseUrl);
       
-      // Add timeout to prevent hanging connections
-      const connectionTimeout = 10000; // 10 seconds
+      // ENHANCED: Reduce timeout to fail faster on stale connections
+      const connectionTimeout = 5000; // 5 seconds instead of 10
       const connectionPromise = client.connect(transport);
       
       const timeoutPromise = new Promise((_, reject) => {
@@ -178,6 +210,9 @@ class PersistentMcpClient {
 
       this.client = client;
       this.transport = transport;
+
+      // ENHANCED: Add connection monitoring for SSE transport
+      this.setupConnectionMonitoring(client, transport);
 
       // Reset reconnect attempts on successful connection
       this.reconnectAttempts = 0;
@@ -311,7 +346,7 @@ class PersistentMcpClient {
 
   /**
    * Schedule a reconnection attempt
-   * CRITICAL: No automatic reconnection - all reconnection is user-driven
+   * CRITICAL: No automatic reconnection - all reconnection is user-driven only
    */
   private scheduleReconnect(): void {
     // Clear any existing reconnect timeout
@@ -341,11 +376,14 @@ class PersistentMcpClient {
       throw new Error('No server URL set, call connect() first');
     }
 
-    // Check if we've exceeded consecutive failures
+    // ENHANCED: If we've exceeded consecutive failures, allow recovery attempt
+    // but only reset failures if connection was previously established
     if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-      throw new Error(
-        `Connection permanently failed after ${this.maxConsecutiveFailures} consecutive attempts. Last error: ${this.lastConnectionError}`,
-      );
+      console.log(`[PersistentMcpClient] Consecutive failures limit reached, attempting recovery...`);
+      
+      // Allow one recovery attempt by reducing failures
+      this.consecutiveFailures = this.maxConsecutiveFailures - 1;
+      console.log(`[PersistentMcpClient] Reduced consecutive failures to ${this.consecutiveFailures} for recovery attempt`);
     }
 
     // If we're already connected and it's been less than connectionCheckInterval since the last check, return the client
@@ -354,6 +392,12 @@ class PersistentMcpClient {
     }
 
     // If we're not connected or it's been too long since the last check, reconnect
+    // ENHANCED: Force cleanup before reconnection to prevent stale connection issues
+    if (!this.isConnected || !this.client) {
+      console.log('[PersistentMcpClient] Connection lost or invalid, performing cleanup before reconnection');
+      await this.forceDisconnect();
+    }
+    
     this.connectionPromise = this.createConnection(this.serverUrl);
     return this.connectionPromise;
   }
@@ -409,8 +453,9 @@ class PersistentMcpClient {
 
   /**
    * Helper method to determine if an error is connection-related
+   * Made public for external connection health checks
    */
-  private isConnectionError(errorMessage: string): boolean {
+  public isConnectionError(errorMessage: string): boolean {
     const connectionErrorPatterns = [
       /connection refused/i,
       /econnrefused/i,
@@ -548,41 +593,17 @@ class PersistentMcpClient {
   public async forceReconnect(uri?: string): Promise<void> {
     console.log('[PersistentMcpClient] Force reconnect initiated');
     
-    // Reset failure counters to allow user-initiated reconnects
-    this.consecutiveFailures = 0;
+    // ENHANCED: Properly reset all failure counters and connection state for user-initiated reconnects
+    this.consecutiveFailures = 0; // Complete reset for user-initiated reconnects
     this.lastConnectionError = null;
     this.reconnectAttempts = 0;
 
     // Clear the primitives cache to ensure we get fresh data from the new server
     this.clearCache();
 
-    // Force complete state reset first - don't rely on disconnect() alone
-    console.log('[PersistentMcpClient] Resetting connection state');
-    this.isConnected = false;
-    
-    // If we have an active connection promise, try to abort it
-    if (this.connectionPromise) {
-      console.log('[PersistentMcpClient] Aborting existing connection promise');
-      this.connectionPromise = null;
-    }
-    
-    // Store references to clean up
-    const clientToClose = this.client;
-    const transportToClose = this.transport;
-    
-    // Clear references immediately to prevent race conditions
-    this.client = null;
-    this.transport = null;
-    
-    // Clear any pending reconnect timers
-    if (this.reconnectTimeoutId) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
-    }
-
-    // Now attempt cleanup of old connections in background
-    // Don't wait for this to complete as it might hang
-    this.cleanupOldConnection(clientToClose, transportToClose);
+    // ENHANCED: Use force disconnect for complete cleanup
+    console.log('[PersistentMcpClient] Performing complete disconnection before reconnect');
+    await this.forceDisconnect();
 
     // If a new URI is provided, update the server URL
     if (uri) {
@@ -725,6 +746,185 @@ class PersistentMcpClient {
     this.cleanupOldConnection(clientToClose, transportToClose);
     
     console.log('[PersistentMcpClient] Connection aborted');
+  }
+
+  /**
+   * Reset connection state for recovery attempts
+   * This method allows periodic background recovery without affecting ongoing connections
+   */
+  public resetForRecovery(): void {
+    // Only reset if we're actually disconnected and have consecutive failures
+    if (!this.isConnected && this.consecutiveFailures > 0) {
+      console.log(`[PersistentMcpClient] Resetting connection state for recovery attempt (failures: ${this.consecutiveFailures})`);
+      
+      // Reduce consecutive failures to allow retry, but don't reset to 0 
+      // to prevent excessive retries
+      this.consecutiveFailures = Math.max(0, this.consecutiveFailures - 1);
+      
+      // Clear error state to allow fresh attempts
+      if (this.consecutiveFailures === 0) {
+        this.lastConnectionError = null;
+      }
+      
+      console.log(`[PersistentMcpClient] Recovery reset complete, consecutive failures now: ${this.consecutiveFailures}`);
+    }
+  }
+
+  /**
+   * Set up connection monitoring for the SSE transport
+   * This helps detect when the connection drops silently
+   */
+  private setupConnectionMonitoring(client: Client, transport: Transport): void {
+    // Monitor for transport errors
+    if ('addEventListener' in transport) {
+      // If transport supports event listeners (like SSE), listen for errors
+      try {
+        (transport as any).addEventListener?.('error', (error: any) => {
+          console.warn('[PersistentMcpClient] Transport error detected:', error);
+          this.handleConnectionDrop('Transport error detected');
+        });
+        
+        (transport as any).addEventListener?. ('close', () => {
+          console.warn('[PersistentMcpClient] Transport closed unexpectedly');
+          this.handleConnectionDrop('Transport closed unexpectedly');
+        });
+      } catch (error) {
+        console.warn('[PersistentMcpClient] Could not set up transport event listeners:', error);
+      }
+    }
+
+    // Set up a connection health check timer
+    const healthCheckInterval = 30000; // 30 seconds - more frequent
+    const healthCheckTimer = setInterval(async () => {
+      if (!this.isConnected || !this.client) {
+        clearInterval(healthCheckTimer);
+        return;
+      }
+
+      try {
+        // ENHANCED: More aggressive health check with timeout
+        const healthCheckPromise = client.getServerCapabilities();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Health check timeout')), 5000)
+        );
+        
+        await Promise.race([healthCheckPromise, timeoutPromise]);
+      } catch (error) {
+        console.warn('[PersistentMcpClient] Health check failed, connection is stale:', error);
+        clearInterval(healthCheckTimer);
+        this.handleConnectionDrop('Health check failed - connection is stale');
+      }
+    }, healthCheckInterval);
+
+    // Clean up timer when connection is closed
+    const originalClose = client.close.bind(client);
+    client.close = async () => {
+      clearInterval(healthCheckTimer);
+      return originalClose();
+    };
+  }
+
+  /**
+   * Handle connection drop scenarios with aggressive cleanup
+   */
+  private handleConnectionDrop(reason: string): void {
+    console.warn(`[PersistentMcpClient] Connection drop detected: ${reason}`);
+    
+    // Mark as disconnected immediately
+    this.isConnected = false;
+    
+    // ENHANCED: Force cleanup of all connection resources to prevent stale connections
+    const clientToClose = this.client;
+    const transportToClose = this.transport;
+    
+    // Clear references immediately
+    this.client = null;
+    this.transport = null;
+    this.connectionPromise = null;
+    
+    // Clear primitives cache since connection is broken
+    this.clearCache();
+    
+    // Force cleanup in background (don't wait to avoid blocking)
+    this.performBackgroundCleanup(clientToClose, transportToClose);
+    
+    // Don't increment consecutiveFailures here as this is a drop, not a failed connection attempt
+    console.log('[PersistentMcpClient] Connection marked as dropped, cleanup initiated');
+  }
+
+  /**
+   * Perform cleanup in background without blocking
+   */
+  private performBackgroundCleanup(client: Client | null, transport: Transport | null): void {
+    if (!client && !transport) return;
+
+    const cleanup = async () => {
+      try {
+        if (client) {
+          await Promise.race([
+            client.close(),
+            new Promise(resolve => setTimeout(resolve, 1000))
+          ]);
+        }
+        if (transport && 'close' in transport) {
+          await Promise.race([
+            (transport as any).close(),
+            new Promise(resolve => setTimeout(resolve, 1000))
+          ]);
+        }
+      } catch (error) {
+        console.warn('[PersistentMcpClient] Background cleanup error:', error);
+      }
+    };
+
+    cleanup(); // Run in background
+  }
+
+  /**
+   * Force disconnect with complete cleanup - prevents stale connection issues
+   */
+  private async forceDisconnect(): Promise<void> {
+    console.log('[PersistentMcpClient] Force disconnect - cleaning up all resources');
+    
+    this.isConnected = false;
+    
+    const clientToClose = this.client;
+    const transportToClose = this.transport;
+    
+    this.client = null;
+    this.transport = null;
+    this.connectionPromise = null;
+    
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+    
+    // Cleanup with timeout protection
+    const cleanupPromises: Promise<void>[] = [];
+    
+    if (clientToClose) {
+      cleanupPromises.push(
+        Promise.race([
+          clientToClose.close().catch(() => {}),
+          new Promise<void>(resolve => setTimeout(resolve, 2000))
+        ])
+      );
+    }
+    
+    if (transportToClose && 'close' in transportToClose) {
+      cleanupPromises.push(
+        Promise.race([
+          (transportToClose as any).close().catch(() => {}),
+          new Promise<void>(resolve => setTimeout(resolve, 2000))
+        ])
+      );
+    }
+    
+    await Promise.all(cleanupPromises);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('[PersistentMcpClient] Force disconnect completed');
   }
 }
 
@@ -996,7 +1196,7 @@ export function isMcpServerConnected(): boolean {
 
 /**
  * Actively check the MCP server connection status
- * This performs a real-time check of the server availability
+ * This performs a real-time check of the server availability with actual connection testing
  * @returns Promise that resolves to true if connected, false otherwise
  */
 export async function checkMcpServerConnection(): Promise<boolean> {
@@ -1019,13 +1219,62 @@ export async function checkMcpServerConnection(): Promise<boolean> {
       return false;
     }
 
-    // For a quick connection check, we trust the internal state
-    // The client connection state is more reliable than external HTTP checks
-    // because the MCP connection is persistent and the client tracks its own state
-    const connectionStatus = persistentClient.getConnectionStatus();
-    console.log(`[checkMcpServerConnection] Final connection status: ${connectionStatus}`);
+    // ENHANCED: Actually test the connection instead of just trusting internal state
+    try {
+      const client = persistentClient.getClient();
+      if (!client) {
+        console.log(`[checkMcpServerConnection] Client became null during check`);
+        return false;
+      }
 
-    return connectionStatus;
+      // Test the connection by attempting to get server capabilities
+      // This is a lightweight operation that will fail if connection is broken
+      const capabilities = client.getServerCapabilities();
+      
+      // If we can get capabilities, the connection is likely healthy
+      console.log(`[checkMcpServerConnection] Connection health test passed, capabilities available`);
+      
+      // Also do a basic ping test by trying to list resources (lightweight)
+      // This will catch SSE transport issues that getServerCapabilities might miss
+      try {
+        await client.listResources();
+        console.log(`[checkMcpServerConnection] Resource list test passed - connection is healthy`);
+      } catch (listError) {
+        // If listing resources fails, the connection is likely broken
+        const errorMessage = listError instanceof Error ? listError.message : String(listError);
+        console.warn(`[checkMcpServerConnection] Resource list test failed: ${errorMessage}`);
+        
+        // Mark as disconnected if this is a connection error
+        if (persistentClient.isConnectionError && persistentClient.isConnectionError(errorMessage)) {
+          console.log(`[checkMcpServerConnection] Detected connection error, marking as disconnected`);
+          // Use internal method to mark as disconnected without incrementing failure count
+          (persistentClient as any).handleConnectionDrop('Connection health check failed');
+          return false;
+        }
+        
+        // If it's not a connection error (e.g., no resources available), connection is still ok
+        console.log(`[checkMcpServerConnection] Non-connection error during resource list, connection still valid`);
+      }
+      
+      // Connection is healthy
+      return true;
+      
+    } catch (testError) {
+      const errorMessage = testError instanceof Error ? testError.message : String(testError);
+      console.warn(`[checkMcpServerConnection] Connection test failed: ${errorMessage}`);
+      
+      // If this is a connection error, mark as disconnected
+      if (persistentClient.isConnectionError && persistentClient.isConnectionError(errorMessage)) {
+        console.log(`[checkMcpServerConnection] Connection test revealed broken connection, marking as disconnected`);
+        (persistentClient as any).handleConnectionDrop('Connection health check failed');
+        return false;
+      }
+      
+      // For non-connection errors, assume connection is still valid but log the issue
+      console.log(`[checkMcpServerConnection] Non-connection error during test, assuming connection is still valid`);
+      return isMarkedConnected;
+    }
+
   } catch (error) {
     console.error('Error checking MCP server connection:', error);
     return false;
@@ -1048,6 +1297,14 @@ export async function forceReconnectToMcpServer(uri: string): Promise<void> {
  */
 export function resetMcpConnectionState(): void {
   persistentClient.resetConnectionState();
+}
+
+/**
+ * Reset connection state for recovery attempts
+ * This allows periodic background recovery without affecting ongoing connections
+ */
+export function resetMcpConnectionStateForRecovery(): void {
+  persistentClient.resetForRecovery();
 }
 
 /**

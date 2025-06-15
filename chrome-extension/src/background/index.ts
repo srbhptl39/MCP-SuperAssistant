@@ -8,7 +8,9 @@ import {
   callToolWithSSE,
   getPrimitivesWithSSE,
   callToolWithBackwardsCompatibility,
-  getPrimitivesWithBackwardsCompatibility
+  getPrimitivesWithBackwardsCompatibility,
+  resetMcpConnectionState,
+  resetMcpConnectionStateForRecovery
 } from '../mcpclient/officialmcpclient';
 import { sendAnalyticsEvent, trackError } from '../../utils/analytics';
 
@@ -329,6 +331,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
       }, delayMs);
     } else {
       console.log('Maximum connection attempts reached. Will try again during periodic check.');
+      // ENHANCED: Don't give up permanently - periodic checks will retry with reset state
       isConnecting = false;
     }
   } finally {
@@ -338,14 +341,14 @@ async function tryConnectToServer(uri: string): Promise<void> {
   }
 }
 
-// Set up a periodic connection check
+// Set up a periodic connection check with enhanced recovery logic
 const PERIODIC_CHECK_INTERVAL = 60000; // 1 minute
 setInterval(async () => {
   if (isConnecting) {
     return; // Skip if already connecting
   }
 
-  // Check current connection status
+  // Check current connection status with enhanced validation
   const wasConnected = getConnectionStatus();
   const isConnected = await checkMcpServerConnection();
   updateConnectionStatus(isConnected);
@@ -375,11 +378,22 @@ setInterval(async () => {
     broadcastConnectionStatusToContentScripts(isConnected);
   }
 
-  // If not connected and we're not in the middle of connecting, try to connect
+  // ENHANCED: If not connected and we're not in the middle of connecting, try to connect
+  // Reset connection attempt count periodically to allow recovery from permanent failure state
   if (!isConnected && !isConnecting) {
     connectionAttemptCount = 0; // Reset counter for periodic checks
     console.log('Periodic check: MCP server not connected, attempting to connect');
     const serverUrl = getServerUrl();
+    
+    // Reset the client's failure state periodically to prevent permanent disconnection
+    // This is critical to fix the issue where only browser restart would work
+    try {
+      console.log('[Background] Resetting MCP client connection state for periodic recovery attempt');
+      resetMcpConnectionStateForRecovery(); // Use recovery reset instead of full reset
+    } catch (error) {
+      console.warn('[Background] Error resetting MCP connection state:', error);
+    }
+    
     tryConnectToServer(serverUrl).catch(() => {});
   }
 }, PERIODIC_CHECK_INTERVAL);
@@ -591,6 +605,10 @@ async function handleMcpMessage(
           broadcastConnectionStatusToContentScripts(false, 'Reconnecting...');
           
           console.log('[Background] Starting force reconnection process...');
+          
+          // ENHANCED: Reset connection state before attempting reconnection
+          // This ensures we don't get blocked by consecutive failure limits
+          resetMcpConnectionState();
           
           // Set a reasonable timeout for the reconnection process
           const reconnectionPromise = forceReconnectToMcpServer(getServerUrl());
