@@ -2,40 +2,35 @@ import type React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useCurrentAdapter } from '@src/hooks/useAdapter';
 import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
+import { useUIStore } from '@src/stores/ui.store';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
 import InputArea from './InputArea/InputArea';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
-import { logMessage, debugShadowDomStyles } from '@src/utils/helpers';
+import { logMessage } from '@src/utils/helpers';
 import { eventBus } from '@src/events/event-bus';
 import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } from './ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
-import type { SidebarPreferences } from '@src/utils/storage';
-import { getSidebarPreferences, saveSidebarPreferences } from '@src/utils/storage';
-// Simpler import approach to avoid TS module errors
-const mcpTools = typeof window !== 'undefined' ? (window as any).mcpTools || {} : {};
-const getMasterToolDict = () => mcpTools.getMasterToolDict?.() || {};
-const clearAllTools = (callIds?: string[]) => mcpTools.clearAllTools?.(callIds);
+import type { UserPreferences } from '@src/types/stores';
+// Debug helper function to check if activeSidebarManager is available
+const checkActiveSidebarManager = (): boolean => {
+  const available = !!(window as any).activeSidebarManager;
+  logMessage(`[Sidebar] checkActiveSidebarManager: ${available}`);
+  return available;
+};
 
 // Define Theme type
-type Theme = SidebarPreferences['theme'];
+type Theme = 'light' | 'dark' | 'system';
 const THEME_CYCLE: Theme[] = ['light', 'dark', 'system']; // Define the cycle order
 
 // Define a constant for minimized width (should match BaseSidebarManager and CSS logic)
 const SIDEBAR_MINIMIZED_WIDTH = 56;
 const SIDEBAR_DEFAULT_WIDTH = 320;
 
-// Define types for detected tools
-type DetectedTool = {
-  name: string;
-  description?: string;
-  callId?: string;
-};
-
 interface SidebarProps {
-  initialPreferences?: SidebarPreferences | null;
+  initialPreferences?: UserPreferences | null;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
@@ -68,13 +63,14 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     isMinimized: storeSidebarMinimized,
     width: storeSidebarWidth,
     toggleSidebar,
+    toggleMinimize,
     resizeSidebar,
     setSidebarVisibility
   } = useSidebarState();
   const { preferences, updatePreferences } = useUserPreferences();
   const { status: connectionStatus } = useConnectionStatus();
 
-  // No error states that could block rendering
+  // Error states that could block rendering
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [extensionContextInvalid, setExtensionContextInvalid] = useState<boolean>(false);
 
@@ -114,6 +110,24 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   useEffect(() => {
     logMessage(`[Sidebar] serverStatus changed to: "${serverStatus}", passing to ServerStatus component`);
   }, [serverStatus]);
+
+  // Monitor activeSidebarManager availability for debugging
+  useEffect(() => {
+    // Initial check
+    checkActiveSidebarManager();
+    
+    // Periodic monitoring to detect if reference gets lost
+    const monitorInterval = setInterval(() => {
+      const available = checkActiveSidebarManager();
+      if (!available) {
+        logMessage('[Sidebar] WARNING: activeSidebarManager reference lost - this may cause push mode issues');
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => {
+      clearInterval(monitorInterval);
+    };
+  }, []);
 
   // Enhanced event bus integration for real-time updates
   useEffect(() => {
@@ -181,7 +195,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     return () => {
       unsubscribeCallbacks.forEach(unsubscribe => unsubscribe());
     };
-  }, [refreshTools, forceReconnect]);
+  }, [refreshTools, forceReconnect, initializationError]);
 
   // Initial tool loading when component mounts and connection is available
   useEffect(() => {
@@ -201,104 +215,73 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     return () => clearTimeout(timeoutId);
   }, [serverStatus, availableTools.length, refreshTools]);
 
-  // Get initial state from shadow host to prevent flash
-  const getInitialMinimizedState = (): boolean => {
-    // Use passed preferences first (most reliable)
-    if (initialPreferences !== undefined && initialPreferences !== null) {
-      const value = initialPreferences.isMinimized ?? false;
-      logMessage(`[Sidebar] Using initialPreferences for isMinimized: ${value}`);
-      return value;
-    }
-
-    // Fallback to shadow host attribute
-    try {
-      const sidebarManager = (window as any).activeSidebarManager;
-      const shadowHost = sidebarManager?.getShadowHost();
-      if (shadowHost) {
-        const attrValue = shadowHost.getAttribute('data-initial-minimized');
-        logMessage(`[Sidebar] DEBUG: Raw attribute value: ${JSON.stringify(attrValue)}`);
-
-        if (attrValue === null || attrValue === undefined) {
-          logMessage(`[Sidebar] WARNING: data-initial-minimized attribute is null/undefined, defaulting to false`);
-          return false;
-        }
-
-        const isMinimized = attrValue === 'true';
-        logMessage(
-          `[Sidebar] Shadow host attribute 'data-initial-minimized' = '${attrValue}', interpreted as: ${isMinimized}`,
-        );
-        return isMinimized;
-      } else {
-        logMessage(`[Sidebar] Shadow host not found, defaulting to false`);
-        return false;
-      }
-    } catch (error) {
-      logMessage(`[Sidebar] Error reading initial state, defaulting to false: ${error}`);
-      return false;
-    }
-  };
-
-  // Initialize states with proper defaults to prevent flash
-  const isInitiallyMinimized = getInitialMinimizedState();
-
-  // CRITICAL FIX: If attribute was null but we expect it to have a value, set it
-  useEffect(() => {
-    try {
-      const sidebarManager = (window as any).activeSidebarManager;
-      const shadowHost = sidebarManager?.getShadowHost();
-      if (shadowHost) {
-        const currentAttr = shadowHost.getAttribute('data-initial-minimized');
-        if (currentAttr === null || currentAttr === undefined) {
-          // Attribute was not set properly, set it now based on our initialization
-          const valueToSet = isInitiallyMinimized ? 'true' : 'false';
-          shadowHost.setAttribute('data-initial-minimized', valueToSet);
-          logMessage(`[Sidebar] CORRECTED: Set missing data-initial-minimized to '${valueToSet}'`);
-        }
-      }
-    } catch (error) {
-      logMessage(`[Sidebar] Error correcting data-initial-minimized: ${error}`);
-    }
-  }, [isInitiallyMinimized]);
-
   // Use store values with fallbacks to initial preferences
   const isMinimized = storeSidebarMinimized ?? (initialPreferences?.isMinimized ?? false);
   const sidebarWidth = storeSidebarWidth || initialPreferences?.sidebarWidth || SIDEBAR_DEFAULT_WIDTH;
   const isPushMode = preferences.isPushMode ?? initialPreferences?.isPushMode ?? false;
   const autoSubmit = preferences.autoSubmit ?? initialPreferences?.autoSubmit ?? false;
 
+  // Debug logging for state tracking
+  useEffect(() => {
+    logMessage(`[Sidebar] State update - visible: ${sidebarVisible}, minimized: ${isMinimized}, pushMode: ${isPushMode}, width: ${sidebarWidth}`);
+  }, [sidebarVisible, isMinimized, isPushMode, sidebarWidth]);
+
   // Local UI state that doesn't need to be in the store
-  const [detectedTools, setDetectedTools] = useState<DetectedTool[]>([]);
   const [activeTab, setActiveTab] = useState<'availableTools' | 'instructions'>('availableTools');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isInputMinimized, setIsInputMinimized] = useState(false);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(initialPreferences !== null);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
-  const isInitialLoadRef = useRef(true);
   const previousWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const transitionTimerRef = useRef<number | null>(null);
 
-  // --- Theme Application Logic ---
-  const applyTheme = useCallback((selectedTheme: Theme) => {
-    const sidebarManager = (window as any).activeSidebarManager;
-    if (!sidebarManager) {
-      logMessage('[Sidebar] Sidebar manager not available for theme application - will apply when ready.');
-      return;
+  // Helper function to wait for SidebarManager to become available with retry mechanism
+  const waitForSidebarManager = useCallback(async (maxRetries = 10, baseDelay = 50): Promise<any> => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const sidebarManager = (window as any).activeSidebarManager;
+      if (sidebarManager) {
+        logMessage(`[Sidebar] activeSidebarManager found after ${attempt} attempts`);
+        return sidebarManager;
+      }
+      
+      // Exponential backoff: 50ms, 100ms, 200ms, 400ms, etc.
+      const delay = baseDelay * Math.pow(2, attempt);
+      logMessage(`[Sidebar] activeSidebarManager not available, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
+    
+    logMessage(`[Sidebar] activeSidebarManager not available after ${maxRetries} attempts`);
+    return null;
+  }, []);
 
-    // OPTIMIZATION: Theme application is now CSS-only and doesn't trigger re-renders
+  // --- Theme Application Logic ---
+  const applyTheme = useCallback(async (selectedTheme: Theme) => {
     try {
-      const success = sidebarManager.applyThemeClass(selectedTheme);
-      if (!success) {
-        logMessage('[Sidebar] Theme application failed but continuing...');
+      // Use retry mechanism to wait for SidebarManager
+      const sidebarManager = await waitForSidebarManager(5, 50); // Shorter retry for theme application
+      
+      if (!sidebarManager) {
+        logMessage('[Sidebar] Sidebar manager not available for theme application - will apply when ready.');
+        return;
+      }
+
+      // OPTIMIZATION: Theme application is now CSS-only and doesn't trigger re-renders
+      try {
+        const success = sidebarManager.applyThemeClass(selectedTheme);
+        if (!success) {
+          logMessage('[Sidebar] Theme application failed but continuing...');
+        }
+      } catch (error) {
+        logMessage(`[Sidebar] Theme application error: ${error instanceof Error ? error.message : String(error)}`);
       }
     } catch (error) {
-      logMessage(`[Sidebar] Theme application error: ${error instanceof Error ? error.message : String(error)}`);
+      logMessage(`[Sidebar] Error waiting for SidebarManager during theme application: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, []);
+  }, [waitForSidebarManager]);
 
   // Effect to apply theme and listen for system changes
   // OPTIMIZATION: Throttle theme changes to avoid excessive calls
@@ -348,89 +331,6 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   }, [theme, applyTheme]);
   // --- End Theme Application Logic ---
 
-  // Load preferences immediately but never block rendering - only if not provided initially
-  useEffect(() => {
-    // Skip loading if preferences were already provided
-    if (initialPreferences !== null) {
-      logMessage('[Sidebar] Using initial preferences, skipping async load');
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    const loadPreferences = async () => {
-      try {
-        logMessage('[Sidebar] Loading preferences...');
-        const preferences = await getSidebarPreferences();
-        logMessage(`[Sidebar] Loaded preferences: ${JSON.stringify(preferences)}`);
-
-        // Apply stored settings - now handled by the store
-        logMessage(
-          `[Sidebar] Applying preferences - isPushMode: ${preferences.isPushMode}, isMinimized: ${preferences.isMinimized}, sidebarWidth: ${preferences.sidebarWidth}`,
-        );
-        // Update preferences through the store
-        updatePreferences(preferences);
-        previousWidthRef.current = preferences.sidebarWidth || SIDEBAR_DEFAULT_WIDTH;
-
-        logMessage('[Sidebar] Preferences applied successfully');
-
-        // Mark preferences as loaded
-        logMessage('[Sidebar] Setting preferencesLoaded to true');
-        setPreferencesLoaded(true);
-
-        // Clean up initial state attributes after preferences are applied
-        setTimeout(() => {
-          try {
-            const sidebarManager = (window as any).activeSidebarManager;
-            const shadowHost = sidebarManager?.getShadowHost();
-            if (shadowHost?.getAttribute('data-initial-minimized') && !preferences.isMinimized) {
-              // Only remove if we're not actually minimized
-              shadowHost.removeAttribute('data-initial-minimized');
-              shadowHost.style.removeProperty('width');
-              logMessage('[Sidebar] Cleaned up initial state attributes');
-            }
-          } catch (error) {
-            logMessage(
-              `[Sidebar] Error cleaning up initial state: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }, 100);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logMessage(`[Sidebar] Error loading preferences (non-blocking): ${errorMessage}`);
-        // Never block the UI for preference loading failures
-        setPreferencesLoaded(true); // Mark as loaded even on error to prevent blocking
-      } finally {
-        isInitialLoadRef.current = false;
-      }
-    };
-
-    // Start loading immediately but don't wait
-    loadPreferences();
-  }, [initialPreferences]); // Load preferences once on mount or when initialPreferences changes
-
-  // Save preferences when they change - now handled by the store
-  useEffect(() => {
-    // Skip saving on initial load when we're just restoring from storage
-    if (isInitialLoadRef.current) return;
-
-    // Use debounce for width changes to avoid excessive writes
-    const saveTimeout = setTimeout(() => {
-      saveSidebarPreferences({
-        isPushMode,
-        sidebarWidth,
-        isMinimized,
-        autoSubmit,
-        theme,
-        customInstructions: preferences.customInstructions,
-        customInstructionsEnabled: preferences.customInstructionsEnabled,
-      }).catch(error => {
-        logMessage(`[Sidebar] Error saving preferences: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    }, 300);
-
-    return () => clearTimeout(saveTimeout);
-  }, [isPushMode, sidebarWidth, isMinimized, autoSubmit, theme, preferences]);
-
   // useEffect(() => {
   //   // Function to update detected tools
   //   const updateDetectedTools = () => {
@@ -455,119 +355,76 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
   //   // Track URL changes to clear detected tools on navigation
   //   let lastUrl = window.location.href;
-  //   const checkUrlChange = () => {
-  //     const currentUrl = window.location.href;
-  //     if (currentUrl !== lastUrl) {
-  //       lastUrl = currentUrl;
-  //       // Clear detected tools in the UI immediately on URL change
-  //       setDetectedTools([]);
-  //       logMessage('[Sidebar] URL changed, cleared detected tools');
-  //     }
-  //   };
 
-  //   // Check for URL changes frequently
-  //   const urlCheckInterval = setInterval(checkUrlChange, 300);
-
-  //   // Initial check
-  //   // updateDetectedTools();
-
-  //   return () => {
-  //     clearInterval(updateInterval);
-  //     clearInterval(urlCheckInterval);
-  //   };
-  // }, [adapter]);
-
-  // Apply push mode and width changes safely - only when preferences are first loaded
+  // Apply push mode when settings change - with robust retry mechanism
   useEffect(() => {
-    // Only run when preferences are loaded for the first time
-    if (!preferencesLoaded) {
-      return;
-    }
-
-    logMessage(`[Sidebar] Preferences loaded - applying initial push mode settings`);
-
-    const sidebarManager = (window as any).activeSidebarManager;
-    if (sidebarManager) {
+    logMessage(`[Sidebar] Push mode effect triggered - visible: ${sidebarVisible}, pushMode: ${isPushMode}, minimized: ${isMinimized}, width: ${sidebarWidth}`);
+    
+    // Use async function to handle the retry mechanism
+    const applyPushModeSettings = async () => {
       try {
-        // Only apply push mode settings if the sidebar is currently visible
-        if (sidebarManager.getIsVisible()) {
-          logMessage(
-            `[Sidebar] Applying push mode (${isPushMode}, minimized: ${isMinimized}) and width (${sidebarWidth}) to BaseSidebarManager`,
-          );
-          // Pass minimized width if minimized, otherwise sidebarWidth
-          sidebarManager.setPushContentMode(
-            isPushMode,
-            isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth,
-            isMinimized,
-          );
-
-          // If only width changed while push mode is active, update styles
-          // Added checks to prevent unnecessary updates during resize or initial load
-          if (isPushMode && !isInitialLoadRef.current && !isResizingRef.current) {
-            sidebarManager.updatePushModeStyles(isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth);
+        // Wait for SidebarManager to become available with retry
+        const sidebarManager = await waitForSidebarManager();
+        
+        if (sidebarManager) {
+          logMessage(`[Sidebar] activeSidebarManager available: true`);
+          
+          try {
+            // Apply push mode settings when visible
+            if (sidebarVisible) {
+              logMessage(
+                `[Sidebar] Applying push mode (${isPushMode}, minimized: ${isMinimized}) and width (${sidebarWidth})`
+              );
+              sidebarManager.setPushContentMode(
+                isPushMode,
+                isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth,
+                isMinimized,
+              );
+            } else {
+              // Ensure push mode is disabled when sidebar is hidden
+              logMessage('[Sidebar] Disabling push mode - sidebar not visible');
+              sidebarManager.setPushContentMode(false);
+            }
+          } catch (error) {
+            logMessage(
+              `[Sidebar] Error applying push mode settings: ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
         } else {
-          logMessage('[Sidebar] Sidebar is hidden, skipping application of push mode/width preferences.');
-          // Ensure push mode is explicitly turned off if the sidebar should be hidden
-          sidebarManager.setPushContentMode(false);
+          logMessage('[Sidebar] activeSidebarManager not available after retries - cannot apply push mode');
         }
       } catch (error) {
         logMessage(
-          `[Sidebar] Error applying push mode settings: ${error instanceof Error ? error.message : String(error)}`,
+          `[Sidebar] Error in push mode application process: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-    } else {
-      logMessage('[Sidebar] Sidebar manager not found when trying to apply push mode/width.');
-    }
+    };
 
-    // Mark initial load as complete after the first run
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-    }
-    // Reset resize ref after applying changes
-    isResizingRef.current = false;
-  }, [preferencesLoaded]); // Only depend on preferencesLoaded
+    // Execute the async function
+    applyPushModeSettings();
+  }, [isPushMode, sidebarWidth, isMinimized, sidebarVisible, waitForSidebarManager]);
 
-  // Separate effect for handling live changes to push mode settings
+  // Cleanup: Ensure push mode is disabled when component unmounts - with retry mechanism
   useEffect(() => {
-    // Skip if preferences haven't been loaded yet
-    if (!preferencesLoaded) {
-      return;
-    }
-
-    // Skip during initial load to prevent duplicate applications
-    if (isInitialLoadRef.current) {
-      return;
-    }
-
-    logMessage(`[Sidebar] Push mode settings changed - updating BaseSidebarManager`);
-
-    const sidebarManager = (window as any).activeSidebarManager;
-    if (sidebarManager) {
-      try {
-        if (sidebarManager.getIsVisible()) {
-          logMessage(
-            `[Sidebar] Updating push mode (${isPushMode}, minimized: ${isMinimized}) and width (${sidebarWidth}) to BaseSidebarManager`,
-          );
-          sidebarManager.setPushContentMode(
-            isPushMode,
-            isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth,
-            isMinimized,
-          );
-
-          if (isPushMode && !isResizingRef.current) {
-            sidebarManager.updatePushModeStyles(isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth);
+    return () => {
+      // Use async cleanup with retry mechanism
+      const cleanupPushMode = async () => {
+        try {
+          const sidebarManager = await waitForSidebarManager(5, 50); // Shorter retry for cleanup
+          if (sidebarManager) {
+            logMessage('[Sidebar] Component unmounting - disabling push mode');
+            sidebarManager.setPushContentMode(false);
+          } else {
+            logMessage('[Sidebar] Component unmounting - could not access SidebarManager for cleanup');
           }
-        } else {
-          sidebarManager.setPushContentMode(false);
+        } catch (error) {
+          logMessage(`[Sidebar] Error during push mode cleanup: ${error instanceof Error ? error.message : String(error)}`);
         }
-      } catch (error) {
-        logMessage(
-          `[Sidebar] Error updating push mode settings: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }, [isPushMode, sidebarWidth, isMinimized, adapter]); // Dependencies for live updates
+      };
+
+      cleanupPushMode();
+    };
+  }, [waitForSidebarManager]);
 
   // Simple transition management
   const startTransition = () => {
@@ -593,7 +450,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     }, 500) as unknown as number;
   };
 
-  const toggleMinimize = () => {
+  const handleToggleMinimize = () => {
     startTransition();
 
     // Add a subtle bounce effect to the toggle
@@ -606,7 +463,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       }, 100);
     }
 
-    toggleSidebar();
+    toggleMinimize('user action');
   };
 
   const toggleInputMinimize = () => setIsInputMinimized(prev => !prev);
@@ -678,23 +535,9 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   };
 
   const handleClearTools = () => {
-    // Store call IDs before clearing for future reference
-    const toolsWithCallIds = detectedTools.filter(tool => tool.callId);
-    const callIds: string[] = [];
-
-    if (toolsWithCallIds.length > 0) {
-      toolsWithCallIds.forEach(tool => {
-        if (tool.callId) {
-          callIds.push(tool.callId);
-        }
-      });
-      logMessage(`[Sidebar] Storing ${callIds.length} call IDs for future reference: ${callIds.join(', ')}`);
-    }
-
-    // Clear tools in the UI and detector
-    setDetectedTools([]);
-    clearAllTools(callIds); // Pass the call IDs to the clearAllTools function
-    logMessage(`[Sidebar] Cleared all detected tools`);
+    logMessage('[Sidebar] Clear tools requested - functionality deprecated');
+    // Note: Tool clearing is now handled by the store/MCP client
+    // This is kept for UI compatibility but doesn't clear anything
   };
 
   const handleRefreshTools = async () => {
@@ -830,7 +673,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={toggleMinimize}
+                onClick={handleToggleMinimize}
                 aria-label="Minimize sidebar"
                 className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
                 <Icon name="chevron-right" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
@@ -842,7 +685,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={toggleMinimize}
+            onClick={handleToggleMinimize}
             aria-label="Expand sidebar"
             className="mx-auto hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-110">
             <Icon name="chevron-left" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
@@ -941,8 +784,8 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                       onClick={() => {
                         const shadowHost = (window as any).activeSidebarManager?.getShadowHost();
                         if (shadowHost && shadowHost.shadowRoot) {
-                          debugShadowDomStyles(shadowHost.shadowRoot);
-                          logMessage('Running Shadow DOM style debug');
+                          logMessage('Shadow DOM debug requested');
+                          // Debug functionality removed - use browser dev tools instead
                         } else {
                           logMessage('Cannot debug: Shadow DOM not found');
                         }

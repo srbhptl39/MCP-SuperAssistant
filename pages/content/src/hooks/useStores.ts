@@ -122,6 +122,7 @@ export const useSidebar = () =>
       isMinimized: state.sidebar.isMinimized,
       position: state.sidebar.position,
       toggle: state.toggleSidebar,
+      toggleMinimize: state.toggleMinimize,
       resize: state.resizeSidebar,
       setVisibility: state.setSidebarVisibility
     })
@@ -179,6 +180,7 @@ export const useSidebarState = () =>
       position: state.sidebar.position,
       width: state.sidebar.width,
       toggleSidebar: state.toggleSidebar,
+      toggleMinimize: state.toggleMinimize,
       resizeSidebar: state.resizeSidebar,
       setSidebarVisibility: state.setSidebarVisibility
     })

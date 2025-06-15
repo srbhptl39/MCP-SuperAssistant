@@ -294,12 +294,12 @@ export const useMcpCommunication = () => {
       normalizedTools.forEach((tool, index) => {
         const hasInputSchema = tool.input_schema && Object.keys(tool.input_schema).length > 0;
         const hasLegacySchema = tool.schema && tool.schema !== '{}';
-        logMessage(`  ${index + 1}. ${tool.name}: input_schema=${hasInputSchema ? 'populated' : 'EMPTY'}, schema=${hasLegacySchema ? 'populated' : 'EMPTY'}`);
+        // logMessage(`  ${index + 1}. ${tool.name}: input_schema=${hasInputSchema ? 'populated' : 'EMPTY'}, schema=${hasLegacySchema ? 'populated' : 'EMPTY'}`);
         
         // Log schema content for first few tools for debugging
-        if (index < 2 && hasInputSchema) {
-          logMessage(`     Schema preview: ${JSON.stringify(tool.input_schema).substring(0, 200)}...`);
-        }
+        // if (index < 2 && hasInputSchema) {
+        //   logMessage(`     Schema preview: ${JSON.stringify(tool.input_schema).substring(0, 10)}...`);
+        // }
       });
     }
   }, [normalizedTools]);

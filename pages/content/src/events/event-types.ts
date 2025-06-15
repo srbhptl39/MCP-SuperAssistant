@@ -24,6 +24,7 @@ export interface EventMap {
 
   // UI events
   'ui:sidebar-toggle': { visible: boolean; reason?: string };
+  'ui:sidebar-minimize': { minimized: boolean; reason?: string };
   'ui:sidebar-resize': { width: number };
   'ui:theme-changed': { theme: GlobalSettings['theme'] };
   'ui:notification-added': { notification: Notification };

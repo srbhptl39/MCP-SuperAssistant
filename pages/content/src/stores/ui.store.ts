@@ -15,6 +15,7 @@ export interface UIState {
 
   // Actions
   toggleSidebar: (reason?: string) => void;
+  toggleMinimize: (reason?: string) => void;
   resizeSidebar: (width: number) => void;
   setSidebarVisibility: (visible: boolean, reason?: string) => void;
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
@@ -46,7 +47,7 @@ const initialUserPreferences: UserPreferences = {
   customInstructionsEnabled: false,
 };
 
-const initialState: Omit<UIState, 'toggleSidebar' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme'> = {
+const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme'> = {
   sidebar: initialSidebarState,
   preferences: initialUserPreferences,
   notifications: [],
@@ -66,6 +67,16 @@ export const useUIStore = create<UIState>()(
           set(state => ({ sidebar: { ...state.sidebar, isVisible: newVisibility } }));
           console.log(`[UIStore] Sidebar toggled to ${newVisibility ? 'visible' : 'hidden'}. Reason: ${reason || 'user action'}`);
           eventBus.emit('ui:sidebar-toggle', { visible: newVisibility, reason: reason || 'user action' });
+        },
+
+        toggleMinimize: (reason?: string) => {
+          const newMinimized = !get().sidebar.isMinimized;
+          set(state => ({ 
+            sidebar: { ...state.sidebar, isMinimized: newMinimized },
+            preferences: { ...state.preferences, isMinimized: newMinimized }
+          }));
+          console.log(`[UIStore] Sidebar ${newMinimized ? 'minimized' : 'expanded'}. Reason: ${reason || 'user action'}`);
+          eventBus.emit('ui:sidebar-minimize', { minimized: newMinimized, reason: reason || 'user action' });
         },
 
         resizeSidebar: (width: number) => {
@@ -147,7 +158,12 @@ export const useUIStore = create<UIState>()(
         storage: createJSONStorage(() => localStorage),
         partialize: (state) => ({
           // Persist sidebar state and user preferences
-          sidebar: { width: state.sidebar.width, position: state.sidebar.position }, // Persist only some parts of sidebar
+          sidebar: { 
+            width: state.sidebar.width, 
+            position: state.sidebar.position,
+            isVisible: state.sidebar.isVisible,
+            isMinimized: state.sidebar.isMinimized
+          },
           preferences: state.preferences,
           theme: state.theme, // Persist theme
         }),

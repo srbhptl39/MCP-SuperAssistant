@@ -3,7 +3,33 @@ import type { SiteType } from './base/BaseSidebarManager';
 import { BaseSidebarManager } from './base/BaseSidebarManager';
 import { logMessage } from '@src/utils/helpers';
 import Sidebar from './Sidebar';
-import { getSidebarPreferences, type SidebarPreferences } from '@src/utils/storage';
+import type { UserPreferences } from '@src/types/stores';
+import { useUIStore } from '@src/stores/ui.store';
+
+// Helper function to get preferences from Zustand store
+const getZustandPreferences = (): UserPreferences => {
+  try {
+    const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
+    if (zustandState.state && zustandState.state.preferences) {
+      return zustandState.state.preferences;
+    }
+  } catch (error) {
+    logMessage(`[SidebarManager] Error reading Zustand store: ${error}`);
+  }
+  
+  // Return default preferences
+  return {
+    autoSubmit: false,
+    notifications: true,
+    theme: 'system',
+    language: navigator.language || 'en-US',
+    isPushMode: false,
+    sidebarWidth: 320,
+    isMinimized: false,
+    customInstructions: '',
+    customInstructionsEnabled: false,
+  };
+};
 
 // Declare a global Window interface extension to include activeSidebarManager property
 declare global {
@@ -29,7 +55,6 @@ export class SidebarManager extends BaseSidebarManager {
   private lastToolOutputsHash: string = '';
   private lastMcpToolsHash: string = '';
   private isFirstLoad: boolean = true;
-  private initialPreferences: SidebarPreferences | null = null;
   private isRendering: boolean = false; // CRITICAL FIX: Prevent multiple concurrent renders
   private lastRenderTime: number = 0; // CRITICAL FIX: Throttle renders
 
@@ -111,26 +136,33 @@ export class SidebarManager extends BaseSidebarManager {
    * Override show method to ensure preferences are loaded before rendering
    */
   public async show(): Promise<void> {
-    // CRITICAL FIX: Always load preferences before showing sidebar
-    if (!this.initialPreferences) {
-      logMessage('[SidebarManager] Loading preferences before show()');
-      try {
-        this.initialPreferences = await getSidebarPreferences();
-        logMessage(`[SidebarManager] Loaded preferences for show(): ${JSON.stringify(this.initialPreferences)}`);
+    // CRITICAL FIX: Always ensure window reference is set before showing
+    if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+      logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set during show()');
+      window.activeSidebarManager = this;
+    }
 
-        // Set the data-initial-minimized attribute based on loaded preferences
-        await this.initialize(); // Ensure initialized
-        if (this.shadowHost) {
-          const wasMinimized = this.initialPreferences?.isMinimized ?? false;
-          this.shadowHost.setAttribute('data-initial-minimized', wasMinimized ? 'true' : 'false');
-          logMessage(`[SidebarManager] Set data-initial-minimized to '${wasMinimized ? 'true' : 'false'}'`);
-        }
-      } catch (error) {
-        logMessage(
-          `[SidebarManager] Error loading preferences in show(): ${error instanceof Error ? error.message : String(error)}`,
-        );
-        // Continue with null preferences and let Sidebar component handle it
+    // CRITICAL FIX: Always load preferences from Zustand store before showing sidebar
+    logMessage('[SidebarManager] Loading preferences from Zustand store before show()');
+    try {
+      const userPreferences = getZustandPreferences();
+      logMessage(`[SidebarManager] Loaded Zustand preferences for show(): ${JSON.stringify(userPreferences)}`);
+
+      // Set the data-initial-minimized attribute based on loaded preferences
+      await this.initialize(); // Ensure initialized
+      if (this.shadowHost) {
+        const wasMinimized = userPreferences.isMinimized ?? false;
+        this.shadowHost.setAttribute('data-initial-minimized', wasMinimized ? 'true' : 'false');
+        logMessage(`[SidebarManager] Set data-initial-minimized to '${wasMinimized ? 'true' : 'false'}'`);
       }
+
+      // CRITICAL FIX: Sync Zustand store with actual visibility state when showing
+      this.syncZustandVisibilityState(true);
+    } catch (error) {
+      logMessage(
+        `[SidebarManager] Error loading Zustand preferences in show(): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Continue with default preferences and let Sidebar component handle it
     }
 
     // Now call the parent show method which will render with proper preferences
@@ -141,34 +173,36 @@ export class SidebarManager extends BaseSidebarManager {
    * Create sidebar content
    */
   protected createSidebarContent(): React.ReactNode {
-    // CRITICAL FIX: Ensure preferences are always loaded before rendering
-    // If initialPreferences is null, it means render() was called before showWithToolOutputs()
-    // In this case, we should load preferences synchronously or provide safe defaults
-    if (!this.initialPreferences) {
-      logMessage('[SidebarManager] WARNING: createSidebarContent called without initialPreferences loaded');
-      // For safety, we'll pass null and let Sidebar component handle the fallback
-      // The Sidebar component will load preferences asynchronously if needed
-    }
+    // Always get fresh preferences from Zustand store
+    const userPreferences = getZustandPreferences();
+    logMessage('[SidebarManager] Creating sidebar content with fresh Zustand preferences');
 
-    return <Sidebar initialPreferences={this.initialPreferences} />;
+    return <Sidebar initialPreferences={userPreferences} />;
   }
 
   /**
-   * Show the sidebar with tool outputs - Load preferences first to prevent flash
+   * Show the sidebar with tool outputs - Using Zustand store for preferences
    */
   public showWithToolOutputs(): void {
+    // CRITICAL FIX: Ensure window reference is set immediately
+    if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+      logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set in showWithToolOutputs()');
+      window.activeSidebarManager = this;
+    }
+
     // Add delay to ensure host website has fully loaded and won't interfere
     logMessage('[SidebarManager] Scheduling sidebar initialization with 500ms delay');
 
     setTimeout(async () => {
       logMessage('[SidebarManager] Starting delayed sidebar initialization');
 
-      try {
-        // Load preferences BEFORE React renders anything
-        logMessage('[SidebarManager] Loading preferences before render...');
-        this.initialPreferences = await getSidebarPreferences();
-        logMessage(`[SidebarManager] Loaded preferences: ${JSON.stringify(this.initialPreferences)}`);
+      // Verify window reference is still set after delay
+      if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+        logMessage('[SidebarManager] Re-setting window.activeSidebarManager reference after delay');
+        window.activeSidebarManager = this;
+      }
 
+      try {
         // Initialize with collapsed state to restore preferences including push mode
         await this.initializeCollapsedState();
         logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
@@ -176,9 +210,8 @@ export class SidebarManager extends BaseSidebarManager {
         logMessage(
           `[SidebarManager] Error during initialization: ${error instanceof Error ? error.message : String(error)}`,
         );
-        // OPTIMIZATION: Fallback to basic show method but avoid double render
+        // Fallback to basic show method
         try {
-          // Initialize without rendering first, then render once
           await this.initialize();
           if (this.shadowHost) {
             this.shadowHost.style.display = 'block';
@@ -188,7 +221,7 @@ export class SidebarManager extends BaseSidebarManager {
 
             // Single render call
             this.render();
-            logMessage('[SidebarManager] Fallback initialization with single render completed');
+            logMessage('[SidebarManager] Fallback initialization completed');
           }
         } catch (showError) {
           logMessage(
@@ -217,21 +250,27 @@ export class SidebarManager extends BaseSidebarManager {
   private async initializeCollapsedState(): Promise<void> {
     this.isFirstLoad = false;
 
+    // CRITICAL FIX: Ensure window reference is set before initialization
+    if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+      logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set in initializeCollapsedState()');
+      window.activeSidebarManager = this;
+    }
+
     // Initialize the sidebar DOM without rendering React yet
     await this.initialize();
 
-    // Use already-loaded preferences or load them if not available
     try {
-      const preferences = this.initialPreferences || (await getSidebarPreferences());
+      // Get preferences from Zustand store
+      const preferences = getZustandPreferences();
       const wasMinimized = preferences.isMinimized ?? false;
       const isPushMode = preferences.isPushMode ?? false;
       const sidebarWidth = preferences.sidebarWidth || 320;
 
       logMessage(
-        `[SidebarManager] Using preferences for initialization: minimized=${wasMinimized}, pushMode=${isPushMode}, width=${sidebarWidth}`,
+        `[SidebarManager] Using Zustand preferences for initialization: minimized=${wasMinimized}, pushMode=${isPushMode}, width=${sidebarWidth}`,
       );
 
-      // CRITICAL: Set ALL attributes and styles BEFORE making sidebar visible and rendering React
+      // Set ALL attributes and styles BEFORE making sidebar visible and rendering React
       if (this.shadowHost) {
         // Set initial state attributes FIRST - this is what React will read
         if (wasMinimized) {
@@ -250,6 +289,9 @@ export class SidebarManager extends BaseSidebarManager {
       }
       this._isVisible = true;
 
+      // CRITICAL FIX: Sync Zustand store with actual visibility state
+      this.syncZustandVisibilityState(true);
+
       // Set push content mode with appropriate width immediately
       if (isPushMode) {
         const initialWidth = wasMinimized ? 56 : sidebarWidth;
@@ -259,52 +301,35 @@ export class SidebarManager extends BaseSidebarManager {
         this.verifyAndRetryPushMode(initialWidth, wasMinimized);
       }
 
-      // CRITICAL: Only render React ONCE with all setup complete
-      // Force a small delay to ensure all DOM attributes are fully applied and readable
+      // Render React component with all setup complete
       setTimeout(() => {
+        // CRITICAL FIX: Final verification of window reference before React render
+        if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+          logMessage('[SidebarManager] Final check: Re-setting window.activeSidebarManager reference before React render');
+          window.activeSidebarManager = this;
+        }
+        
         logMessage('[SidebarManager] Rendering React component with all initial state ready');
         this.render();
 
         // Mark as fully initialized
         logMessage(`[SidebarManager] Sidebar fully initialized: minimized=${wasMinimized}, pushMode=${isPushMode}`);
-      }, 20); // Slightly longer delay to ensure DOM is fully ready
+      }, 20);
     } catch (error) {
       logMessage(
-        `[SidebarManager] Error loading preferences: ${error instanceof Error ? error.message : String(error)}`,
+        `[SidebarManager] Error during initialization: ${error instanceof Error ? error.message : String(error)}`,
       );
-      // OPTIMIZATION: Fallback with proper attribute setting to prevent re-renders
-      try {
-        // CRITICAL FIX: Load preferences even in fallback scenario
-        if (!this.initialPreferences) {
-          logMessage('[SidebarManager] Loading preferences for fallback initialization');
-          this.initialPreferences = await getSidebarPreferences();
-        }
+      // Fallback initialization
+      await this.initialize();
+      if (this.shadowHost) {
+        this.shadowHost.setAttribute('data-initial-minimized', 'false');
+        this.shadowHost.style.display = 'block';
+        this.shadowHost.style.opacity = '1';
+        this.shadowHost.classList.add('initialized');
+        this._isVisible = true;
 
-        // Initialize without rendering first, then render once with proper attributes
-        await this.initialize();
-        if (this.shadowHost) {
-          // CRITICAL: Set the data-initial-minimized attribute based on loaded preferences
-          const wasMinimized = this.initialPreferences?.isMinimized ?? false;
-          this.shadowHost.setAttribute('data-initial-minimized', wasMinimized ? 'true' : 'false');
-
-          // Set initial width based on minimized state
-          if (wasMinimized) {
-            this.shadowHost.style.width = '56px';
-          }
-
-          this.shadowHost.style.display = 'block';
-          this.shadowHost.style.opacity = '1';
-          this.shadowHost.classList.add('initialized');
-          this._isVisible = true;
-
-          // Single render call with preferences now available
-          this.render();
-          logMessage('[SidebarManager] Fallback initialization with single render completed');
-        }
-      } catch (showError) {
-        logMessage(
-          `[SidebarManager] Even fallback initialization failed: ${showError instanceof Error ? showError.message : String(showError)}`,
-        );
+        this.render();
+        logMessage('[SidebarManager] Fallback initialization completed');
       }
     }
   }
@@ -322,8 +347,21 @@ export class SidebarManager extends BaseSidebarManager {
 
     const isPushModeApplied = hasClass && hasMargin && hasWidth;
 
-    if (!isPushModeApplied) {
-      logMessage('[SidebarManager] Push mode verification failed, retrying...');
+    // Also check computed styles to see if they match what we set
+    const computedStyle = window.getComputedStyle(document.documentElement);
+    const computedMarginRight = computedStyle.marginRight;
+    const expectedMargin = `${width}px`;
+    const marginApplied = computedMarginRight === expectedMargin;
+
+    if (!isPushModeApplied || !marginApplied) {
+      logMessage(`[SidebarManager] Push mode verification failed. Applied: ${isPushModeApplied}, Margin correct: ${marginApplied} (expected: ${expectedMargin}, got: ${computedMarginRight})`);
+
+      if (!marginApplied) {
+        // If margin-based approach isn't working, try transform-based approach
+        logMessage('[SidebarManager] Falling back to transform-based push mode');
+        document.documentElement.classList.add('push-mode-transform');
+        document.documentElement.style.setProperty('transform', `translateX(-${width}px)`, 'important');
+      }
 
       // Retry applying push mode after a short delay
       setTimeout(() => {
@@ -334,13 +372,17 @@ export class SidebarManager extends BaseSidebarManager {
           const retryHasClass = document.documentElement.classList.contains('push-mode-enabled');
           const retryHasMargin = document.documentElement.style.marginRight !== '';
           const retryHasWidth = document.documentElement.style.width !== '';
+          const retryComputedStyle = window.getComputedStyle(document.documentElement);
+          const retryMarginApplied = retryComputedStyle.marginRight === expectedMargin || 
+                                    retryComputedStyle.transform.includes('translateX');
 
-          if (retryHasClass && retryHasMargin && retryHasWidth) {
+          if (retryHasClass && (retryHasMargin || retryMarginApplied)) {
             logMessage('[SidebarManager] Push mode successfully applied after retry');
           } else {
             logMessage('[SidebarManager] Push mode still failed after retry - website may be interfering');
+            logMessage(`[SidebarManager] Final state - margin-right: ${retryComputedStyle.marginRight}, transform: ${retryComputedStyle.transform}`);
           }
-        }, 50);
+        }, 100);
       }, 50);
     } else {
       logMessage('[SidebarManager] Push mode verification successful');
@@ -413,6 +455,35 @@ export class SidebarManager extends BaseSidebarManager {
   }
 
   /**
+   * Sync Zustand store visibility state with SidebarManager internal state
+   * @param isVisible Whether the sidebar should be visible
+   */
+  private syncZustandVisibilityState(isVisible: boolean): void {
+    try {
+      // Use the proper Zustand action to update visibility
+      const store = useUIStore.getState();
+      store.setSidebarVisibility(isVisible, 'sidebar-manager-sync');
+      logMessage(`[SidebarManager] Synced Zustand visibility state to: ${isVisible}`);
+    } catch (error) {
+      logMessage(`[SidebarManager] Error syncing Zustand visibility state: ${error}`);
+      
+      // Fallback to direct localStorage manipulation if store access fails
+      try {
+        const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
+        if (zustandState.state && zustandState.state.sidebar) {
+          zustandState.state.sidebar.isVisible = isVisible;
+          localStorage.setItem('mcp-super-assistant-ui-store', JSON.stringify(zustandState));
+          logMessage(`[SidebarManager] Fallback: Synced Zustand visibility state to: ${isVisible}`);
+        } else {
+          logMessage('[SidebarManager] Could not find Zustand sidebar state to update');
+        }
+      } catch (fallbackError) {
+        logMessage(`[SidebarManager] Fallback sync also failed: ${fallbackError}`);
+      }
+    }
+  }
+
+  /**
    * Destroy the sidebar manager
    * Override the parent destroy method to also remove the window reference
    */
@@ -424,5 +495,16 @@ export class SidebarManager extends BaseSidebarManager {
 
     // Call the parent destroy method
     super.destroy();
+  }
+
+  /**
+   * Override hide method to sync Zustand store visibility state
+   */
+  public async hide(): Promise<void> {
+    // Sync Zustand store with actual visibility state when hiding
+    this.syncZustandVisibilityState(false);
+    
+    // Call the parent hide method
+    return super.hide();
   }
 }

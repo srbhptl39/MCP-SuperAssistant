@@ -107,11 +107,18 @@ export abstract class BaseSidebarManager {
       const width = isCollapsed ? 56 : sidebarWidth || 320;
       document.documentElement.style.setProperty('--sidebar-width-mcp', `${width}px`);
 
-      // Apply specific inline styles directly to the HTML element
-      document.documentElement.style.setProperty('position', 'relative');
-      document.documentElement.style.setProperty('margin-right', `${width}px`);
-      document.documentElement.style.setProperty('width', `calc(100% - ${width}px)`);
-      document.documentElement.style.setProperty('min-height', '100vh');
+      // Apply specific inline styles directly to the HTML element with !important
+      document.documentElement.style.setProperty('position', 'relative', 'important');
+      document.documentElement.style.setProperty('margin-right', `${width}px`, 'important');
+      document.documentElement.style.setProperty('width', `calc(100% - ${width}px)`, 'important');
+      document.documentElement.style.setProperty('min-height', '100vh', 'important');
+      document.documentElement.style.setProperty('box-sizing', 'border-box', 'important');
+
+      // Also apply styles to body for better compatibility with different website layouts
+      document.body.style.setProperty('margin-right', '0', 'important');
+      document.body.style.setProperty('padding-right', '0', 'important');
+      document.body.style.setProperty('box-sizing', 'border-box', 'important');
+      document.body.style.setProperty('max-width', 'none', 'important');
 
       // Add classes to HTML root for CSS-based layout adjustments
       document.documentElement.classList.add('push-mode-enabled');
@@ -122,6 +129,19 @@ export abstract class BaseSidebarManager {
       } else {
         document.documentElement.classList.remove('sidebar-collapsed');
       }
+
+      // Debug logging to verify styles are applied
+      logMessage(`[BaseSidebarManager] Push mode enabled with width: ${width}px`);
+      logMessage(`[BaseSidebarManager] Applied styles - margin-right: ${document.documentElement.style.marginRight}, width: ${document.documentElement.style.width}`);
+      logMessage(`[BaseSidebarManager] HTML classes: ${document.documentElement.className}`);
+
+      // Check if styles are being overridden
+      const computedStyle = window.getComputedStyle(document.documentElement);
+      logMessage(`[BaseSidebarManager] Computed styles - margin-right: ${computedStyle.marginRight}, width: ${computedStyle.width}`);
+
+      // Also check body styles
+      const bodyComputedStyle = window.getComputedStyle(document.body);
+      logMessage(`[BaseSidebarManager] Body computed styles - margin-right: ${bodyComputedStyle.marginRight}, max-width: ${bodyComputedStyle.maxWidth}`);
 
       // When push mode is enabled, ensure the sidebar is visible
       if (!this._isVisible || (this.shadowHost && this.shadowHost.style.display !== 'block')) {
@@ -135,9 +155,17 @@ export abstract class BaseSidebarManager {
       document.documentElement.style.removeProperty('margin-right');
       document.documentElement.style.removeProperty('width');
       document.documentElement.style.removeProperty('min-height');
+      document.documentElement.style.removeProperty('box-sizing');
+      document.documentElement.style.removeProperty('transform');
+
+      // Remove body styles
+      document.body.style.removeProperty('margin-right');
+      document.body.style.removeProperty('padding-right');
+      document.body.style.removeProperty('box-sizing');
+      document.body.style.removeProperty('max-width');
 
       // Remove push mode classes when disabled
-      document.documentElement.classList.remove('push-mode-enabled', 'sidebar-collapsed');
+      document.documentElement.classList.remove('push-mode-enabled', 'sidebar-collapsed', 'push-mode-transform');
     }
 
     // Ensure push mode styles are in the document
@@ -185,8 +213,9 @@ export abstract class BaseSidebarManager {
   public updatePushModeStyles(width: number): void {
     if (this._isPushContentMode) {
       document.documentElement.style.setProperty('--sidebar-width-mcp', `${width}px`);
-      document.documentElement.style.setProperty('margin-right', `${width}px`);
-      document.documentElement.style.setProperty('width', `calc(100% - ${width}px)`);
+      document.documentElement.style.setProperty('margin-right', `${width}px`, 'important');
+      document.documentElement.style.setProperty('width', `calc(100% - ${width}px)`, 'important');
+      logMessage(`[BaseSidebarManager] Updated push mode styles to width: ${width}px`);
     }
   }
 
@@ -209,10 +238,33 @@ export abstract class BaseSidebarManager {
       const styleEl = document.createElement('style');
       styleEl.id = 'mcp-sidebar-push-styles';
       styleEl.textContent = `
+        /* High-priority push mode styles with !important to override website styles */
         html.push-mode-enabled {
-          overflow-x: hidden;
-          transition: margin-right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), 
-                      width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+          overflow-x: hidden !important;
+          transition: margin-right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important, 
+                      width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important,
+                      transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* Force position and dimensions for push mode */
+        html.push-mode-enabled {
+          position: relative !important;
+        }
+        
+        /* Alternative transform-based push mode for websites that override margin/width */
+        html.push-mode-enabled.push-mode-transform {
+          transform: translateX(calc(var(--sidebar-width-mcp, 320px) * -1)) !important;
+          width: 100vw !important;
+          margin-right: 0 !important;
+        }
+        
+        /* Ensure body also respects the new layout */
+        html.push-mode-enabled body {
+          margin-right: 0 !important;
+          padding-right: 0 !important;
+          overflow-x: hidden !important;
+          box-sizing: border-box !important;
         }
         
         /* Ensure fixed elements don't overlap with sidebar */
