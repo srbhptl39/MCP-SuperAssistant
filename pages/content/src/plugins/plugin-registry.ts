@@ -3,6 +3,7 @@ import { eventBus } from '../events/event-bus';
 import type { EventMap } from '../events'; 
 import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
+import { useAdapterStore } from '../stores/adapter.store';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
@@ -116,6 +117,24 @@ class PluginRegistry {
       // Register plugin
       this.plugins.set(pluginName, registration);
 
+      // Also register in the AdapterStore for React component integration
+      try {
+        const adapterStore = useAdapterStore.getState();
+        await adapterStore.registerPlugin(plugin, {
+          id: registration.config.id,
+          name: registration.config.name,
+          description: registration.config.description,
+          version: registration.config.version,
+          enabled: registration.config.enabled,
+          priority: registration.config.priority || 0,
+          settings: registration.config.settings || {}
+        });
+        console.log(`[PluginRegistry] Also registered ${pluginName} in AdapterStore for React integration`);
+      } catch (adapterStoreError) {
+        console.warn(`[PluginRegistry] Failed to register ${pluginName} in AdapterStore:`, adapterStoreError);
+        // Don't fail the entire registration if AdapterStore registration fails
+      }
+
       eventBus.emit('plugin:registered', { name: pluginName, version: plugin.version });
 
       console.log(`[PluginRegistry] Registered plugin: ${pluginName} v${plugin.version}`);
@@ -219,6 +238,16 @@ class PluginRegistry {
       registration.status = 'active';
       registration.lastUsedAt = Date.now(); // Update last used timestamp
 
+      // Also activate in the AdapterStore for React component integration
+      try {
+        const adapterStore = useAdapterStore.getState();
+        await adapterStore.activateAdapter(pluginName);
+        console.log(`[PluginRegistry] Also activated ${pluginName} in AdapterStore for React integration`);
+      } catch (adapterStoreError) {
+        console.warn(`[PluginRegistry] Failed to activate ${pluginName} in AdapterStore:`, adapterStoreError);
+        // Don't fail the entire activation if AdapterStore activation fails
+      }
+
       eventBus.emit('adapter:activated', {
         pluginName: pluginName,
         timestamp: Date.now(),
@@ -254,6 +283,15 @@ class PluginRegistry {
       await performanceMonitor.time(`plugin-deactivation-${pluginName}`, async () => {
         await this.activePlugin!.deactivate();
       });
+
+      // Also deactivate in the AdapterStore for React component integration
+      try {
+        const adapterStore = useAdapterStore.getState();
+        await adapterStore.deactivateAdapter(pluginName, 'manual-deactivation');
+        console.log(`[PluginRegistry] Also deactivated ${pluginName} in AdapterStore`);
+      } catch (adapterStoreError) {
+        console.warn(`[PluginRegistry] Failed to deactivate ${pluginName} in AdapterStore:`, adapterStoreError);
+      }
 
       eventBus.emit('adapter:deactivated', {
         pluginName: pluginName,

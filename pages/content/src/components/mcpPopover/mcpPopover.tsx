@@ -515,6 +515,18 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   // Use MCP state hook to get persistent MCP toggle state
   const { mcpEnabled: mcpEnabledFromStore, setMCPEnabled } = useMCPState();
 
+  // Debug: Log adapter state changes
+  useEffect(() => {
+    console.log(`[MCPPopover] Adapter state changed:`, {
+      isAdapterActive,
+      hasActivePlugin: !!activePlugin,
+      pluginName: activePlugin?.name,
+      hasInsertText: !!insertText,
+      hasAttachFile: !!attachFile,
+      capabilities: activePlugin?.capabilities
+    });
+  }, [isAdapterActive, activePlugin, insertText, attachFile]);
+
   // Debug: Log instructions state for debugging
   useEffect(() => {
     console.log(`[MCPPopover] Instructions state:`, {
@@ -563,7 +575,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   // Instructions come directly from the global state (managed by Instructions panel in sidebar)
   const [instructions, setInstructions] = useState(instructionsState.instructions || '');
   const [copyStatus, setCopyStatus] = useState<'Copy' | 'Copied!' | 'Error'>('Copy');
-  const [insertStatus, setInsertStatus] = useState<'Insert' | 'Inserted!' | 'No Adapter'>('Insert');
+  const [insertStatus, setInsertStatus] = useState<'Insert' | 'Inserted!' | 'No Adapter' | 'No Content' | 'Failed'>('Insert');
   const [attachStatus, setAttachStatus] = useState<'Attach' | 'Attached!' | 'No File' | 'Error'>('Attach');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -656,27 +668,72 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     }
   };
 
-  
+
   const handleInsert = async () => {
-    if (isAdapterActive && activePlugin) {
+    if (!instructions.trim()) {
+      setInsertStatus('No Content');
+      setTimeout(() => setInsertStatus('Insert'), 1200);
+      return;
+    }
+
+    // Add more detailed debugging
+    console.log(`[MCPPopover] handleInsert called - isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, insertText: ${!!insertText}`);
+    if (activePlugin) {
+      console.log(`[MCPPopover] Active plugin details:`, {
+        name: activePlugin.name,
+        capabilities: activePlugin.capabilities,
+        hasInsertText: !!activePlugin.insertText
+      });
+    }
+
+    // Try with a small delay first to allow state to propagate
+    if (!isAdapterActive || !activePlugin || !insertText) {
+      console.log(`[MCPPopover] Adapter not immediately ready, waiting 100ms and retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (isAdapterActive && activePlugin && insertText) {
       try {
+        console.log(`[MCPPopover] Attempting to insert text using ${activePlugin.name} adapter`);
         const success = await insertText(instructions);
         if (success) {
           setInsertStatus('Inserted!');
+          console.log(`[MCPPopover] Text inserted successfully using ${activePlugin.name} adapter`);
         } else {
-          setInsertStatus('No Adapter');
+          setInsertStatus('Failed');
+          console.warn(`[MCPPopover] Text insertion failed using ${activePlugin.name} adapter`);
         }
       } catch (error) {
-        setInsertStatus('No Adapter');
+        console.error(`[MCPPopover] Error inserting text:`, error);
+        setInsertStatus('Failed');
       }
     } else {
       setInsertStatus('No Adapter');
+      console.warn(`[MCPPopover] No active adapter available for text insertion. isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, insertText: ${!!insertText}`);
+      if (activePlugin) {
+        console.warn(`[MCPPopover] Active plugin details:`, {
+          name: activePlugin.name,
+          capabilities: activePlugin.capabilities,
+          hasInsertTextMethod: !!activePlugin.insertText
+        });
+      }
     }
     setTimeout(() => setInsertStatus('Insert'), 1200);
   };
 
 
   const handleAttach = async () => {
+    // Add more detailed debugging
+    console.log(`[MCPPopover] handleAttach called - isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, attachFile: ${!!attachFile}`);
+    if (activePlugin) {
+      console.log(`[MCPPopover] Active plugin details for attach:`, {
+        name: activePlugin.name,
+        capabilities: activePlugin.capabilities,
+        hasAttachFile: !!activePlugin.attachFile,
+        supportsFileAttachment: activePlugin.capabilities.includes('file-attachment')
+      });
+    }
+
     if (isAdapterActive && activePlugin && activePlugin.capabilities.includes('file-attachment')) {
       const isPerplexity = activePlugin.name === 'Perplexity';
       const isGemini = activePlugin.name === 'Gemini';
@@ -685,17 +742,29 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
       const fileName = `mcp_superassistant_instructions${fileExtension}`;
       const file = new File([instructions], fileName, { type: fileType });
       try {
+        console.log(`[MCPPopover] Attempting to attach file using ${activePlugin.name} adapter`);
         const success = await attachFile(file);
         if (success) {
           setAttachStatus('Attached!');
+          console.log(`[MCPPopover] File attached successfully using ${activePlugin.name} adapter`);
         } else {
           setAttachStatus('Error');
+          console.warn(`[MCPPopover] File attachment failed using ${activePlugin.name} adapter`);
         }
-      } catch {
+      } catch (error) {
+        console.error(`[MCPPopover] Error attaching file:`, error);
         setAttachStatus('Error');
       }
     } else {
       setAttachStatus('No File');
+      console.warn(`[MCPPopover] Cannot attach file. isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, supportsFileAttachment: ${activePlugin?.capabilities.includes('file-attachment')}`);
+      if (activePlugin) {
+        console.warn(`[MCPPopover] Active plugin details:`, {
+          name: activePlugin.name,
+          capabilities: activePlugin.capabilities,
+          hasAttachFileMethod: !!activePlugin.attachFile
+        });
+      }
     }
     setTimeout(() => setAttachStatus('Attach'), 1200);
   };
