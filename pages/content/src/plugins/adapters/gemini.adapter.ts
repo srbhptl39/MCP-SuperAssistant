@@ -51,14 +51,32 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   private mcpPopoverContainer: HTMLElement | null = null;
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
+  
+  // Setup state tracking
+  private storeEventListenersSetup: boolean = false;
+  private domObserversSetup: boolean = false;
+  private uiIntegrationSetup: boolean = false;
+  
+  // Instance tracking for debugging
+  private static instanceCount = 0;
+  private instanceId: number;
 
   constructor() {
     super();
+    GeminiAdapter.instanceCount++;
+    this.instanceId = GeminiAdapter.instanceCount;
+    console.log(`[GeminiAdapter] Instance #${this.instanceId} created. Total instances: ${GeminiAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
+    // Guard against multiple initialization
+    if (this.currentStatus === 'initializing' || this.currentStatus === 'active') {
+      this.context?.logger.warn(`Gemini adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
+      return;
+    }
+
     await super.initialize(context);
-    this.context.logger.info('Initializing Gemini adapter...');
+    this.context.logger.info(`Initializing Gemini adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -69,8 +87,14 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   async activate(): Promise<void> {
+    // Guard against multiple activation
+    if (this.currentStatus === 'active') {
+      this.context?.logger.warn(`Gemini adapter instance #${this.instanceId} already active, skipping re-activation`);
+      return;
+    }
+
     await super.activate();
-    this.context.logger.info('Activating Gemini adapter...');
+    this.context.logger.info(`Activating Gemini adapter instance #${this.instanceId}...`);
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -84,12 +108,23 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   async deactivate(): Promise<void> {
+    // Guard against double deactivation
+    if (this.currentStatus === 'inactive' || this.currentStatus === 'disabled') {
+      this.context?.logger.warn('Gemini adapter already inactive, skipping deactivation');
+      return;
+    }
+
     await super.deactivate();
     this.context.logger.info('Deactivating Gemini adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+
+    // Reset setup flags
+    this.storeEventListenersSetup = false;
+    this.domObserversSetup = false;
+    this.uiIntegrationSetup = false;
 
     // Emit deactivation event
     this.context.eventBus.emit('adapter:deactivated', {
@@ -117,6 +152,11 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    
+    // Reset all setup flags
+    this.storeEventListenersSetup = false;
+    this.domObserversSetup = false;
+    this.uiIntegrationSetup = false;
   }
 
   /**
@@ -432,7 +472,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   // New architecture integration methods
 
   private setupStoreEventListeners(): void {
-    this.context.logger.debug('Setting up store event listeners for Gemini adapter');
+    if (this.storeEventListenersSetup) {
+      this.context.logger.warn(`Store event listeners already set up for instance #${this.instanceId}, skipping`);
+      return;
+    }
+
+    this.context.logger.debug(`Setting up store event listeners for Gemini adapter instance #${this.instanceId}`);
 
     // Listen for tool execution events from the store
     this.context.eventBus.on('tool:execution-completed', (data) => {
@@ -445,10 +490,17 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     this.context.eventBus.on('ui:sidebar-toggle', (data) => {
       this.context.logger.debug('Sidebar toggled:', data);
     });
+
+    this.storeEventListenersSetup = true;
   }
 
   private setupDOMObservers(): void {
-    this.context.logger.debug('Setting up DOM observers for Gemini adapter');
+    if (this.domObserversSetup) {
+      this.context.logger.warn(`DOM observers already set up for instance #${this.instanceId}, skipping`);
+      return;
+    }
+
+    this.context.logger.debug(`Setting up DOM observers for Gemini adapter instance #${this.instanceId}`);
 
     // Set up mutation observer to detect page changes and re-inject UI if needed
     this.mutationObserver = new MutationObserver((mutations) => {
@@ -474,10 +526,19 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       childList: true,
       subtree: true
     });
+    
+    this.domObserversSetup = true;
   }
 
   private setupUIIntegration(): void {
-    this.context.logger.debug('Setting up UI integration for Gemini adapter');
+    // Allow multiple calls for UI integration (for re-injection after page changes)
+    // but log it for debugging
+    if (this.uiIntegrationSetup) {
+      this.context.logger.debug(`UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`);
+    } else {
+      this.context.logger.debug(`Setting up UI integration for Gemini adapter instance #${this.instanceId}`);
+      this.uiIntegrationSetup = true;
+    }
 
     // Wait for page to be ready, then inject MCP popover
     this.waitForPageReady().then(() => {

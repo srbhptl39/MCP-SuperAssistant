@@ -16,6 +16,7 @@ class PluginRegistry {
   private context: PluginContext | null = null;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private isPerformingInitialActivation = false;
 
   async initialize(context: PluginContext): Promise<void> {
     if (this.initializationPromise) {
@@ -66,6 +67,15 @@ class PluginRegistry {
 
     // Listen for site changes to auto-activate plugins
     const unsubscribeSiteChange = eventBus.on('app:site-changed', async ({ hostname }: EventMap['app:site-changed']) => {
+      console.log(`[PluginRegistry] Site change event received for ${hostname}, initial activation flag: ${this.isPerformingInitialActivation}`);
+      
+      // Skip if we're in the middle of initial activation to prevent race conditions
+      if (this.isPerformingInitialActivation) {
+        console.log(`[PluginRegistry] Skipping site-change activation for ${hostname} (initial activation in progress)`);
+        return;
+      }
+      
+      console.log(`[PluginRegistry] Site changed to ${hostname}, attempting plugin activation`);
       await this.activatePluginForHostname(hostname);
     });
 
@@ -194,30 +204,49 @@ class PluginRegistry {
     }
   }
 
-  async activatePluginForHostname(hostname: string): Promise<void> {
-    const plugin = this.findPluginForHostname(hostname);
+  async activatePluginForHostname(hostname: string, isInitialActivation = false): Promise<void> {
+    if (isInitialActivation) {
+      this.isPerformingInitialActivation = true;
+    }
     
-    if (!plugin) {
-      console.log(`[PluginRegistry] No plugin found for hostname: ${hostname}`);
-      if (this.activePlugin) {
-        await this.deactivateCurrentPlugin();
+    try {
+      console.log(`[PluginRegistry] activatePluginForHostname called for: ${hostname}${isInitialActivation ? ' (initial)' : ''}`);
+      
+      const plugin = this.findPluginForHostname(hostname);
+      
+      if (!plugin) {
+        console.log(`[PluginRegistry] No plugin found for hostname: ${hostname}`);
+        if (this.activePlugin) {
+          await this.deactivateCurrentPlugin();
+        }
+        return;
       }
-      return;
-    }
 
-    // Don't reactivate if already active
-    if (this.activePlugin?.name === plugin.name) {
-      console.log(`[PluginRegistry] Plugin ${plugin.name} already active for ${hostname}`);
-      return;
-    }
+      // Don't reactivate if already active
+      if (this.activePlugin?.name === plugin.name) {
+        console.log(`[PluginRegistry] Plugin ${plugin.name} already active for ${hostname}, skipping activation`);
+        return;
+      }
 
-    await this.activatePlugin(plugin.name);
+      console.log(`[PluginRegistry] Activating plugin ${plugin.name} for hostname: ${hostname}`);
+      await this.activatePlugin(plugin.name);
+    } finally {
+      if (isInitialActivation) {
+        this.isPerformingInitialActivation = false;
+      }
+    }
   }
 
   async activatePlugin(pluginName: string): Promise<void> {
     const registration = this.plugins.get(pluginName);
     if (!registration) {
       throw new Error(`Plugin ${pluginName} is not registered`);
+    }
+
+    // Guard against activating an already active plugin
+    if (this.activePlugin && this.activePlugin.name === pluginName && registration.status === 'active') {
+      console.log(`[PluginRegistry] Plugin ${pluginName} is already active, skipping activation`);
+      return;
     }
 
     try {
@@ -500,6 +529,12 @@ class PluginRegistry {
     registration.config = updatedConfig;
     
     eventBus.emit('plugin:config-updated', { name: pluginName, config: updatedConfig, timestamp: Date.now() });
+  }
+
+  setInitialActivationFlag(flag: boolean): void {
+    console.log(`[PluginRegistry] setInitialActivationFlag called with: ${flag}, current flag: ${this.isPerformingInitialActivation}`);
+    this.isPerformingInitialActivation = flag;
+    console.log(`[PluginRegistry] Initial activation flag set to: ${flag}`);
   }
 
   // Debug information

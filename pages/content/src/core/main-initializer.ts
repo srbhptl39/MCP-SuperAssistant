@@ -43,6 +43,7 @@ class Logger {
 const logger = new Logger('[MainInitializer]');
 
 let isInitialized = false;
+let isApplicationStateInitialized = false;
 let initializationStartTime = 0;
 
 /**
@@ -153,6 +154,11 @@ async function activateSidebarPlugin(): Promise<void> {
  * Initialize application state and trigger initial actions
  */
 async function initializeApplicationState(): Promise<void> {
+  if (isApplicationStateInitialized) {
+    logger.warn('Application state already initialized, skipping.');
+    return;
+  }
+  
   logger.log('Initializing application state...');
 
   await performanceMonitor.time('app-state-initialization', async () => {
@@ -167,18 +173,24 @@ async function initializeApplicationState(): Promise<void> {
       const hostname = window.location.hostname;
       const site = window.location.href;
 
-      // Update app store with current site
-      useAppStore.getState().setCurrentSite({ site, host: hostname });
-      logger.log(`Current site set to: ${hostname}`);
-
-      // Auto-activate appropriate adapter for the current hostname
+      // Import plugin registry first and set initial activation flag
+      const { pluginRegistry } = await import('../plugins/plugin-registry');
+      
+      // Set the flag before any operations that might trigger events
+      pluginRegistry.setInitialActivationFlag(true);
+      
       try {
-        const { pluginRegistry } = await import('../plugins/plugin-registry');
-        await pluginRegistry.activatePluginForHostname(hostname);
+        // Update app store with current site (this will emit 'app:site-changed')
+        useAppStore.getState().setCurrentSite({ site, host: hostname });
+        logger.log(`Current site set to: ${hostname}`);
+
+        // Auto-activate appropriate adapter for the current hostname
+        logger.log(`Attempting to auto-activate adapter for hostname: ${hostname}`);
+        await pluginRegistry.activatePluginForHostname(hostname, true); // Pass true for initial activation
         logger.log(`Adapter auto-activation completed for hostname: ${hostname}`);
-      } catch (adapterError) {
-        logger.warn(`Failed to auto-activate adapter for hostname ${hostname}:`, adapterError);
-        // Don't throw - adapter activation failure shouldn't stop app initialization
+      } finally {
+        // Clear the flag after all operations are complete
+        pluginRegistry.setInitialActivationFlag(false);
       }
     }
 
@@ -201,6 +213,9 @@ async function initializeApplicationState(): Promise<void> {
       }, 'initial-connection');
     }
   });
+  
+  isApplicationStateInitialized = true;
+  logger.log('Application state initialization completed.');
 }
 
 /**
@@ -311,6 +326,7 @@ export async function applicationCleanup(): Promise<void> {
     performanceMonitor.mark('app-cleanup-complete');
 
     isInitialized = false;
+    isApplicationStateInitialized = false;
     logger.log('Application cleanup completed.');
 
     eventBus.emit('app:shutdown', {
