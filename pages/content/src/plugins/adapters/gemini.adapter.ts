@@ -688,35 +688,73 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Create the state manager object
     const stateManager = {
       getState: () => {
-        // Get state from new stores
-        const uiState = context.stores.ui;
-        const adapterState = context.stores.adapter;
+        try {
+          // Get state from UI store - MCP enabled state should reflect sidebar visibility
+          const uiState = context.stores.ui;
+          
+          // Check if sidebar is visible to determine MCP enabled state
+          const sidebarVisible = uiState?.sidebar?.isVisible ?? false;
+          const autoSubmitEnabled = uiState?.preferences?.autoSubmit ?? false;
 
-        return {
-          mcpEnabled: !!adapterState?.activeAdapterName,
-          autoInsert: uiState?.preferences?.autoSubmit || false,
-          autoSubmit: uiState?.preferences?.autoSubmit || false,
-          autoExecute: false // Default for now, can be extended
-        };
+          context.logger.debug(`Getting MCP toggle state: sidebarVisible=${sidebarVisible}, autoSubmit=${autoSubmitEnabled}`);
+
+          return {
+            mcpEnabled: sidebarVisible, // MCP enabled = sidebar visible
+            autoInsert: autoSubmitEnabled,
+            autoSubmit: autoSubmitEnabled,
+            autoExecute: false // Default for now, can be extended
+          };
+        } catch (error) {
+          context.logger.error('Error getting toggle state:', error);
+          // Return safe defaults in case of error
+          return {
+            mcpEnabled: false,
+            autoInsert: false,
+            autoSubmit: false,
+            autoExecute: false
+          };
+        }
       },
 
       setMCPEnabled: (enabled: boolean) => {
-        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} via new architecture`);
+        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility`);
 
-        if (enabled) {
-          // Activate this adapter
-          context.stores.adapter?.activateAdapter?.(adapterName);
-          context.eventBus.emit('adapter:activated', {
-            pluginName: adapterName,
-            timestamp: Date.now()
+        try {
+          // Primary method: Control sidebar visibility through UI store
+          if (context.stores.ui?.setSidebarVisibility) {
+            context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle');
+            context.logger.debug(`Sidebar visibility set to: ${enabled} via UI store`);
+          } else {
+            context.logger.warn('UI store setSidebarVisibility method not available');
+          }
+
+          // Secondary method: Control through global sidebar manager as additional safeguard
+          const sidebarManager = (window as any).activeSidebarManager;
+          if (sidebarManager) {
+            if (enabled) {
+              context.logger.debug('Showing sidebar via activeSidebarManager');
+              sidebarManager.show().catch((error: any) => {
+                context.logger.error('Error showing sidebar:', error);
+              });
+            } else {
+              context.logger.debug('Hiding sidebar via activeSidebarManager');
+              sidebarManager.hide().catch((error: any) => {
+                context.logger.error('Error hiding sidebar:', error);
+              });
+            }
+          } else {
+            context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
+          }
+
+          // Emit events for other components that might be listening
+          context.eventBus.emit('ui:sidebar-toggle', {
+            visible: enabled,
+            reason: 'mcp-popover-toggle'
           });
-        } else {
-          // Deactivate adapter
-          context.stores.adapter?.deactivateAdapter?.();
-          context.eventBus.emit('adapter:deactivated', {
-            pluginName: adapterName,
-            timestamp: Date.now()
-          });
+
+          context.logger.info(`MCP toggle completed: sidebar ${enabled ? 'shown' : 'hidden'}`);
+        } catch (error) {
+          context.logger.error('Error in setMCPEnabled:', error);
         }
 
         stateManager.updateUI();

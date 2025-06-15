@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useCurrentAdapter, useUserPreferences } from '../../hooks';
+import { useCurrentAdapter, useUserPreferences, useSidebarState } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 
@@ -511,6 +511,9 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   // Use Zustand hooks for adapter and user preferences
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
   const { preferences } = useUserPreferences();
+  
+  // Import useSidebarState hook to sync with actual sidebar visibility
+  const { isVisible: sidebarVisible } = useSidebarState();
 
   // Debug: Log instructions state for debugging
   useEffect(() => {
@@ -549,7 +552,14 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     innerShadow: isDarkMode ? 'inset 0 1px 2px rgba(20,20,20,0.10)' : 'inset 0 1px 2px rgba(60,64,67,0.03)',
   };
   useInjectStyles();
-  const [state, setState] = useState<MCPToggleState>(toggleStateManager.getState());
+  const [state, setState] = useState<MCPToggleState>(() => {
+    // Initialize state with current sidebar visibility
+    const initialState = toggleStateManager.getState();
+    return {
+      ...initialState,
+      mcpEnabled: sidebarVisible // Sync with actual sidebar visibility
+    };
+  });
   // Instructions come directly from the global state (managed by Instructions panel in sidebar)
   const [instructions, setInstructions] = useState(instructionsState.instructions || '');
   const [copyStatus, setCopyStatus] = useState<'Copy' | 'Copied!' | 'Error'>('Copy');
@@ -561,8 +571,25 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
 
   // Update state from manager
   const updateState = useCallback(() => {
-    setState(toggleStateManager.getState());
-  }, [toggleStateManager]);
+    const currentState = toggleStateManager.getState();
+    setState(prevState => ({
+      ...currentState,
+      mcpEnabled: sidebarVisible // Always sync with actual sidebar visibility
+    }));
+  }, [toggleStateManager, sidebarVisible]);
+
+  // Sync state when sidebar visibility changes externally (e.g., from other UI components)
+  useEffect(() => {
+    console.log(`[MCPPopover] Sidebar visibility changed to: ${sidebarVisible}, updating MCP toggle state`);
+    setState(prevState => {
+      const newState = {
+        ...prevState,
+        mcpEnabled: sidebarVisible
+      };
+      console.log(`[MCPPopover] State updated:`, newState);
+      return newState;
+    });
+  }, [sidebarVisible]);
 
   // Subscribe to global instructions state changes (Instructions panel is source of truth)
   useEffect(() => {
@@ -580,10 +607,23 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     };
   }, []);
 
+  // Initialize and sync popover state with actual sidebar state
+  useEffect(() => {
+    // Force initial state sync to ensure popover reflects current sidebar state
+    const currentToggleState = toggleStateManager.getState();
+    console.log(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, sidebar: ${sidebarVisible}`);
+    
+    setState({
+      ...currentToggleState,
+      mcpEnabled: sidebarVisible // Always prioritize actual sidebar visibility
+    });
+  }, [toggleStateManager, sidebarVisible]); // Include dependencies
+
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
+    console.log(`[MCPPopover] MCP toggle changed to: ${checked}`);
     toggleStateManager.setMCPEnabled(checked);
-    updateState();
+    // State will be updated automatically through the sidebar visibility effect
   };
   const handleAutoInsert = (checked: boolean) => {
     toggleStateManager.setAutoInsert(checked);
@@ -687,8 +727,8 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     <div className="mcp-popover-container" id="mcp-popover-container" ref={containerRef}>
       <button
         className={`mcp-main-button${state.mcpEnabled ? '' : ' inactive'}`}
-        aria-label="MCP Settings"
-        title="MCP Settings"
+        aria-label={`MCP Settings - ${state.mcpEnabled ? 'Active' : 'Inactive'}`}
+        title={`MCP Settings - ${state.mcpEnabled ? 'Sidebar Visible' : 'Sidebar Hidden'}`}
         type="button"
         ref={buttonRef}
         onClick={() => setIsPopoverOpen(!isPopoverOpen)}>
