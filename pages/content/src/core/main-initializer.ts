@@ -170,6 +170,16 @@ async function initializeApplicationState(): Promise<void> {
       // Update app store with current site
       useAppStore.getState().setCurrentSite({ site, host: hostname });
       logger.log(`Current site set to: ${hostname}`);
+
+      // Auto-activate appropriate adapter for the current hostname
+      try {
+        const { pluginRegistry } = await import('../plugins/plugin-registry');
+        await pluginRegistry.activatePluginForHostname(hostname);
+        logger.log(`Adapter auto-activation completed for hostname: ${hostname}`);
+      } catch (adapterError) {
+        logger.warn(`Failed to auto-activate adapter for hostname ${hostname}:`, adapterError);
+        // Don't throw - adapter activation failure shouldn't stop app initialization
+      }
     }
 
     // Check for connection configuration and attempt initial connection

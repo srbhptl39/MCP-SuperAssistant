@@ -345,6 +345,15 @@ function collectDemographicData(): { [key: string]: any } {
 
     logMessage('Application initialized successfully with Session 10 architecture');
 
+    // Expose plugin registry globally for adapter access
+    try {
+      const { pluginRegistry } = await import('./plugins/plugin-registry');
+      (window as any).pluginRegistry = pluginRegistry;
+      logMessage('Plugin registry exposed on window.pluginRegistry');
+    } catch (pluginError) {
+      console.warn('Failed to expose plugin registry globally:', pluginError);
+    }
+
     // Expose initialization utilities for debugging
     if (process.env.NODE_ENV === 'development') {
       (window as any).appInitUtils = initializationUtils;

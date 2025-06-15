@@ -655,6 +655,8 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
       setTimeout(() => setCopyStatus('Copy'), 1200);
     }
   };
+
+  
   const handleInsert = async () => {
     if (isAdapterActive && activePlugin) {
       try {
@@ -672,6 +674,8 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     }
     setTimeout(() => setInsertStatus('Insert'), 1200);
   };
+
+
   const handleAttach = async () => {
     if (isAdapterActive && activePlugin && activePlugin.capabilities.includes('file-attachment')) {
       const isPerplexity = activePlugin.name === 'Perplexity';

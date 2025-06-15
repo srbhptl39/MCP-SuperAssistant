@@ -5,7 +5,7 @@ import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
-import { ExampleForumAdapter } from './adapters/example-forum.adapter';
+// import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
@@ -380,32 +380,32 @@ class PluginRegistry {
       });
 
       // Register DefaultAdapter as fallback
-      const defaultAdapter = new DefaultAdapter();
-      await this.register(defaultAdapter, {
-        id: 'default-adapter',
-        name: 'Default Adapter',
-        description: 'A fallback adapter that works on any website',
-        version: '1.0.0',
-        enabled: true,
-        priority: 99, // Low priority, acts as fallback
-        settings: {
-          logLevel: 'info',
-        },
-      });
+      // const defaultAdapter = new DefaultAdapter();
+      // await this.register(defaultAdapter, {
+      //   id: 'default-adapter',
+      //   name: 'Default Adapter',
+      //   description: 'A fallback adapter that works on any website',
+      //   version: '1.0.0',
+      //   enabled: true,
+      //   priority: 99, // Low priority, acts as fallback
+      //   settings: {
+      //     logLevel: 'info',
+      //   },
+      // });
       
       // Register ExampleForumAdapter for forum.example.com
-      const exampleForumAdapter = new ExampleForumAdapter();
-      await this.register(exampleForumAdapter, {
-        id: 'example-forum-adapter',
-        name: 'Example Forum Adapter',
-        description: 'Specialized adapter for forum.example.com with forum-specific functionality',
-        version: '1.0.0',
-        enabled: true,
-        priority: 10, // Higher priority than default
-        settings: {
-          logLevel: 'info',
-        },
-      });
+      // const exampleForumAdapter = new ExampleForumAdapter();
+      // await this.register(exampleForumAdapter, {
+      //   id: 'example-forum-adapter',
+      //   name: 'Example Forum Adapter',
+      //   description: 'Specialized adapter for forum.example.com with forum-specific functionality',
+      //   version: '1.0.0',
+      //   enabled: true,
+      //   priority: 10, // Higher priority than default
+      //   settings: {
+      //     logLevel: 'info',
+      //   },
+      // });
 
       // Register GeminiAdapter for Google Gemini
       const geminiAdapter = new GeminiAdapter();

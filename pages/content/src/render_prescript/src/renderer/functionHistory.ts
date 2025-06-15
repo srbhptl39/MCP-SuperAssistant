@@ -13,6 +13,13 @@ import {
 } from '../mcpexecute/storage';
 import { displayResult } from './components';
 
+// Add type declaration for global mcpClient access
+declare global {
+  interface Window {
+    mcpClient?: any;
+  }
+}
+
 /**
  * Create a history panel for previously executed functions
  *
@@ -65,12 +72,12 @@ export const createHistoryPanel = (
  *
  * @param historyPanel History panel element
  * @param executionData Execution data to display
- * @param mcpHandler MCP handler for re-executing functions
+ * @param mcpClient MCP client for re-executing functions (new architecture)
  */
 export const updateHistoryPanel = (
   historyPanel: HTMLDivElement,
   executionData: ExecutedFunction,
-  mcpHandler: any,
+  mcpClient: any,
 ): void => {
   // Clear existing content
   historyPanel.innerHTML = '';
@@ -99,8 +106,8 @@ export const updateHistoryPanel = (
   reExecuteBtn.className = 'function-reexecute-button';
   reExecuteBtn.textContent = 'Re-execute';
 
-  // Handle re-execution
-  reExecuteBtn.onclick = () => {
+  // Handle re-execution with async mcpClient
+  reExecuteBtn.onclick = async () => {
     // Create results panel if it doesn't exist
     let resultsPanel = historyPanel.parentElement?.querySelector(
       `.function-results-panel[data-call-id="${executionData.callId}"]`,
@@ -131,39 +138,62 @@ export const updateHistoryPanel = (
     resultsPanel.appendChild(loadingIndicator);
 
     try {
-      if (!mcpHandler) {
-        displayResult(resultsPanel, loadingIndicator, false, 'Error: mcpHandler not found');
+      if (!mcpClient) {
+        displayResult(resultsPanel, loadingIndicator, false, 'Error: mcpClient not found');
+        return;
+      }
+
+      // Check if mcpClient is ready
+      if (!mcpClient.isReady || !mcpClient.isReady()) {
+        displayResult(resultsPanel, loadingIndicator, false, 'Error: MCP client not ready');
         return;
       }
 
       console.debug(`Re-executing function ${executionData.functionName} with arguments:`, executionData.params);
 
-      mcpHandler.callTool(executionData.functionName, executionData.params, (result: any, error: any) => {
-        if (error) {
-          // Pass the error directly without adding "Error:" prefix
-          displayResult(resultsPanel, loadingIndicator, false, error);
-        } else {
-          displayResult(resultsPanel, loadingIndicator, true, result);
+      try {
+        // Use async/await with the new mcpClient API
+        const result = await mcpClient.callTool(executionData.functionName, executionData.params);
+        
+        displayResult(resultsPanel, loadingIndicator, true, result);
 
-          // Update the execution record with new timestamp
-          // Always use the current URL context when storing execution data
-          const updatedExecutionData = storeExecutedFunction(
-            executionData.functionName,
-            executionData.callId,
-            executionData.params,
-            executionData.contentSignature,
-          );
+        // Update the execution record with new timestamp
+        // Always use the current URL context when storing execution data
+        const updatedExecutionData = storeExecutedFunction(
+          executionData.functionName,
+          executionData.callId,
+          executionData.params,
+          executionData.contentSignature,
+        );
 
-          // Update the history panel with the new timestamp
-          updateHistoryPanel(historyPanel, updatedExecutionData, mcpHandler);
+        // Update the history panel with the new timestamp
+        updateHistoryPanel(historyPanel, updatedExecutionData, mcpClient);
+        
+      } catch (toolError: any) {
+        // Enhanced error handling for different error types
+        let errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+        
+        // Check for connection-related errors and provide better user feedback
+        if (errorMessage.includes('not connected') || errorMessage.includes('connection')) {
+          errorMessage = 'Connection lost. Please check your MCP server connection.';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else if (errorMessage.includes('server unavailable') || errorMessage.includes('SERVER_UNAVAILABLE')) {
+          errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
-      });
-    } catch (error) {
+        
+        displayResult(resultsPanel, loadingIndicator, false, errorMessage);
+      }
+
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Re-execute error:', error);
+      
       displayResult(
         resultsPanel,
         loadingIndicator,
         false,
-        `Error: ${error instanceof Error ? error.message : String(error)}`,
+        `Unexpected error: ${errorMessage}`,
       );
     }
   };
@@ -210,11 +240,11 @@ export const checkAndDisplayFunctionHistory = (
     // Create history panel (this will remove any existing panels)
     const historyPanel = createHistoryPanel(blockDiv, callId, contentSignature);
 
-    // Access the global mcpHandler
-    const mcpHandler = (window as any).mcpHandler;
+    // Access the global mcpClient instead of mcpHandler
+    const mcpClient = (window as any).mcpClient;
 
     // Update the panel with the latest execution data
-    updateHistoryPanel(historyPanel, latestExecution, mcpHandler);
+    updateHistoryPanel(historyPanel, latestExecution, mcpClient);
 
     // Log that we're showing only the latest execution
     console.debug(
