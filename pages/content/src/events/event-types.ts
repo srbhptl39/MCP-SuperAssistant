@@ -30,6 +30,7 @@ export interface EventMap {
   'ui:notification-added': { notification: Notification };
   'ui:notification-removed': { id: string };
   'ui:preferences-updated': { preferences: UserPreferences };
+  'ui:mcp-toggle': { enabled: boolean; reason?: string; previousState: boolean };
 
   // Adapter events
   'adapter:activated': { pluginName: string; timestamp: number };

@@ -194,6 +194,15 @@ export const useUserPreferences = () =>
     })
   ));
 
+// Hook for MCP toggle state management
+export const useMCPState = () =>
+  useUIStore(useShallow(
+    (state) => ({
+      mcpEnabled: state.mcpEnabled,
+      setMCPEnabled: state.setMCPEnabled
+    })
+  ));
+
 export const useModal = () =>
   useUIStore(useShallow(
     (state) => ({

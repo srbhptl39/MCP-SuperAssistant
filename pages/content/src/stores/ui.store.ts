@@ -12,6 +12,7 @@ export interface UIState {
   activeModal: string | null; // e.g., 'settingsModal', 'confirmActionModal'
   isLoading: boolean; // Global UI loading state
   theme: GlobalSettings['theme']; // Centralized theme management
+  mcpEnabled: boolean; // Separate MCP toggle state that persists across page refreshes
 
   // Actions
   toggleSidebar: (reason?: string) => void;
@@ -26,6 +27,7 @@ export interface UIState {
   closeModal: () => void;
   setGlobalLoading: (loading: boolean) => void;
   setTheme: (theme: GlobalSettings['theme']) => void;
+  setMCPEnabled: (enabled: boolean, reason?: string) => void; // Action to control MCP state
 }
 
 const initialSidebarState: SidebarState = {
@@ -47,13 +49,14 @@ const initialUserPreferences: UserPreferences = {
   customInstructionsEnabled: false,
 };
 
-const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme'> = {
+const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme' | 'setMCPEnabled'> = {
   sidebar: initialSidebarState,
   preferences: initialUserPreferences,
   notifications: [],
   activeModal: null,
   isLoading: false,
   theme: initialUserPreferences.theme,
+  mcpEnabled: false, // Default to disabled - user must explicitly enable MCP
 };
 
 export const useUIStore = create<UIState>()(
@@ -152,6 +155,21 @@ export const useUIStore = create<UIState>()(
              eventBus.emit('ui:preferences-updated', { preferences: get().preferences });
           }
         },
+
+        setMCPEnabled: (enabled: boolean, reason?: string) => {
+          const previousState = get().mcpEnabled;
+          set({ mcpEnabled: enabled });
+          
+          console.log(`[UIStore] MCP toggle set to ${enabled}. Reason: ${reason || 'user action'}`);
+          
+          // When MCP is enabled, show sidebar; when disabled, hide sidebar
+          if (enabled !== previousState) {
+            get().setSidebarVisibility(enabled, reason || 'mcp-toggle');
+          }
+          
+          // Emit event for components that need to react to MCP state changes
+          eventBus.emit('ui:mcp-toggle', { enabled, reason: reason || 'user action', previousState });
+        },
       }),
       {
         name: 'mcp-super-assistant-ui-store',
@@ -166,6 +184,7 @@ export const useUIStore = create<UIState>()(
           },
           preferences: state.preferences,
           theme: state.theme, // Persist theme
+          mcpEnabled: state.mcpEnabled, // Persist MCP toggle state across page refreshes
         }),
       }
     ),

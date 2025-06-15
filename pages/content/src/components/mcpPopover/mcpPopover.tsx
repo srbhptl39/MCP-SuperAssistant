@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useCurrentAdapter, useUserPreferences, useSidebarState } from '../../hooks';
+import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 
@@ -512,8 +512,8 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
   const { preferences } = useUserPreferences();
   
-  // Import useSidebarState hook to sync with actual sidebar visibility
-  const { isVisible: sidebarVisible } = useSidebarState();
+  // Use MCP state hook to get persistent MCP toggle state
+  const { mcpEnabled: mcpEnabledFromStore, setMCPEnabled } = useMCPState();
 
   // Debug: Log instructions state for debugging
   useEffect(() => {
@@ -553,11 +553,11 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   };
   useInjectStyles();
   const [state, setState] = useState<MCPToggleState>(() => {
-    // Initialize state with current sidebar visibility
+    // Initialize state with current MCP state from store
     const initialState = toggleStateManager.getState();
     return {
       ...initialState,
-      mcpEnabled: sidebarVisible // Sync with actual sidebar visibility
+      mcpEnabled: mcpEnabledFromStore // Use the persistent MCP state from store
     };
   });
   // Instructions come directly from the global state (managed by Instructions panel in sidebar)
@@ -574,22 +574,22 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     const currentState = toggleStateManager.getState();
     setState(prevState => ({
       ...currentState,
-      mcpEnabled: sidebarVisible // Always sync with actual sidebar visibility
+      mcpEnabled: mcpEnabledFromStore // Always sync with persistent MCP state from store
     }));
-  }, [toggleStateManager, sidebarVisible]);
+  }, [toggleStateManager, mcpEnabledFromStore]);
 
-  // Sync state when sidebar visibility changes externally (e.g., from other UI components)
+  // Sync state when MCP state changes from store (e.g., from other UI components or on page load)
   useEffect(() => {
-    console.log(`[MCPPopover] Sidebar visibility changed to: ${sidebarVisible}, updating MCP toggle state`);
+    console.log(`[MCPPopover] MCP state changed to: ${mcpEnabledFromStore}, updating MCP toggle UI`);
     setState(prevState => {
       const newState = {
         ...prevState,
-        mcpEnabled: sidebarVisible
+        mcpEnabled: mcpEnabledFromStore
       };
       console.log(`[MCPPopover] State updated:`, newState);
       return newState;
     });
-  }, [sidebarVisible]);
+  }, [mcpEnabledFromStore]);
 
   // Subscribe to global instructions state changes (Instructions panel is source of truth)
   useEffect(() => {
@@ -607,23 +607,29 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     };
   }, []);
 
-  // Initialize and sync popover state with actual sidebar state
+  // Initialize and sync popover state with persistent MCP state from store
   useEffect(() => {
-    // Force initial state sync to ensure popover reflects current sidebar state
+    // Force initial state sync to ensure popover reflects current persistent MCP state
     const currentToggleState = toggleStateManager.getState();
-    console.log(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, sidebar: ${sidebarVisible}`);
+    console.log(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, store MCP: ${mcpEnabledFromStore}`);
     
     setState({
       ...currentToggleState,
-      mcpEnabled: sidebarVisible // Always prioritize actual sidebar visibility
+      mcpEnabled: mcpEnabledFromStore // Always prioritize persistent MCP state from store
     });
-  }, [toggleStateManager, sidebarVisible]); // Include dependencies
+  }, [toggleStateManager, mcpEnabledFromStore]); // Include dependencies
 
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
     console.log(`[MCPPopover] MCP toggle changed to: ${checked}`);
+    
+    // Update the persistent MCP state in store (this will automatically control sidebar visibility)
+    setMCPEnabled(checked, 'mcp-popover-user-toggle');
+    
+    // Also inform the legacy toggle state manager for compatibility
     toggleStateManager.setMCPEnabled(checked);
-    // State will be updated automatically through the sidebar visibility effect
+    
+    // State will be updated automatically through the MCP state effect
   };
   const handleAutoInsert = (checked: boolean) => {
     toggleStateManager.setAutoInsert(checked);

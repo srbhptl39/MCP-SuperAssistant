@@ -689,17 +689,17 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     const stateManager = {
       getState: () => {
         try {
-          // Get state from UI store - MCP enabled state should reflect sidebar visibility
+          // Get state from UI store - MCP enabled state should be the persistent MCP toggle state
           const uiState = context.stores.ui;
           
-          // Check if sidebar is visible to determine MCP enabled state
-          const sidebarVisible = uiState?.sidebar?.isVisible ?? false;
+          // Get the persistent MCP enabled state and other preferences
+          const mcpEnabled = uiState?.mcpEnabled ?? false;
           const autoSubmitEnabled = uiState?.preferences?.autoSubmit ?? false;
 
-          context.logger.debug(`Getting MCP toggle state: sidebarVisible=${sidebarVisible}, autoSubmit=${autoSubmitEnabled}`);
+          context.logger.debug(`Getting MCP toggle state: mcpEnabled=${mcpEnabled}, autoSubmit=${autoSubmitEnabled}`);
 
           return {
-            mcpEnabled: sidebarVisible, // MCP enabled = sidebar visible
+            mcpEnabled: mcpEnabled, // Use the persistent MCP state
             autoInsert: autoSubmitEnabled,
             autoSubmit: autoSubmitEnabled,
             autoExecute: false // Default for now, can be extended
@@ -717,15 +717,21 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       },
 
       setMCPEnabled: (enabled: boolean) => {
-        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility`);
+        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`);
 
         try {
-          // Primary method: Control sidebar visibility through UI store
-          if (context.stores.ui?.setSidebarVisibility) {
-            context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle');
-            context.logger.debug(`Sidebar visibility set to: ${enabled} via UI store`);
+          // Primary method: Control MCP state through UI store (which will automatically control sidebar)
+          if (context.stores.ui?.setMCPEnabled) {
+            context.stores.ui.setMCPEnabled(enabled, 'mcp-popover-toggle');
+            context.logger.debug(`MCP state set to: ${enabled} via UI store`);
           } else {
-            context.logger.warn('UI store setSidebarVisibility method not available');
+            context.logger.warn('UI store setMCPEnabled method not available');
+            
+            // Fallback: Control sidebar visibility directly if MCP state setter not available
+            if (context.stores.ui?.setSidebarVisibility) {
+              context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle-fallback');
+              context.logger.debug(`Sidebar visibility set to: ${enabled} via UI store fallback`);
+            }
           }
 
           // Secondary method: Control through global sidebar manager as additional safeguard
@@ -746,13 +752,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          // Emit events for other components that might be listening
-          context.eventBus.emit('ui:sidebar-toggle', {
-            visible: enabled,
-            reason: 'mcp-popover-toggle'
-          });
-
-          context.logger.info(`MCP toggle completed: sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }

@@ -15,6 +15,7 @@ export {
   useSidebar,
   useSidebarState,
   useUserPreferences,
+  useMCPState,
   useTheme,
   useNotifications,
   usePreferences,

@@ -203,9 +203,31 @@ export class SidebarManager extends BaseSidebarManager {
       }
 
       try {
-        // Initialize with collapsed state to restore preferences including push mode
-        await this.initializeCollapsedState();
-        logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
+        // Check if MCP is enabled from persistent state before showing sidebar
+        const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
+        const mcpEnabled = zustandState.state?.mcpEnabled ?? false;
+        
+        logMessage(`[SidebarManager] MCP enabled from persisted state: ${mcpEnabled}`);
+        
+        if (mcpEnabled) {
+          // MCP is enabled, so show the sidebar
+          logMessage('[SidebarManager] MCP is enabled, showing sidebar');
+          // Initialize with collapsed state to restore preferences including push mode
+          await this.initializeCollapsedState();
+          logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
+        } else {
+          // MCP is disabled, ensure sidebar is hidden but still initialize for later use
+          logMessage('[SidebarManager] MCP is disabled, initializing sidebar but keeping it hidden');
+          // Initialize without showing the sidebar
+          await this.initialize();
+          // Keep sidebar hidden
+          if (this.shadowHost) {
+            this.shadowHost.style.display = 'none';
+            this.shadowHost.style.opacity = '0';
+            this._isVisible = false;
+          }
+          logMessage('[SidebarManager] Sidebar initialized but kept hidden due to MCP being disabled');
+        }
       } catch (error) {
         logMessage(
           `[SidebarManager] Error during initialization: ${error instanceof Error ? error.message : String(error)}`,
