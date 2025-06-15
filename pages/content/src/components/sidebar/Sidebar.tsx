@@ -8,6 +8,7 @@ import InstructionManager from './Instructions/InstructionManager';
 import InputArea from './InputArea/InputArea';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { logMessage, debugShadowDomStyles } from '@src/utils/helpers';
+import { eventBus } from '@src/events/event-bus';
 import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } from './ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
@@ -39,7 +40,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   // Add unique ID to track component instances
-  const componentId = useRef(`sidebar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const componentId = useRef(`sidebar-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`);
   logMessage(
     `[Sidebar] Component initializing with preferences: ${initialPreferences ? 'loaded' : 'null'} (ID: ${componentId.current})`,
   );
@@ -75,9 +76,32 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
   // No error states that could block rendering
   const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [extensionContextInvalid, setExtensionContextInvalid] = useState<boolean>(false);
 
   // Get communication methods with guaranteed safe fallbacks
-  const communicationMethods = useMcpCommunication();
+  let communicationMethods;
+  try {
+    communicationMethods = useMcpCommunication();
+  } catch (error) {
+    // Handle extension context invalidation gracefully
+    if (error instanceof Error && error.message.includes('Extension context invalidated')) {
+      logMessage('[Sidebar] Extension context invalidated during hook initialization');
+      setExtensionContextInvalid(true);
+      setInitializationError('Extension was reloaded. Please refresh the page to restore functionality.');
+      // Provide fallback methods
+      communicationMethods = {
+        availableTools: [],
+        sendMessage: async () => 'Extension context invalidated',
+        refreshTools: async () => [],
+        forceReconnect: async () => false,
+        serverStatus: 'disconnected' as const,
+        updateServerConfig: async () => false,
+        getServerConfig: async () => ({ uri: '' })
+      };
+    } else {
+      throw error; // Re-throw other errors
+    }
+  }
 
   // Always render immediately - use safe defaults for all communication methods
   const serverStatus = connectionStatus || communicationMethods?.serverStatus || 'disconnected';
@@ -90,6 +114,92 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   useEffect(() => {
     logMessage(`[Sidebar] serverStatus changed to: "${serverStatus}", passing to ServerStatus component`);
   }, [serverStatus]);
+
+  // Enhanced event bus integration for real-time updates
+  useEffect(() => {
+    const unsubscribeCallbacks: (() => void)[] = [];
+
+    // Listen for connection status changes
+    const unsubscribeConnection = eventBus.on('connection:status-changed', (data) => {
+      logMessage(`[Sidebar] Connection status event received: ${data.status}${data.error ? ` (${data.error})` : ''}`);
+
+      // The connection store will be updated by the MCP client,
+      // but we can add additional UI feedback here if needed
+      if (data.status === 'connected') {
+        // Automatically refresh tools when connection is established
+        logMessage('[Sidebar] Connection established, refreshing tools...');
+        refreshTools(true).catch(error => {
+          logMessage(`[Sidebar] Failed to refresh tools after connection: ${error}`);
+        });
+      }
+    });
+    unsubscribeCallbacks.push(unsubscribeConnection);
+
+    // Listen for tool updates
+    const unsubscribeTools = eventBus.on('tool:list-updated', (data) => {
+      logMessage(`[Sidebar] Tool list updated event received: ${data.tools.length} tools`);
+      // Tools are already updated in the store by the MCP client
+      // We can add UI feedback here if needed
+    });
+    unsubscribeCallbacks.push(unsubscribeTools);
+
+    // Listen for tool execution events for better user feedback
+    const unsubscribeToolExecution = eventBus.on('tool:execution-completed', (data) => {
+      logMessage(`[Sidebar] Tool execution completed: ${data.execution.toolName} (ID: ${data.execution.id})`);
+      // Could show success notifications or update UI state
+    });
+    unsubscribeCallbacks.push(unsubscribeToolExecution);
+
+    const unsubscribeToolError = eventBus.on('tool:execution-failed', (data) => {
+      logMessage(`[Sidebar] Tool execution failed: ${data.toolName} - ${data.error}`);
+      // Could show error notifications
+    });
+    unsubscribeCallbacks.push(unsubscribeToolError);
+
+    // Listen for context bridge events to handle extension lifecycle
+    const unsubscribeBridgeInvalidated = eventBus.on('context:bridge-invalidated', (data) => {
+      logMessage(`[Sidebar] Context bridge invalidated: ${data.error}`);
+      setExtensionContextInvalid(true);
+      setInitializationError('Extension was reloaded. Please refresh the page to restore functionality.');
+    });
+    unsubscribeCallbacks.push(unsubscribeBridgeInvalidated);
+
+    const unsubscribeBridgeRestored = eventBus.on('context:bridge-restored', () => {
+      logMessage('[Sidebar] Context bridge restored');
+      setExtensionContextInvalid(false);
+      if (initializationError?.includes('Extension was reloaded')) {
+        setInitializationError(null);
+      }
+      // Try to reconnect when context is restored
+      forceReconnect().catch(error => {
+        logMessage(`[Sidebar] Failed to reconnect after context restoration: ${error}`);
+      });
+    });
+    unsubscribeCallbacks.push(unsubscribeBridgeRestored);
+
+    // Cleanup all event listeners
+    return () => {
+      unsubscribeCallbacks.forEach(unsubscribe => unsubscribe());
+    };
+  }, [refreshTools, forceReconnect]);
+
+  // Initial tool loading when component mounts and connection is available
+  useEffect(() => {
+    const loadInitialTools = async () => {
+      if (serverStatus === 'connected' && availableTools.length === 0) {
+        logMessage('[Sidebar] Component mounted with connection, loading initial tools...');
+        try {
+          await refreshTools(true);
+        } catch (error) {
+          logMessage(`[Sidebar] Failed to load initial tools: ${error}`);
+        }
+      }
+    };
+
+    // Small delay to ensure everything is initialized
+    const timeoutId = setTimeout(loadInitialTools, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [serverStatus, availableTools.length, refreshTools]);
 
   // Get initial state from shadow host to prevent flash
   const getInitialMinimizedState = (): boolean => {
@@ -760,20 +870,36 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     <Icon name="alert-triangle" size="sm" className="text-red-600 dark:text-red-400 mt-0.5" />
                     <div className="flex-1">
                       <Typography variant="subtitle" className="text-red-800 dark:text-red-200 font-medium">
-                        Warning
+                        {extensionContextInvalid ? 'Extension Reloaded' : 'Warning'}
                       </Typography>
                       <Typography variant="caption" className="text-red-700 dark:text-red-300">
-                        Some features may be limited: {initializationError}
+                        {extensionContextInvalid
+                          ? 'The extension was reloaded. Please refresh this page to restore full functionality.'
+                          : `Some features may be limited: ${initializationError}`
+                        }
                       </Typography>
+                      {extensionContextInvalid && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.location.reload()}
+                            className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800 mr-2">
+                            Refresh Page
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setInitializationError(null)}
-                    className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800">
-                    Dismiss
-                  </Button>
+                  {!extensionContextInvalid && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setInitializationError(null)}
+                      className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800">
+                      Dismiss
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

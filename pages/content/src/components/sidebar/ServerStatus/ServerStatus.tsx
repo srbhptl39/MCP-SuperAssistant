@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { useConnectionStatus, useServerConfig } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
+import { eventBus } from '@src/events/event-bus';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
@@ -43,6 +44,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
   // Use connection status from store, fallback to prop
   const status = connectionStatus || initialStatus || 'unknown';
+
+  // Debug logging to track status changes
+  useEffect(() => {
+    console.log(`[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
+  }, [connectionStatus, initialStatus, status, isConnected]);
 
   // Destructure with fallbacks in case useBackgroundCommunication fails
   const forceReconnect = useCallback(async () => {
@@ -148,6 +154,58 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       }
     }
   }, [status, connectionError, hasBackgroundError, isReconnecting, storeIsReconnecting, isConnected]);
+
+  // Enhanced event bus integration for real-time status updates
+  useEffect(() => {
+    const unsubscribeCallbacks: (() => void)[] = [];
+
+    // Listen for connection status changes from the event bus
+    const unsubscribeConnection = eventBus.on('connection:status-changed', (data) => {
+      logMessage(`[ServerStatus] Connection status event: ${data.status}${data.error ? ` (${data.error})` : ''}`);
+
+      // Update local error state if there's an error
+      if (data.error) {
+        setLastErrorMessage(data.error);
+      } else {
+        setLastErrorMessage('');
+      }
+
+      // Update last reconnect time for successful connections
+      if (data.status === 'connected') {
+        setLastReconnectTime(new Date().toLocaleTimeString());
+        setShowSuccessAnimation(true);
+        setTimeout(() => setShowSuccessAnimation(false), 1000);
+      }
+    });
+    unsubscribeCallbacks.push(unsubscribeConnection);
+
+    // Listen for context bridge events
+    const unsubscribeBridgeInvalidated = eventBus.on('context:bridge-invalidated', (data) => {
+      logMessage(`[ServerStatus] Context bridge invalidated: ${data.error}`);
+      setHasBackgroundError(true);
+      setStatusMessage(`Extension context invalidated: ${data.error}`);
+    });
+    unsubscribeCallbacks.push(unsubscribeBridgeInvalidated);
+
+    const unsubscribeBridgeRestored = eventBus.on('context:bridge-restored', () => {
+      logMessage('[ServerStatus] Context bridge restored');
+      setHasBackgroundError(false);
+      // Don't automatically reconnect here - let user decide
+    });
+    unsubscribeCallbacks.push(unsubscribeBridgeRestored);
+
+    // Listen for heartbeat events to monitor connection health
+    const unsubscribeHeartbeat = eventBus.on('connection:heartbeat', (data) => {
+      // Update connection health indicator if needed
+      logMessage(`[ServerStatus] Heartbeat received: ${data.timestamp}`);
+    });
+    unsubscribeCallbacks.push(unsubscribeHeartbeat);
+
+    // Cleanup all event listeners
+    return () => {
+      unsubscribeCallbacks.forEach(unsubscribe => unsubscribe());
+    };
+  }, []);
 
   // Check for background communication issues
   useEffect(() => {

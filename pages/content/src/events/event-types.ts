@@ -68,6 +68,9 @@ export interface EventMap {
   'context:message-received': { message: any; sender: any };
   'context:tab-updated': { tabId: number; url: string; changeInfo: any };
   'context:broadcast': { event: string; data: any; excludeOrigin?: string };
+  'context:bridge-initialized': { timestamp: number };
+  'context:bridge-restored': { timestamp: number };
+  'context:bridge-invalidated': { timestamp: number; error: string };
 
   // Additional error and recovery events
   'error:breadcrumb': { message: string; category: string; data?: Record<string, any>; timestamp: number };

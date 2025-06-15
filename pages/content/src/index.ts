@@ -7,7 +7,10 @@
 
 import './tailwind-input.css';
 import { logMessage } from '@src/utils/helpers';
-import { mcpHandler } from '@src/utils/mcpHandler';
+import { mcpClient } from './core/mcp-client';
+import { eventBus } from './events/event-bus';
+import type { ConnectionStatus } from './types/stores';
+import { useConnectionStore } from './stores/connection.store';
 
 // Import the new initialization system
 import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
@@ -320,21 +323,37 @@ function collectDemographicData(): { [key: string]: any } {
 (async function initializeNewArchitecture() {
   try {
     logMessage('Starting comprehensive application initialization...');
-    
+
+    // Initialize MCP client first to ensure communication layer is ready
+    try {
+      if (!mcpClient.isReady()) {
+        logMessage('MCP client not ready, initialization will be handled by the client itself');
+      } else {
+        logMessage('MCP client is ready for communication');
+      }
+
+      // Expose MCP client globally for debugging and legacy compatibility
+      (window as any).mcpClient = mcpClient;
+      logMessage('MCP client exposed on window.mcpClient');
+    } catch (mcpError) {
+      console.error('MCP client initialization warning:', mcpError);
+      // Don't fail the entire initialization for MCP client issues
+    }
+
     // Initialize the complete application with all core services
     await applicationInit();
-    
+
     logMessage('Application initialized successfully with Session 10 architecture');
-    
+
     // Expose initialization utilities for debugging
     if (process.env.NODE_ENV === 'development') {
       (window as any).appInitUtils = initializationUtils;
       logMessage('Initialization utilities exposed on window.appInitUtils');
     }
-    
+
   } catch (error) {
     console.error('Failed to initialize application with Session 10 architecture:', error);
-    
+
     // Fallback to basic functionality if available
     logMessage('Attempting fallback initialization...');
     try {
@@ -347,19 +366,16 @@ function collectDemographicData(): { [key: string]: any } {
   }
 })();
 
-// Initialize MCP handler and set up connection status listener
-mcpHandler.onConnectionStatusChanged(isConnected => {
-  logMessage(`MCP connection status changed: ${isConnected ? 'Connected' : 'Disconnected'}`);
+// Listen for connection status changes via the global event bus
+eventBus.on('connection:status-changed', ({ status }: { status: ConnectionStatus }) => {
+  const isConnected = status === 'connected';
+  logMessage(`[Content Script] MCP connection status changed: ${isConnected ? 'Connected' : 'Disconnected'}`);
 
-  // Update connection status in the current site adapter
   const currentHostname = window.location.hostname;
   const adapter = adapterRegistry.getAdapter(currentHostname);
   if (adapter) {
-    // Update connection status regardless of initialization state
     adapter.updateConnectionStatus(isConnected);
-
-    // Ensure the adapter is always set globally
-    window.mcpAdapter = adapter;
+    (window as any).mcpAdapter = adapter;
   }
 });
 
@@ -423,7 +439,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({
       success: true,
       stats: {
-        mcpConnected: mcpHandler.getConnectionStatus(),
+        mcpConnected: useConnectionStore.getState().status === 'connected',
         activeSite: adapter?.name || 'Unknown',
       },
     });
@@ -447,13 +463,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Handle MCP tool call requests from popup
     const { toolName, args } = message;
     if (toolName && args) {
-      mcpHandler.callTool(toolName, args, (result, error) => {
-        if (error) {
-          sendResponse({ success: false, error });
-        } else {
+      mcpClient
+        .callTool(toolName, args)
+        .then(result => {
           sendResponse({ success: true, result });
-        }
-      });
+        })
+        .catch(err => {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          sendResponse({ success: false, error: errorMsg });
+        });
       return true; // Indicate we'll respond asynchronously
     } else {
       sendResponse({ success: false, error: 'Invalid tool call request' });
@@ -536,9 +554,9 @@ window.addEventListener('beforeunload', async () => {
   }
 });
 
-// Expose mcpHandler to the global window object for renderer access
-(window as any).mcpHandler = mcpHandler;
-console.debug('[Content Script] mcpHandler exposed to window object for renderer use.');
+// Expose mcpClient to the global window object for renderer or debugging access
+(window as any).mcpClient = mcpClient;
+console.debug('[Content Script] mcpClient exposed to window object for renderer use.');
 
 // Set the current adapter to global window object
 const currentAdapter = getCurrentAdapter();

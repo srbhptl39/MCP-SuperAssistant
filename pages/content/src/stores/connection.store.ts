@@ -45,8 +45,9 @@ export const useConnectionStore = create<ConnectionState>()(
       ...initialState,
 
       setStatus: (status: ConnectionStatus) => {
+        const oldStatus = get().status;
         set({ status });
-        console.log(`[ConnectionStore] Status changed to: ${status}`);
+        console.log(`[ConnectionStore] Status changed from ${oldStatus} to: ${status}`);
         eventBus.emit('connection:status-changed', { status, error: get().error || undefined });
       },
 

@@ -28,6 +28,14 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
   // Use tools from store if available, fallback to props
   const effectiveTools = storeTools.length > 0 ? storeTools : tools;
 
+  // Debug logging for tools
+  useEffect(() => {
+    logMessage(`[AvailableTools] Store tools: ${storeTools.length}, Props tools: ${tools.length}, Effective tools: ${effectiveTools.length}`);
+    if (effectiveTools.length > 0) {
+      logMessage(`[AvailableTools] Tool names: ${effectiveTools.map(t => t.name).join(', ')}`);
+    }
+  }, [storeTools, tools, effectiveTools]);
+
   // Mark component as loaded after initial render
   useEffect(() => {
     const timeoutId = setTimeout(() => {
