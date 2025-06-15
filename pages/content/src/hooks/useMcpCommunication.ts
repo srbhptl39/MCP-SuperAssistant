@@ -287,6 +287,23 @@ export const useMcpCommunication = () => {
     }
   }, [tools, normalizedTools]);
 
+  // Enhanced debugging for schema population
+  useEffect(() => {
+    if (normalizedTools.length > 0) {
+      logMessage(`[useMcpCommunication] Schema status for available tools:`);
+      normalizedTools.forEach((tool, index) => {
+        const hasInputSchema = tool.input_schema && Object.keys(tool.input_schema).length > 0;
+        const hasLegacySchema = tool.schema && tool.schema !== '{}';
+        logMessage(`  ${index + 1}. ${tool.name}: input_schema=${hasInputSchema ? 'populated' : 'EMPTY'}, schema=${hasLegacySchema ? 'populated' : 'EMPTY'}`);
+        
+        // Log schema content for first few tools for debugging
+        if (index < 2 && hasInputSchema) {
+          logMessage(`     Schema preview: ${JSON.stringify(tool.input_schema).substring(0, 200)}...`);
+        }
+      });
+    }
+  }, [normalizedTools]);
+
   // Enhanced status with more granular information
   const serverStatus = connection.status as 'connected' | 'disconnected' | 'reconnecting' | 'error';
   const connectionHealth = {

@@ -251,8 +251,8 @@ async function initializeExtension() {
         const primitives = await getPrimitivesWithBackwardsCompatibility(serverUrl, false);
         console.log(`[Background] Retrieved ${primitives.length} primitives for initial broadcast`);
         
-        const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
-        console.log(`[Background] Broadcasting ${tools.length} initial tools`);
+        const tools = normalizeToolsFromPrimitives(primitives);
+        console.log(`[Background] Broadcasting ${tools.length} normalized initial tools`);
         
         broadcastToolsUpdateToContentScripts(tools);
       } catch (error) {
@@ -297,8 +297,8 @@ async function tryConnectToServer(uri: string): Promise<void> {
       const primitives = await getPrimitivesWithBackwardsCompatibility(uri, true);
       console.log(`[Background] Retrieved ${primitives.length} primitives after connection`);
       
-      const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
-      console.log(`[Background] Broadcasting ${tools.length} tools after successful connection`);
+      const tools = normalizeToolsFromPrimitives(primitives);
+      console.log(`[Background] Broadcasting ${tools.length} normalized tools after successful connection`);
       
       broadcastToolsUpdateToContentScripts(tools);
     } catch (toolsError) {
@@ -365,8 +365,8 @@ setInterval(async () => {
         const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
         console.log(`[Background] Periodic check: Retrieved ${primitives.length} primitives`);
         
-        const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
-        console.log(`[Background] Periodic check: Broadcasting ${tools.length} tools`);
+        const tools = normalizeToolsFromPrimitives(primitives);
+        console.log(`[Background] Periodic check: Broadcasting ${tools.length} normalized tools`);
         
         broadcastToolsUpdateToContentScripts(tools);
       } catch (error) {
@@ -584,9 +584,9 @@ async function handleMcpMessage(
           const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), forceRefresh);
           console.log(`[Background] Retrieved ${primitives.length} primitives from server`);
           
-          // Return only the tool primitives' value shape for UI consumption
-          const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
-          console.log(`[Background] Returning ${tools.length} tools to content script`);
+          // Use the helper function to normalize tools with proper schema handling
+          const tools = normalizeToolsFromPrimitives(primitives);
+          console.log(`[Background] Returning ${tools.length} normalized tools to content script`);
           
           result = tools;
         } catch (error) {
@@ -633,8 +633,8 @@ async function handleMcpMessage(
               const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
               console.log(`[Background] Retrieved ${primitives.length} primitives after reconnection`);
               
-              const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
-              console.log(`[Background] Broadcasting ${tools.length} tools after reconnection`);
+              const tools = normalizeToolsFromPrimitives(primitives);
+              console.log(`[Background] Broadcasting ${tools.length} normalized tools after reconnection`);
               
               broadcastToolsUpdateToContentScripts(tools);
             } catch (toolsError) {
@@ -694,9 +694,9 @@ async function handleMcpMessage(
             if (isConnected) {
               try {
                 const primitives = await getPrimitivesWithBackwardsCompatibility(config.uri, true);
-                const tools = primitives.filter(p => p.type === 'tool').map(p => p.value);
+                const tools = normalizeToolsFromPrimitives(primitives);
                 broadcastToolsUpdateToContentScripts(tools);
-                console.log(`[Background] Broadcasted ${tools.length} tools after config update`);
+                console.log(`[Background] Broadcasted ${tools.length} normalized tools after config update`);
               } catch (toolError) {
                 console.warn('[Background] Failed to fetch tools after config update:', toolError);
               }
@@ -879,4 +879,44 @@ function broadcastConfigUpdateToContentScripts(config: { uri: string }) {
       }
     });
   });
+}
+
+/**
+ * Normalize tool schema property names for consistent content script consumption
+ * Converts MCP server's camelCase 'inputSchema' to snake_case 'input_schema'
+ * 
+ * @param primitives - Array of primitives from MCP server
+ * @returns Array of normalized tools with proper schema property names
+ */
+function normalizeToolsFromPrimitives(primitives: any[]): any[] {
+  const tools = primitives
+    .filter(p => p.type === 'tool')
+    .map(p => {
+      const tool = p.value as any; // Cast to any to handle both inputSchema and input_schema properties
+      
+      // Log the raw tool structure for debugging (only first tool to avoid spam)
+      if (p === primitives.find(prim => prim.type === 'tool')) {
+        console.log(`[Background] Sample raw tool structure:`, JSON.stringify(tool, null, 2));
+      }
+      
+      // Normalize schema property names: inputSchema (camelCase from MCP) -> input_schema (snake_case for content script)
+      const normalizedTool = {
+        name: tool.name,
+        description: tool.description || '',
+        // Convert camelCase inputSchema to snake_case input_schema for content script compatibility
+        input_schema: tool.inputSchema || tool.input_schema || {},
+        // Keep legacy schema field for backwards compatibility (as string)
+        schema: tool.inputSchema ? JSON.stringify(tool.inputSchema) : 
+                tool.input_schema ? JSON.stringify(tool.input_schema) : '{}',
+        // Preserve URI if present (for resources)
+        ...(tool.uri && { uri: tool.uri }),
+        // Preserve arguments if present
+        ...(tool.arguments && { arguments: tool.arguments })
+      };
+      
+      return normalizedTool;
+    });
+    
+  console.log(`[Background] Normalized ${tools.length} tools with schemas. Sample schema sizes: ${tools.slice(0, 3).map(t => `${t.name}:${t.schema.length}chars`).join(', ')}`);
+  return tools;
 }
