@@ -115,6 +115,7 @@ class McpClient {
           // Use default config if loading fails
           useConnectionStore.getState().setServerConfig({
             uri: 'http://localhost:3006/sse',
+            connectionType: 'sse',
             timeout: 5000,
             retryAttempts: 3,
             retryDelay: 2000

@@ -1,3 +1,4 @@
+import type { ConnectionType } from '../../../types/stores';
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
@@ -29,6 +30,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [lastReconnectTime, setLastReconnectTime] = useState<string>('');
   const [serverUri, setServerUri] = useState<string>(serverConfig.uri || '');
+  const [connectionType, setConnectionType] = useState<ConnectionType>(serverConfig.connectionType || 'sse');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
   const [isEditingUri, setIsEditingUri] = useState<boolean>(false);
@@ -100,7 +102,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   );
 
   const updateServerConfig = useCallback(
-    async (config: { uri: string }) => {
+    async (config: { uri: string; connectionType: ConnectionType }) => {
       try {
         if (!communicationMethods.updateServerConfig) {
           throw new Error('Communication method unavailable');
@@ -117,12 +119,15 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     [communicationMethods],
   );
 
-  // Update server URI when config changes
+  // Update server URI and connection type when config changes
   useEffect(() => {
     if (serverConfig.uri && !isEditingUri) {
       setServerUri(serverConfig.uri);
     }
-  }, [serverConfig.uri, isEditingUri]);
+    if (serverConfig.connectionType) {
+      setConnectionType(serverConfig.connectionType);
+    }
+  }, [serverConfig.uri, serverConfig.connectionType, isEditingUri]);
 
   // Update status message based on connection state from store
   useEffect(() => {
@@ -442,13 +447,13 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     const minDisplayDuration = 1500; // Minimum 1.5 seconds to prevent jitter
 
     try {
-      logMessage(`[ServerStatus] Saving server URI: ${serverUri}`);
+      logMessage(`[ServerStatus] Saving server URI: ${serverUri} with connection type: ${connectionType}`);
 
       // Update server config using Zustand store
-      setServerConfig({ uri: serverUri });
+      setServerConfig({ uri: serverUri, connectionType });
 
       // Also update via background communication for backward compatibility
-      await updateServerConfig({ uri: serverUri });
+      await updateServerConfig({ uri: serverUri, connectionType });
       logMessage('[ServerStatus] Server config updated successfully');
 
       // Clear the editing flag since we successfully saved
@@ -715,6 +720,27 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
               <Typography variant="h4" className="mb-3 text-slate-800 dark:text-slate-100 font-semibold">
                 Server Configuration
               </Typography>
+              
+              <div className="mb-4">
+                <label htmlFor="connection-type" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
+                  Connection Type
+                </label>
+                <select
+                  id="connection-type"
+                  value={connectionType}
+                  onChange={(e) => setConnectionType(e.target.value as ConnectionType)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
+                >
+                  <option value="sse">Server-Sent Events (SSE)</option>
+                  <option value="websocket">WebSocket</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {connectionType === 'sse' 
+                    ? 'HTTP-based streaming connection (traditional)' 
+                    : 'Full-duplex WebSocket connection (faster, more features)'}
+                </p>
+              </div>
+
               <div className="mb-4">
                 <label htmlFor="server-uri" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
                   Server URI
@@ -726,7 +752,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onChange={handleServerUriChange}
                   onFocus={handleServerUriFocus}
                   onBlur={handleServerUriBlur}
-                  placeholder="Enter server URI (e.g., http://localhost:3000)"
+                  placeholder={connectionType === 'sse' 
+                    ? "Enter SSE URI (e.g., http://localhost:3000/sse)" 
+                    : "Enter WebSocket URI (e.g., ws://localhost:3000)"}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
                 />
               </div>
@@ -800,6 +828,18 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   <span className="font-medium text-slate-700 dark:text-slate-200">Server URI:</span>
                   <span className="text-right text-slate-600 dark:text-slate-300 max-w-[200px] break-all">
                     {serverUri || 'Not configured'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center py-1">
+                  <span className="font-medium text-slate-700 dark:text-slate-200">Connection Type:</span>
+                  <span className={cn(
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    connectionType === 'websocket' 
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
+                  )}>
+                    {connectionType === 'websocket' ? 'WebSocket' : 'SSE'}
                   </span>
                 </div>
 

@@ -8,8 +8,11 @@ export interface GlobalSettings {
   notifications: boolean;
 }
 
+export type ConnectionType = 'sse' | 'websocket';
+
 export interface ServerConfig {
   uri: string;
+  connectionType: ConnectionType;
   timeout: number;
   retryAttempts: number;
   retryDelay: number;

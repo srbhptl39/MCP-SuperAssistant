@@ -3,7 +3,7 @@ import { mcpClient } from '../core/mcp-client';
 import { useConnectionStatus, useAvailableTools, useServerConfig } from './useStores';
 import { useToolStore } from '../stores/tool.store';
 import { logMessage } from '../utils/helpers';
-import type { ServerConfig, Tool } from '../types/stores';
+import type { ServerConfig, Tool, ConnectionType } from '../types/stores';
 
 /**
  * useMcpCommunication – Enhanced facade over mcpClient that provides a stable,
@@ -198,6 +198,10 @@ export const useMcpCommunication = () => {
     // Basic validation
     if (cfg.uri && typeof cfg.uri !== 'string') {
       throw new Error('Server URI must be a string');
+    }
+
+    if (cfg.connectionType && !['sse', 'websocket'].includes(cfg.connectionType)) {
+      throw new Error('Connection type must be either "sse" or "websocket"');
     }
 
     if (cfg.timeout && (typeof cfg.timeout !== 'number' || cfg.timeout <= 0)) {
