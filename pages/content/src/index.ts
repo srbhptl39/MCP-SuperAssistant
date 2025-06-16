@@ -28,6 +28,9 @@ import {
 // Import the adapter registry (legacy)
 import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
 
+// Import the automation service
+import { initializeAllServices, cleanupAllServices } from './services';
+
 // Add this as a global recovery mechanism for the sidebar
 function setupSidebarRecovery(): void {
   // Watch for the case where push mode is enabled but sidebar isn't visible
@@ -343,6 +346,9 @@ function collectDemographicData(): { [key: string]: any } {
     // Initialize the complete application with all core services
     await applicationInit();
 
+    // Initialize automation service and other services
+    await initializeAllServices();
+
     logMessage('Application initialized successfully with Session 10 architecture');
 
     // Expose plugin registry globally for adapter access
@@ -544,6 +550,9 @@ window.addEventListener('beforeunload', async () => {
   logMessage('Page unloading - starting comprehensive cleanup...');
   
   try {
+    // Cleanup all services first
+    await cleanupAllServices();
+    
     // Use the comprehensive cleanup from Session 10
     await applicationCleanup();
     

@@ -74,6 +74,27 @@ const activeTimeouts = new Map<string, number>();
 // RAF scheduling
 let rafScheduled = false;
 
+// Utility function to get automation state
+function getAutomationState() {
+  // First try the new store-based state (exposed by automation service)
+  const automationState = (window as any).__mcpAutomationState;
+  if (automationState) {
+    return {
+      autoInsert: automationState.autoInsert || false,
+      autoSubmit: automationState.autoSubmit || false,
+      autoExecute: automationState.autoExecute || false,
+    };
+  }
+  
+  // Fallback to legacy toggle state
+  const legacyState = (window as any).toggleState;
+  return {
+    autoInsert: legacyState?.autoInsert === true,
+    autoSubmit: legacyState?.autoSubmit === true,
+    autoExecute: legacyState?.autoExecute === true,
+  };
+}
+
 // Common style configurations
 const STREAMING_STYLES = {
   pre: {
@@ -1171,7 +1192,8 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       addExecuteButton(buttonContainer!, rawContent);
 
       // Setup auto-execution
-      const autoExecuteEnabled = (window as any).toggleState?.autoExecute === true;
+      const automationState = getAutomationState();
+      const autoExecuteEnabled = automationState.autoExecute;
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
         if (autoExecuteEnabled !== true) {
           console.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);

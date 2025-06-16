@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
+import { AutomationService } from '../../services/automation.service';
 
 export interface MCPToggleState {
   mcpEnabled: boolean;
@@ -510,7 +511,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
 
   // Use Zustand hooks for adapter and user preferences
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
-  const { preferences } = useUserPreferences();
+  const { preferences, updatePreferences } = useUserPreferences();
   
   // Use MCP state hook to get persistent MCP toggle state
   const { mcpEnabled: mcpEnabledFromStore, setMCPEnabled } = useMCPState();
@@ -625,11 +626,22 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     const currentToggleState = toggleStateManager.getState();
     console.log(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, store MCP: ${mcpEnabledFromStore}`);
     
-    setState({
+    // Sync automation state from user preferences
+    const syncedState = {
       ...currentToggleState,
-      mcpEnabled: mcpEnabledFromStore // Always prioritize persistent MCP state from store
-    });
-  }, [toggleStateManager, mcpEnabledFromStore]); // Include dependencies
+      mcpEnabled: mcpEnabledFromStore, // Always prioritize persistent MCP state from store
+      autoInsert: preferences.autoInsert || false,
+      autoSubmit: preferences.autoSubmit || false,
+      autoExecute: preferences.autoExecute || false,
+    };
+    
+    setState(syncedState);
+    
+    // Also sync the legacy toggle state manager
+    toggleStateManager.setAutoInsert(preferences.autoInsert || false);
+    toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
+    toggleStateManager.setAutoExecute(preferences.autoExecute || false);
+  }, [toggleStateManager, mcpEnabledFromStore, preferences.autoInsert, preferences.autoSubmit, preferences.autoExecute]); // Include dependencies
 
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
@@ -643,17 +655,47 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
     
     // State will be updated automatically through the MCP state effect
   };
+
   const handleAutoInsert = (checked: boolean) => {
+    console.log(`[MCPPopover] Auto Insert toggle changed to: ${checked}`);
+    
+    // Update user preferences store
+    updatePreferences({ autoInsert: checked });
+    
+    // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoInsert(checked);
     updateState();
+    
+    // Update automation state on window for render_prescript access
+    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
+
   const handleAutoSubmit = (checked: boolean) => {
+    console.log(`[MCPPopover] Auto Submit toggle changed to: ${checked}`);
+    
+    // Update user preferences store
+    updatePreferences({ autoSubmit: checked });
+    
+    // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoSubmit(checked);
     updateState();
+    
+    // Update automation state on window for render_prescript access
+    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
+
   const handleAutoExecute = (checked: boolean) => {
+    console.log(`[MCPPopover] Auto Execute toggle changed to: ${checked}`);
+    
+    // Update user preferences store
+    updatePreferences({ autoExecute: checked });
+    
+    // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoExecute(checked);
     updateState();
+    
+    // Update automation state on window for render_prescript access
+    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
 
   // Action buttons
