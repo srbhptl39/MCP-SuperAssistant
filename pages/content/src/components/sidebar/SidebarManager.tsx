@@ -20,6 +20,8 @@ const getZustandPreferences = (): UserPreferences => {
   // Return default preferences
   return {
     autoSubmit: false,
+    autoInsert: false,
+    autoExecute: false,
     notifications: true,
     theme: 'system',
     language: navigator.language || 'en-US',
@@ -507,7 +509,7 @@ export class SidebarManager extends BaseSidebarManager {
 
   /**
    * Destroy the sidebar manager
-   * Override the parent destroy method to also remove the window reference
+   * Override the parent destroy method to also remove the window reference and clear singleton
    */
   public destroy(): void {
     // Remove the window reference
@@ -515,8 +517,81 @@ export class SidebarManager extends BaseSidebarManager {
       window.activeSidebarManager = undefined;
     }
 
+    // Clear the appropriate singleton instance
+    switch (this.siteType) {
+      case 'perplexity':
+        if (SidebarManager.perplexityInstance === this) {
+          SidebarManager.perplexityInstance = null;
+        }
+        break;
+      case 'chatgpt':
+        if (SidebarManager.chatgptInstance === this) {
+          SidebarManager.chatgptInstance = null;
+        }
+        break;
+      case 'grok':
+        if (SidebarManager.grokInstance === this) {
+          SidebarManager.grokInstance = null;
+        }
+        break;
+      case 'gemini':
+        if (SidebarManager.geminiInstance === this) {
+          SidebarManager.geminiInstance = null;
+        }
+        break;
+      case 'aistudio':
+        if (SidebarManager.aistudioInstance === this) {
+          SidebarManager.aistudioInstance = null;
+        }
+        break;
+      case 'openrouter':
+        if (SidebarManager.openrouterInstance === this) {
+          SidebarManager.openrouterInstance = null;
+        }
+        break;
+      case 'deepseek':
+        if (SidebarManager.deepseekInstance === this) {
+          SidebarManager.deepseekInstance = null;
+        }
+        break;
+      case 'kagi':
+        if (SidebarManager.kagiInstance === this) {
+          SidebarManager.kagiInstance = null;
+        }
+        break;
+      case 't3chat':
+        if (SidebarManager.t3chatInstance === this) {
+          SidebarManager.t3chatInstance = null;
+        }
+        break;
+    }
+
+    logMessage(`[SidebarManager] Destroyed sidebar manager for site type: ${this.siteType}`);
+
     // Call the parent destroy method
     super.destroy();
+  }
+
+  /**
+   * Check if this is a navigation-based cleanup (should preserve sidebar) vs actual destroy
+   */
+  private isNavigationEvent(): boolean {
+    // If we're on a supported site and the URL is still valid, this is likely navigation
+    return window.location.hostname === 'gemini.google.com' && 
+           window.location.href.includes('/app');
+  }
+
+  /**
+   * Safe destroy that checks if this is navigation vs actual cleanup
+   */
+  public safeDestroy(): void {
+    if (this.isNavigationEvent()) {
+      logMessage(`[SidebarManager] Skipping destroy during navigation for ${this.siteType}`);
+      return;
+    }
+    
+    logMessage(`[SidebarManager] Performing actual destroy for ${this.siteType}`);
+    this.destroy();
   }
 
   /**

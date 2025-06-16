@@ -951,6 +951,48 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     return `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
+  /**
+   * Check if the sidebar is properly available after navigation
+   */
+  private checkAndRestoreSidebar(): void {
+    this.context.logger.info('Checking sidebar state after page navigation');
+
+    try {
+      // Check if there's an active sidebar manager
+      const activeSidebarManager = (window as any).activeSidebarManager;
+      
+      if (!activeSidebarManager) {
+        this.context.logger.warn('No active sidebar manager found after navigation');
+        return;
+      }
+
+      // Sidebar manager exists, just ensure MCP popover connection is working
+      this.ensureMCPPopoverConnection();
+      
+    } catch (error) {
+      this.context.logger.error('Error checking sidebar state after navigation:', error);
+    }
+  }
+
+  /**
+   * Ensure MCP popover is properly connected to the sidebar after navigation
+   */
+  private ensureMCPPopoverConnection(): void {
+    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    
+    try {
+      // Check if MCP popover is still injected
+      if (!this.isMCPPopoverInjected()) {
+        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.injectMCPPopoverWithRetry(3);
+      } else {
+        this.context.logger.info('MCP popover is still present after navigation');
+      }
+    } catch (error) {
+      this.context.logger.error('Error ensuring MCP popover connection:', error);
+    }
+  }
+
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
     this.context.logger.info(`Gemini page changed: from ${oldUrl || 'N/A'} to ${url}`);
@@ -965,6 +1007,11 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       setTimeout(() => {
         this.setupUIIntegration();
       }, 1000); // Give page time to load
+
+      // Check if sidebar exists and restore it if needed
+      setTimeout(() => {
+        this.checkAndRestoreSidebar();
+      }, 1500); // Additional delay to ensure page is fully loaded
     } else {
       this.context.logger.warn('Page no longer supported after navigation');
     }

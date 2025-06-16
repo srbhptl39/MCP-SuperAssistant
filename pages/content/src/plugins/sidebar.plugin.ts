@@ -282,10 +282,21 @@ export class SidebarPlugin implements AdapterPlugin {
     const unsubscribeSiteChange = this.context.eventBus.on('app:site-changed', async (data) => {
       this.context?.logger.info(`[SidebarPlugin] Site changed to: ${data.hostname}`);
 
+      // Determine if this is actually a different site or just a URL change within the same site
+      const currentSiteType = this.determineSiteType(data.hostname);
+      const existingSiteType = this.sidebarManager ? this.determineSiteType(window.location.hostname) : null;
+
+      if (existingSiteType && currentSiteType === existingSiteType) {
+        this.context?.logger.info(`[SidebarPlugin] URL changed within same site (${currentSiteType}), preserving sidebar manager`);
+        return; // Don't destroy and recreate for same site
+      }
+
+      this.context?.logger.info(`[SidebarPlugin] Actual site change detected: ${existingSiteType} -> ${currentSiteType}`);
+
       // Reset showing state
       this.isShowingSidebar = false;
 
-      // Cleanup existing sidebar manager
+      // Cleanup existing sidebar manager only if it's a different site
       if (this.sidebarManager) {
         this.sidebarManager.destroy();
         this.sidebarManager = null;
