@@ -507,6 +507,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     from: sender.tab ? `tab-${sender.tab.id}` : 'extension'
   });
 
+  // Handle MCP client connection status changes
+  if (message.type === 'mcp:connection-status-changed' && message.origin === 'mcpclient') {
+    console.log('[Background] Received connection status change from MCP client:', message.payload);
+    
+    // Update internal connection status
+    const { isConnected, error } = message.payload;
+    updateConnectionStatus(isConnected);
+    
+    // Broadcast the status change to all content scripts
+    broadcastConnectionStatusToContentScripts(isConnected, error);
+    
+    // No response needed
+    return false;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Legacy analytics bridge                                             */
   /* ------------------------------------------------------------------ */
