@@ -8,6 +8,7 @@ import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, A
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
+import { PerplexityAdapter } from './adapters/perplexity.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
@@ -488,8 +489,23 @@ class PluginRegistry {
           urlCheckInterval: 1000,
         },
       });
+
+      // Register PerplexityAdapter for Perplexity AI
+      const perplexityAdapter = new PerplexityAdapter();
+      await this.register(perplexityAdapter, {
+        id: 'perplexity-adapter',
+        name: 'Perplexity Adapter',
+        description: 'Specialized adapter for Perplexity AI with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for Perplexity
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, and GeminiAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, and PerplexityAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);

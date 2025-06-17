@@ -8,6 +8,7 @@ export { BaseAdapterPlugin } from './base.adapter';
 export { DefaultAdapter } from './default.adapter';
 export { ExampleForumAdapter } from './example-forum.adapter';
 export { GeminiAdapter } from './gemini.adapter';
+export { PerplexityAdapter } from './perplexity.adapter';
 
 // Export types
 export type { 

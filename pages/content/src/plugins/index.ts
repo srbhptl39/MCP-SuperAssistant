@@ -3,6 +3,8 @@ export { pluginRegistry, initializePluginRegistry, cleanupPluginRegistry } from 
 export { BaseAdapterPlugin } from './adapters/base.adapter';
 export { DefaultAdapter } from './adapters/default.adapter';
 export { ExampleForumAdapter } from './adapters/example-forum.adapter';
+export { GeminiAdapter } from './adapters/gemini.adapter';
+export { PerplexityAdapter } from './adapters/perplexity.adapter';
 export { SidebarPlugin } from './sidebar.plugin';
 export { createPluginContext } from './plugin-context';
 
