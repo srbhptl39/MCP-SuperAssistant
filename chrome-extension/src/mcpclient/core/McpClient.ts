@@ -151,6 +151,28 @@ export class McpClient extends EventEmitter<AllEvents> {
       // Get transport from plugin (plugin creates but doesn't connect)
       const transport = await plugin.connect(uri);
 
+      // Set up disconnection callback for WebSocket plugin
+      if (type === 'websocket' && 'setDisconnectionCallback' in plugin) {
+        (plugin as any).setDisconnectionCallback((reason: string, code?: number, details?: string) => {
+          console.log(`[McpClient] WebSocket disconnection detected: ${reason} (code: ${code})`);
+          
+          // Mark as disconnected immediately
+          this.isConnectedFlag = false;
+          
+          // Emit disconnection event with details
+          this.emit('connection:status-changed', {
+            isConnected: false,
+            type: 'websocket',
+            error: `WebSocket disconnected: ${reason}${code ? ` (code: ${code})` : ''}${details ? ` - ${details}` : ''}`
+          });
+
+          // Clean up connection state
+          this.cleanup().catch(error => {
+            console.error('[McpClient] Error during cleanup after WebSocket disconnection:', error);
+          });
+        });
+      }
+
       // Create MCP client
       this.client = new Client(
         {

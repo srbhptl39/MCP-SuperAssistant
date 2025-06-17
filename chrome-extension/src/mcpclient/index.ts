@@ -57,14 +57,58 @@ async function getGlobalClient(): Promise<McpClient> {
     try {
       globalClient = new McpClient();
       await globalClient.initialize();
+      
+      // Set up global event listeners for connection status changes
+      setupGlobalClientEventListeners(globalClient);
     } catch (error) {
       console.error('[getGlobalClient] Failed to initialize client:', error);
       // Create a fallback client without plugin loading
       globalClient = new McpClient();
       // Don't initialize to avoid plugin loading issues
+      setupGlobalClientEventListeners(globalClient);
     }
   }
   return globalClient;
+}
+
+/**
+ * Set up event listeners on the global client to handle connection events
+ */
+function setupGlobalClientEventListeners(client: McpClient): void {
+  // Listen for connection status changes and forward them to any registered listeners
+  client.on('connection:status-changed', (event) => {
+    console.log('[Global Client] Connection status changed:', event);
+    
+    // Emit a global event that can be caught by the background script
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('mcp:connection-status-changed', { 
+        detail: event 
+      }));
+    }
+    
+    // Also try to broadcast via chrome runtime if available
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({
+        type: 'mcp:connection-status-changed',
+        payload: event,
+        origin: 'mcpclient'
+      }).catch(() => {
+        // Ignore errors if background script isn't listening
+      });
+    }
+  });
+
+  client.on('client:connected', (event) => {
+    console.log('[Global Client] Client connected:', event);
+  });
+
+  client.on('client:disconnected', (event) => {
+    console.log('[Global Client] Client disconnected:', event);
+  });
+
+  client.on('client:error', (event) => {
+    console.error('[Global Client] Client error:', event);
+  });
 }
 
 /**

@@ -20,6 +20,7 @@ export class WebSocketPlugin implements ITransportPlugin {
   private isConnectedFlag: boolean = false;
   private connectionPromise: Promise<Transport> | null = null;
   private lastPingTime: number = 0;
+  private disconnectionCallback?: (reason: string, code?: number, details?: string) => void;
 
   async initialize(config: PluginConfig): Promise<void> {
     this.config = {
@@ -73,6 +74,9 @@ export class WebSocketPlugin implements ITransportPlugin {
       transport.on('close', (event: any) => {
         console.log(`[WebSocketPlugin] Transport closed: ${event.code} ${event.reason}`);
         this.isConnectedFlag = false;
+        
+        // Notify the main client about disconnection
+        this.handleDisconnection('WebSocket closed', event.code, event.reason);
       });
 
       transport.on('error', (error: any) => {
@@ -81,6 +85,7 @@ export class WebSocketPlugin implements ITransportPlugin {
         // Let MCP protocol handle connection management
         if (!error.message.includes('Pong timeout')) {
           this.isConnectedFlag = false;
+          this.handleDisconnection('WebSocket error', undefined, error.message);
         }
       });
 
@@ -252,6 +257,28 @@ export class WebSocketPlugin implements ITransportPlugin {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * Set a callback to be called when the WebSocket disconnects
+   */
+  setDisconnectionCallback(callback: (reason: string, code?: number, details?: string) => void): void {
+    this.disconnectionCallback = callback;
+  }
+
+  /**
+   * Handle disconnection events by notifying the main client
+   */
+  private handleDisconnection(reason: string, code?: number, details?: string): void {
+    console.log(`[WebSocketPlugin] Handling disconnection: ${reason} (code: ${code}, details: ${details})`);
+    
+    if (this.disconnectionCallback) {
+      try {
+        this.disconnectionCallback(reason, code, details);
+      } catch (error) {
+        console.error('[WebSocketPlugin] Error in disconnection callback:', error);
+      }
     }
   }
 }
