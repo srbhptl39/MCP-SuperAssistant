@@ -1,17 +1,19 @@
 import 'webextension-polyfill';
 import { exampleThemeStorage } from '@extension/storage';
 import {
-  runWithSSE,
+  runWithBackwardsCompatibility,
   isMcpServerConnected,
   forceReconnectToMcpServer,
   checkMcpServerConnection,
-  callToolWithSSE,
-  getPrimitivesWithSSE,
   callToolWithBackwardsCompatibility,
   getPrimitivesWithBackwardsCompatibility,
   resetMcpConnectionState,
-  resetMcpConnectionStateForRecovery
-} from '../mcpclient/officialmcpclient';
+  resetMcpConnectionStateForRecovery,
+  normalizeToolsFromPrimitives as normalizeTools,
+  createMcpClient,
+  type TransportType,
+  type ConnectionRequest
+} from '../mcpclient/index';
 import { sendAnalyticsEvent, trackError } from '../../utils/analytics';
 
 // Import message types for type safety
@@ -33,11 +35,17 @@ import type {
   HeartbeatResponseBroadcast
 } from '../../../pages/content/src/types/messages';
 
-// Default MCP server URL
-const DEFAULT_MCP_SERVER_URL = 'http://localhost:3006/sse';
+// Default MCP server URLs
+const DEFAULT_SSE_URL = 'http://localhost:3006/sse';
+const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3006/message';
 
-// Background script state management - replaces legacy mcpInterface
-let serverUrl: string = DEFAULT_MCP_SERVER_URL;
+// Connection type management
+type ConnectionType = 'sse' | 'websocket';
+const DEFAULT_CONNECTION_TYPE: ConnectionType = 'sse';
+
+// Background script state management with connection type support
+let serverUrl: string = DEFAULT_SSE_URL;
+let connectionType: ConnectionType = DEFAULT_CONNECTION_TYPE;
 let isConnected: boolean = false;
 let connectionCount: number = 0;
 let isInitialized: boolean = false;
@@ -46,15 +54,25 @@ let isInitialized: boolean = false;
  * Initialize server URL from Chrome storage
  * Replaces mcpInterface initialization functionality
  */
-async function initializeServerUrl(): Promise<void> {
+async function initializeServerConfig(): Promise<void> {
   try {
-    const result = await chrome.storage.local.get('mcpServerUrl');
-    serverUrl = result.mcpServerUrl || DEFAULT_MCP_SERVER_URL;
+    const result = await chrome.storage.local.get(['mcpServerUrl', 'mcpConnectionType']);
+    
+    // Load connection type first to determine default URL
+    connectionType = (result.mcpConnectionType as ConnectionType) || DEFAULT_CONNECTION_TYPE;
+    const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
+    
+    serverUrl = result.mcpServerUrl || defaultUrl;
     isInitialized = true;
-    console.log('[Background] Server URL loaded from storage:', serverUrl);
+    
+    console.log('[Background] Server config loaded from storage:', {
+      url: serverUrl,
+      type: connectionType
+    });
   } catch (error) {
-    console.warn('[Background] Failed to load server URL from storage, using default:', error);
-    serverUrl = DEFAULT_MCP_SERVER_URL;
+    console.warn('[Background] Failed to load server config from storage, using defaults:', error);
+    connectionType = DEFAULT_CONNECTION_TYPE;
+    serverUrl = DEFAULT_SSE_URL;
     isInitialized = true;
   }
 }
@@ -78,12 +96,15 @@ function getServerUrl(): string {
 }
 
 /**
- * Update the server URL
+ * Update the server configuration
  * Replaces mcpInterface.updateServerUrl()
  */
-function updateServerUrl(url: string): void {
+function updateServerConfig(url: string, type?: ConnectionType): void {
   serverUrl = url;
-  console.log('[Background] Server URL updated to:', url);
+  if (type) {
+    connectionType = type;
+  }
+  console.log('[Background] Server config updated to:', { url, type: connectionType });
 }
 
 /**
@@ -210,8 +231,8 @@ async function initializeExtension() {
     console.warn('Error initializing theme, continuing with defaults:', error);
   }
 
-  // Initialize server URL from storage
-  await initializeServerUrl();
+  // Initialize server configuration from storage
+  await initializeServerConfig();
 
   // Wait for initialization to complete
   await waitForInitialization();
@@ -240,7 +261,7 @@ async function initializeExtension() {
     
     // Then try connecting to the server asynchronously if not connected
     if (!isConnected) {
-      tryConnectToServer(serverUrl).catch(() => {
+      tryConnectToServer(serverUrl, connectionType).catch(() => {
         // Silently ignore errors - we've already logged them
         // and the extension should continue running
       });
@@ -251,7 +272,7 @@ async function initializeExtension() {
         const primitives = await getPrimitivesWithBackwardsCompatibility(serverUrl, false);
         console.log(`[Background] Retrieved ${primitives.length} primitives for initial broadcast`);
         
-        const tools = normalizeToolsFromPrimitives(primitives);
+        const tools = normalizeTools(primitives);
         console.log(`[Background] Broadcasting ${tools.length} normalized initial tools`);
         
         broadcastToolsUpdateToContentScripts(tools);
@@ -271,7 +292,7 @@ async function initializeExtension() {
  * @param uri - The MCP server URI to connect to
  * @returns Promise that resolves when connection attempt is complete (success or failure)
  */
-async function tryConnectToServer(uri: string): Promise<void> {
+async function tryConnectToServer(uri: string, type: ConnectionType = connectionType): Promise<void> {
   if (isConnecting) {
     console.log('Connection attempt already in progress, skipping');
     return;
@@ -281,11 +302,11 @@ async function tryConnectToServer(uri: string): Promise<void> {
   connectionAttemptCount++;
 
   console.log(
-    `Attempting to connect to MCP server (attempt ${connectionAttemptCount}/${MAX_CONNECTION_ATTEMPTS}): ${uri}`,
+    `Attempting to connect to MCP server via ${type} (attempt ${connectionAttemptCount}/${MAX_CONNECTION_ATTEMPTS}): ${uri}`,
   );
 
   try {
-    await runWithSSE(uri);
+    await runWithBackwardsCompatibility(uri);
 
     console.log('MCP client connected successfully');
     updateConnectionStatus(true);
@@ -297,7 +318,7 @@ async function tryConnectToServer(uri: string): Promise<void> {
       const primitives = await getPrimitivesWithBackwardsCompatibility(uri, true);
       console.log(`[Background] Retrieved ${primitives.length} primitives after connection`);
       
-      const tools = normalizeToolsFromPrimitives(primitives);
+      const tools = normalizeTools(primitives);
       console.log(`[Background] Broadcasting ${tools.length} normalized tools after successful connection`);
       
       broadcastToolsUpdateToContentScripts(tools);
@@ -365,7 +386,7 @@ setInterval(async () => {
         const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
         console.log(`[Background] Periodic check: Retrieved ${primitives.length} primitives`);
         
-        const tools = normalizeToolsFromPrimitives(primitives);
+        const tools = normalizeTools(primitives);
         console.log(`[Background] Periodic check: Broadcasting ${tools.length} normalized tools`);
         
         broadcastToolsUpdateToContentScripts(tools);
@@ -394,7 +415,7 @@ setInterval(async () => {
       console.warn('[Background] Error resetting MCP connection state:', error);
     }
     
-    tryConnectToServer(serverUrl).catch(() => {});
+    tryConnectToServer(serverUrl, connectionType).catch(() => {});
   }
 }, PERIODIC_CHECK_INTERVAL);
 
@@ -585,7 +606,7 @@ async function handleMcpMessage(
           console.log(`[Background] Retrieved ${primitives.length} primitives from server`);
           
           // Use the helper function to normalize tools with proper schema handling
-          const tools = normalizeToolsFromPrimitives(primitives);
+          const tools = normalizeTools(primitives);
           console.log(`[Background] Returning ${tools.length} normalized tools to content script`);
           
           result = tools;
@@ -633,7 +654,7 @@ async function handleMcpMessage(
               const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
               console.log(`[Background] Retrieved ${primitives.length} primitives after reconnection`);
               
-              const tools = normalizeToolsFromPrimitives(primitives);
+              const tools = normalizeTools(primitives);
               console.log(`[Background] Broadcasting ${tools.length} normalized tools after reconnection`);
               
               broadcastToolsUpdateToContentScripts(tools);
@@ -660,8 +681,12 @@ async function handleMcpMessage(
       }
 
       case 'mcp:get-server-config': {
-        const stored = await chrome.storage.local.get('mcpServerUrl');
-        result = { uri: stored.mcpServerUrl || DEFAULT_MCP_SERVER_URL };
+        const stored = await chrome.storage.local.get(['mcpServerUrl', 'mcpConnectionType']);
+        const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
+        result = { 
+          uri: stored.mcpServerUrl || defaultUrl,
+          type: stored.mcpConnectionType || connectionType
+        };
         break;
       }
 
@@ -671,14 +696,27 @@ async function handleMcpMessage(
           throw new Error('Invalid server config: uri is required');
         }
 
-        console.log(`[Background] Updating server config to: ${config.uri}`);
+        // Auto-detect connection type from URI if not specified
+        let newType = config.type as ConnectionType;
+        if (!newType) {
+          try {
+            const url = new URL(config.uri);
+            newType = (url.protocol === 'ws:' || url.protocol === 'wss:') ? 'websocket' : 'sse';
+          } catch {
+            newType = connectionType; // fallback to current type
+          }
+        }
+        console.log(`[Background] Updating server config to: ${config.uri} (${newType})`);
         
         // Update storage and background script state
-        await chrome.storage.local.set({ mcpServerUrl: config.uri });
-        updateServerUrl(config.uri);
+        await chrome.storage.local.set({ 
+          mcpServerUrl: config.uri,
+          mcpConnectionType: newType
+        });
+        updateServerConfig(config.uri, newType);
         
         // Broadcast config update immediately
-        broadcastConfigUpdateToContentScripts({ uri: config.uri });
+        broadcastConfigUpdateToContentScripts({ uri: config.uri, type: newType });
         
         // Start async reconnection but don't block the response
         const reconnectPromise = (async () => {
@@ -694,7 +732,7 @@ async function handleMcpMessage(
             if (isConnected) {
               try {
                 const primitives = await getPrimitivesWithBackwardsCompatibility(config.uri, true);
-                const tools = normalizeToolsFromPrimitives(primitives);
+                const tools = normalizeTools(primitives);
                 broadcastToolsUpdateToContentScripts(tools);
                 console.log(`[Background] Broadcasted ${tools.length} normalized tools after config update`);
               } catch (toolError) {
@@ -858,7 +896,7 @@ function broadcastToolsUpdateToContentScripts(tools: any[]) {
  * 
  * @param config - The updated server configuration
  */
-function broadcastConfigUpdateToContentScripts(config: { uri: string }) {
+function broadcastConfigUpdateToContentScripts(config: { uri: string; type?: string }) {
   console.log(`[Background] Broadcasting config update to content scripts: ${config.uri}`);
   
   const broadcastMessage: BaseMessage & { payload: ServerConfigUpdatedBroadcast } = {
@@ -881,42 +919,3 @@ function broadcastConfigUpdateToContentScripts(config: { uri: string }) {
   });
 }
 
-/**
- * Normalize tool schema property names for consistent content script consumption
- * Converts MCP server's camelCase 'inputSchema' to snake_case 'input_schema'
- * 
- * @param primitives - Array of primitives from MCP server
- * @returns Array of normalized tools with proper schema property names
- */
-function normalizeToolsFromPrimitives(primitives: any[]): any[] {
-  const tools = primitives
-    .filter(p => p.type === 'tool')
-    .map(p => {
-      const tool = p.value as any; // Cast to any to handle both inputSchema and input_schema properties
-      
-      // Log the raw tool structure for debugging (only first tool to avoid spam)
-      if (p === primitives.find(prim => prim.type === 'tool')) {
-        console.log(`[Background] Sample raw tool structure:`, JSON.stringify(tool, null, 2));
-      }
-      
-      // Normalize schema property names: inputSchema (camelCase from MCP) -> input_schema (snake_case for content script)
-      const normalizedTool = {
-        name: tool.name,
-        description: tool.description || '',
-        // Convert camelCase inputSchema to snake_case input_schema for content script compatibility
-        input_schema: tool.inputSchema || tool.input_schema || {},
-        // Keep legacy schema field for backwards compatibility (as string)
-        schema: tool.inputSchema ? JSON.stringify(tool.inputSchema) : 
-                tool.input_schema ? JSON.stringify(tool.input_schema) : '{}',
-        // Preserve URI if present (for resources)
-        ...(tool.uri && { uri: tool.uri }),
-        // Preserve arguments if present
-        ...(tool.arguments && { arguments: tool.arguments })
-      };
-      
-      return normalizedTool;
-    });
-    
-  console.log(`[Background] Normalized ${tools.length} tools with schemas. Sample schema sizes: ${tools.slice(0, 3).map(t => `${t.name}:${t.schema.length}chars`).join(', ')}`);
-  return tools;
-}
