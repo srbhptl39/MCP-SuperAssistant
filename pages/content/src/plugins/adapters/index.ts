@@ -9,6 +9,7 @@ export { DefaultAdapter } from './default.adapter';
 export { ExampleForumAdapter } from './example-forum.adapter';
 export { GeminiAdapter } from './gemini.adapter';
 export { PerplexityAdapter } from './perplexity.adapter';
+export { AIStudioAdapter } from './aistudio.adapter';
 
 // Export types
 export type { 

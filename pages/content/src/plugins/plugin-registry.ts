@@ -9,6 +9,7 @@ import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
 import { PerplexityAdapter } from './adapters/perplexity.adapter';
+import { AIStudioAdapter } from './adapters/aistudio.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
@@ -504,8 +505,23 @@ class PluginRegistry {
           urlCheckInterval: 1000,
         },
       });
+
+      // Register AIStudioAdapter for Google AI Studio
+      const aiStudioAdapter = new AIStudioAdapter();
+      await this.register(aiStudioAdapter, {
+        id: 'aistudio-adapter',
+        name: 'AI Studio Adapter',
+        description: 'Specialized adapter for Google AI Studio with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for AI Studio
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, and PerplexityAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, PerplexityAdapter, and AIStudioAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
