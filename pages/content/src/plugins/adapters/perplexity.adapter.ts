@@ -25,7 +25,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current Perplexity interface
   private readonly selectors = {
     // Primary chat input selectors
-    CHAT_INPUT: 'textarea[placeholder="Ask anything..."], textarea[placeholder="Ask follow-up"], textarea[placeholder*="Ask"]',
+    CHAT_INPUT: '#ask-input[contenteditable="true"], #ask-input[role="textbox"], div[role="textbox"][contenteditable="true"], textarea[placeholder="Ask anything..."], textarea[placeholder="Ask follow-up"], textarea[placeholder*="Ask"], div[contenteditable="true"][data-lexical-editor="true"]',
     // Submit button selectors (multiple fallbacks)
     SUBMIT_BUTTON: 'button[aria-label="Submit"], button[aria-label="Send"], button[type="submit"]',
     // File upload related selectors
@@ -818,6 +818,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   private handleToolExecutionCompleted(data: any): void {
     this.context.logger.debug('Handling tool execution completion in Perplexity adapter:', data);
+
+    // Use the base class method to check if we should handle events
+    if (!this.shouldHandleEvents()) {
+      this.context.logger.debug('Perplexity adapter should not handle events, ignoring tool execution event');
+      return;
+    }
 
     // Get current UI state from stores to determine auto-actions
     const uiState = this.context.stores.ui;

@@ -123,4 +123,30 @@ export abstract class BaseAdapterPlugin implements AdapterPlugin {
     // Base implementation could re-check isSupported or trigger adapter re-evaluation
     // For example, if an adapter is only for a specific path on a host.
   }
+
+  /**
+   * Check if this adapter should handle events
+   * Only active adapters on supported sites should handle events
+   */
+  protected shouldHandleEvents(): boolean {
+    // Only handle events if adapter is active
+    if (this.currentStatus !== 'active') {
+      return false;
+    }
+
+    // Only handle events if the current site is supported
+    try {
+      const isSupported = this.isSupported();
+      // Handle both sync and async isSupported implementations
+      if (typeof isSupported === 'boolean') {
+        return isSupported;
+      }
+      // For async implementations, we assume supported for now
+      // (this could be improved with caching)
+      return true;
+    } catch (error) {
+      this.context.logger.error('Error checking if site is supported:', error);
+      return false;
+    }
+  }
 }

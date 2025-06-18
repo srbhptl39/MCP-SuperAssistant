@@ -1341,7 +1341,7 @@ export const displayResult = (
         rawResultText,
         attachButton,
         attachButton.querySelector('span') as HTMLElement,
-        true,
+        true, // Set skipAutoInsertCheck to true to prevent AutomationService from auto-inserting the same file
       );
     };
 
@@ -1377,7 +1377,7 @@ export const displayResult = (
         }),
       };
 
-      attachResultAsFile(adapter, functionName, callId, rawResultText, fakeElements.button, fakeElements.icon, false)
+      attachResultAsFile(adapter, functionName, callId, rawResultText, fakeElements.button, fakeElements.icon, true) // Set to true to prevent double attachment
         .then(({ success, message }) => {
           if (success) {
             console.debug(`Auto-attached file successfully: ${message}`);

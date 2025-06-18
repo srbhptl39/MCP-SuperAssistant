@@ -630,6 +630,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   private handleToolExecutionCompleted(data: any): void {
     this.context.logger.debug('Handling tool execution completion in Gemini adapter:', data);
 
+    // Use the base class method to check if we should handle events
+    if (!this.shouldHandleEvents()) {
+      this.context.logger.debug('Gemini adapter should not handle events, ignoring tool execution event');
+      return;
+    }
+
     // Get current UI state from stores to determine auto-actions
     const uiState = this.context.stores.ui;
     if (uiState && data.execution) {

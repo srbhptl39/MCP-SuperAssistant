@@ -214,7 +214,8 @@ export class AutomationService {
       }
 
       // Handle Auto Insert and Auto Submit logic
-      const shouldAutoInsert = automationState.autoInsert || detail.skipAutoInsertCheck;
+      // Skip auto-insert if skipAutoInsertCheck is true (for manual actions)
+      const shouldAutoInsert = automationState.autoInsert && !detail.skipAutoInsertCheck;
       
       if (shouldAutoInsert) {
         const insertSuccess = await this.handleAutoInsert(detail);
@@ -284,6 +285,12 @@ export class AutomationService {
    */
   private async handleAutoInsert(detail: ToolExecutionCompleteDetail): Promise<boolean> {
     console.debug('[AutomationService] Handling auto insert');
+
+    // Additional safety check: Don't auto-insert if skipAutoInsertCheck is true
+    if (detail.skipAutoInsertCheck) {
+      console.debug('[AutomationService] Skipping auto insert due to skipAutoInsertCheck flag');
+      return false;
+    }
 
     try {
       // Get current adapter from the adapter hook
