@@ -19,6 +19,7 @@ declare global {
     _scrollInitialized?: boolean;
     _scrollCleanup?: () => void;
     _scrollHandlersInitialized?: boolean;
+    value?: string; // For compatibility with input elements
   }
 }
 

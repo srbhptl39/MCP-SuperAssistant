@@ -144,6 +144,14 @@ export const WEBSITE_CONFIGS: Array<{
       function_result_selector: ['div[aria-label="Your message"]'],
     },
   },
+  {
+    urlPattern: 'chat.mistral.ai',
+    config: {
+      targetSelectors: ['pre'],
+      streamingContainerSelectors: ['pre'],
+      function_result_selector: ['div[data-message-part-type="answer"]'],
+    },
+  },
   // Add more website-specific configurations as needed
   // Example:
   // {

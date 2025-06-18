@@ -14,6 +14,7 @@ import { PerplexityAdapter } from './adapters/perplexity.adapter';
 import { AIStudioAdapter } from './adapters/aistudio.adapter';
 import { OpenRouterAdapter } from './adapters/openrouter.adapter';
 import { T3ChatAdapter } from './adapters/t3chat.adapter';
+import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
@@ -576,6 +577,21 @@ class PluginRegistry {
         id: 't3chat-adapter',
         name: 'T3Chat Adapter',
         description: 'Specialized adapter for T3 Chat with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for T3Chat
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
+
+      // Register MistralAdapter for Mistral Chat
+      const mistralChatAdapter = new MistralAdapter();
+      await this.register(mistralChatAdapter, {
+        id: 'mistralchat-adapter',
+        name: 'Mistral Adapter',
+        description: 'Specialized adapter for Mistral chat with chat input, form submission, and file attachment support',
         version: '2.0.0',
         enabled: true,
         priority: 5, // High priority for T3Chat

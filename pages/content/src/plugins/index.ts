@@ -10,6 +10,7 @@ export { OpenRouterAdapter } from './adapters/openrouter.adapter';
 export { DeepSeekAdapter } from './adapters/deepseek.adapter';
 export { T3ChatAdapter } from './adapters/t3chat.adapter';
 export { AIStudioAdapter } from './adapters/aistudio.adapter';
+export { MistralAdapter } from './adapters/mistral.adapter';
 export { SidebarPlugin } from './sidebar.plugin';
 export { createPluginContext } from './plugin-context';
 

@@ -14,6 +14,7 @@ export { AIStudioAdapter } from './aistudio.adapter';
 export { OpenRouterAdapter } from './openrouter.adapter';
 export { DeepSeekAdapter } from './deepseek.adapter';
 export { T3ChatAdapter } from './t3chat.adapter';
+export { MistralAdapter } from './mistral.adapter';
 
 
 // Export types
