@@ -7,6 +7,7 @@ export { GeminiAdapter } from './adapters/gemini.adapter';
 export { GrokAdapter } from './adapters/grok.adapter';
 export { PerplexityAdapter } from './adapters/perplexity.adapter';
 export { OpenRouterAdapter } from './adapters/openrouter.adapter';
+export { DeepSeekAdapter } from './adapters/deepseek.adapter';
 export { AIStudioAdapter } from './adapters/aistudio.adapter';
 export { SidebarPlugin } from './sidebar.plugin';
 export { createPluginContext } from './plugin-context';

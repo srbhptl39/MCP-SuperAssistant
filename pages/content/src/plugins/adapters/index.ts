@@ -12,6 +12,8 @@ export { GrokAdapter } from './grok.adapter';
 export { PerplexityAdapter } from './perplexity.adapter';
 export { AIStudioAdapter } from './aistudio.adapter';
 export { OpenRouterAdapter } from './openrouter.adapter';
+export { DeepSeekAdapter } from './deepseek.adapter';
+
 
 // Export types
 export type { 
