@@ -13,6 +13,7 @@ import { GrokAdapter } from './adapters/grok.adapter';
 import { PerplexityAdapter } from './adapters/perplexity.adapter';
 import { AIStudioAdapter } from './adapters/aistudio.adapter';
 import { OpenRouterAdapter } from './adapters/openrouter.adapter';
+import { T3ChatAdapter } from './adapters/t3chat.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
@@ -568,8 +569,23 @@ class PluginRegistry {
           urlCheckInterval: 1000,
         },
       });
+
+      // Register T3ChatAdapter for T3 Chat
+      const t3ChatAdapter = new T3ChatAdapter();
+      await this.register(t3ChatAdapter, {
+        id: 't3chat-adapter',
+        name: 'T3Chat Adapter',
+        description: 'Specialized adapter for T3 Chat with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for T3Chat
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, DeepSeekAdapter, GrokAdapter, PerplexityAdapter, AIStudioAdapter, and OpenRouterAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, DeepSeekAdapter, GrokAdapter, PerplexityAdapter, AIStudioAdapter, OpenRouterAdapter, and T3ChatAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);

@@ -13,6 +13,7 @@ export { PerplexityAdapter } from './perplexity.adapter';
 export { AIStudioAdapter } from './aistudio.adapter';
 export { OpenRouterAdapter } from './openrouter.adapter';
 export { DeepSeekAdapter } from './deepseek.adapter';
+export { T3ChatAdapter } from './t3chat.adapter';
 
 
 // Export types
