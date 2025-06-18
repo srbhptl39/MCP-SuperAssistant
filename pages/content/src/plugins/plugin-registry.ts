@@ -8,6 +8,7 @@ import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, A
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
+import { GrokAdapter } from './adapters/grok.adapter';
 import { PerplexityAdapter } from './adapters/perplexity.adapter';
 import { AIStudioAdapter } from './adapters/aistudio.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
@@ -491,6 +492,21 @@ class PluginRegistry {
         },
       });
 
+      // Register GrokAdapter for Grok (X.com/Grok.com)
+      const grokAdapter = new GrokAdapter();
+      await this.register(grokAdapter, {
+        id: 'grok-adapter',
+        name: 'Grok Adapter',
+        description: 'Specialized adapter for Grok (X.com/Grok.com) with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for Grok
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
+
       // Register PerplexityAdapter for Perplexity AI
       const perplexityAdapter = new PerplexityAdapter();
       await this.register(perplexityAdapter, {
@@ -521,7 +537,7 @@ class PluginRegistry {
         },
       });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, PerplexityAdapter, and AIStudioAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, GrokAdapter, PerplexityAdapter, and AIStudioAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
