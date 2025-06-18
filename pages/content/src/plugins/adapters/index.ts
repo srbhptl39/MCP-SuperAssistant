@@ -11,6 +11,7 @@ export { GeminiAdapter } from './gemini.adapter';
 export { GrokAdapter } from './grok.adapter';
 export { PerplexityAdapter } from './perplexity.adapter';
 export { AIStudioAdapter } from './aistudio.adapter';
+export { OpenRouterAdapter } from './openrouter.adapter';
 
 // Export types
 export type { 

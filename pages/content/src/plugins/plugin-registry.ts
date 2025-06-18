@@ -11,6 +11,7 @@ import { GeminiAdapter } from './adapters/gemini.adapter';
 import { GrokAdapter } from './adapters/grok.adapter';
 import { PerplexityAdapter } from './adapters/perplexity.adapter';
 import { AIStudioAdapter } from './adapters/aistudio.adapter';
+import { OpenRouterAdapter } from './adapters/openrouter.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
 class PluginRegistry {
@@ -536,8 +537,23 @@ class PluginRegistry {
           urlCheckInterval: 1000,
         },
       });
+
+      // Register OpenRouterAdapter for OpenRouter
+      const openRouterAdapter = new OpenRouterAdapter();
+      await this.register(openRouterAdapter, {
+        id: 'openrouter-adapter',
+        name: 'OpenRouter Adapter',
+        description: 'Specialized adapter for OpenRouter with chat input, form submission, and file attachment support',
+        version: '2.0.0',
+        enabled: true,
+        priority: 5, // High priority for OpenRouter
+        settings: {
+          logLevel: 'info',
+          urlCheckInterval: 1000,
+        },
+      });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, GrokAdapter, PerplexityAdapter, and AIStudioAdapter');
+      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, GrokAdapter, PerplexityAdapter, AIStudioAdapter, and OpenRouterAdapter');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
