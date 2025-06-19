@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Tool } from '@src/types/mcp';
 import { useAvailableTools, useToolExecution } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
@@ -28,13 +28,15 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
   // Use tools from store if available, fallback to props
   const effectiveTools = storeTools.length > 0 ? storeTools : tools;
 
-  // Debug logging for tools
+  // Memoize effective tools length to prevent excessive logging
+  const effectiveToolsCount = useMemo(() => effectiveTools.length, [effectiveTools.length]);
+
+  // Reduced debug logging - only log when tool count changes significantly
   useEffect(() => {
-    logMessage(`[AvailableTools] Store tools: ${storeTools.length}, Props tools: ${tools.length}, Effective tools: ${effectiveTools.length}`);
-    if (effectiveTools.length > 0) {
-      logMessage(`[AvailableTools] Tool names: ${effectiveTools.map(t => t.name).join(', ')}`);
+    if (effectiveToolsCount > 0) {
+      logMessage(`[AvailableTools] ${effectiveToolsCount} tools available`);
     }
-  }, [storeTools, tools, effectiveTools]);
+  }, [effectiveToolsCount]);
 
   // Mark component as loaded after initial render
   useEffect(() => {
@@ -64,12 +66,14 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     logMessage(`[AvailableTools] Component ${!isExpanded ? 'expanded' : 'collapsed'}`);
   };
 
-  // Filter tools using effective tools (store or props)
-  const filteredTools = (effectiveTools || []).filter(
-    tool =>
-      tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (tool.description && tool.description.toLowerCase().includes(searchTerm.toLowerCase())),
-  );
+  // Filter tools using effective tools (store or props) - memoized to prevent unnecessary recalculations
+  const filteredTools = useMemo(() => {
+    return (effectiveTools || []).filter(
+      tool =>
+        tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (tool.description && tool.description.toLowerCase().includes(searchTerm.toLowerCase())),
+    );
+  }, [effectiveTools, searchTerm]);
 
   const handleExecute = (tool: Tool) => {
     logMessage(`[AvailableTools] Executing tool: ${tool.name}`);

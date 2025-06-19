@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { mcpClient } from '../core/mcp-client';
 import { useConnectionStatus, useAvailableTools, useServerConfig } from './useStores';
 import { useToolStore } from '../stores/tool.store';
@@ -271,42 +271,48 @@ export const useMcpCommunication = () => {
   /* Public interface with enhanced data normalization                      */
   /* ---------------------------------------------------------------------- */
 
-  // Normalize tools for consistent interface across components
-  const normalizedTools = tools.map((tool: Tool) => ({
-    name: tool.name,
-    description: tool.description || '',
-    // Ensure schema is always a string for legacy compatibility
-    schema: typeof (tool as any).schema === 'string'
-      ? (tool as any).schema
-      : JSON.stringify(tool.input_schema || {}),
-    // Keep original input_schema for new components
-    input_schema: tool.input_schema
-  }));
-
-  // Debug logging for tools
-  useEffect(() => {
-    logMessage(`[useMcpCommunication] Tools from store: ${tools.length}, normalized: ${normalizedTools.length}`);
-    if (normalizedTools.length > 0) {
-      logMessage(`[useMcpCommunication] Available tool names: ${normalizedTools.map(t => t.name).join(', ')}`);
+  // Normalize tools for consistent interface across components - MEMOIZED to prevent unnecessary re-renders
+  const normalizedTools = useMemo(() => {
+    const normalized = tools.map((tool: Tool) => ({
+      name: tool.name,
+      description: tool.description || '',
+      // Ensure schema is always a string for legacy compatibility
+      schema: typeof (tool as any).schema === 'string'
+        ? (tool as any).schema
+        : JSON.stringify(tool.input_schema || {}),
+      // Keep original input_schema for new components
+      input_schema: tool.input_schema
+    }));
+    
+    // Only log when tools actually change (not on every render)
+    if (normalized.length > 0) {
+      logMessage(`[useMcpCommunication] Tools normalized: ${normalized.length} tools`);
     }
-  }, [tools, normalizedTools]);
+    
+    return normalized;
+  }, [tools]);
 
-  // Enhanced debugging for schema population
+  // Throttled debug logging to prevent spam - only log significant changes
+  useEffect(() => {
+    // Only log when there's a meaningful change in tool count or first load
+    const toolCount = normalizedTools.length;
+    if (toolCount > 0) {
+      logMessage(`[useMcpCommunication] Available tool names: ${normalizedTools.map(t => t.name).slice(0, 3).join(', ')}${toolCount > 3 ? `...and ${toolCount - 3} more` : ''}`);
+    }
+  }, [normalizedTools.length]); // Only depend on length, not the full array
+
+  // Simplified schema status logging - only run once when tools are loaded
   useEffect(() => {
     if (normalizedTools.length > 0) {
       logMessage(`[useMcpCommunication] Schema status for available tools:`);
-      normalizedTools.forEach((tool, index) => {
-        const hasInputSchema = tool.input_schema && Object.keys(tool.input_schema).length > 0;
-        const hasLegacySchema = tool.schema && tool.schema !== '{}';
-        // logMessage(`  ${index + 1}. ${tool.name}: input_schema=${hasInputSchema ? 'populated' : 'EMPTY'}, schema=${hasLegacySchema ? 'populated' : 'EMPTY'}`);
-        
-        // Log schema content for first few tools for debugging
-        // if (index < 2 && hasInputSchema) {
-        //   logMessage(`     Schema preview: ${JSON.stringify(tool.input_schema).substring(0, 10)}...`);
-        // }
-      });
+      // Only log a summary, not individual tool details
+      const toolsWithSchema = normalizedTools.filter(tool => 
+        (tool.input_schema && Object.keys(tool.input_schema).length > 0) ||
+        (tool.schema && tool.schema !== '{}')
+      );
+      logMessage(`  ${toolsWithSchema.length}/${normalizedTools.length} tools have valid schemas`);
     }
-  }, [normalizedTools]);
+  }, [normalizedTools.length]); // Only run when tool count changes
 
   // Enhanced status with more granular information
   const serverStatus = connection.status as 'connected' | 'disconnected' | 'reconnecting' | 'error';

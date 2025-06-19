@@ -96,10 +96,15 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   const [customInstructionsEnabled, setCustomInstructionsEnabled] = useState(preferences.customInstructionsEnabled || false);
   const [isEditingCustom, setIsEditingCustom] = useState(false);
 
-  // Memoize tools to prevent unnecessary regeneration
+  // Memoize tools to prevent unnecessary regeneration - use deep comparison of tool data
   const toolsSignature = useMemo(() => {
-    return tools.map(tool => tool.name).join(',');
+    return tools.map(tool => `${tool.name}:${tool.description || ''}`).sort().join('|');
   }, [tools]);
+
+  // Memoize custom instructions key to prevent unnecessary updates
+  const customInstructionsKey = useMemo(() => {
+    return `${customInstructionsEnabled}:${customInstructions}`;
+  }, [customInstructions, customInstructionsEnabled]);
 
   // Update local state when preferences change
   useEffect(() => {
@@ -107,25 +112,32 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     setCustomInstructionsEnabled(preferences.customInstructionsEnabled || false);
   }, [preferences]);
 
-  // Generate instructions with custom instructions
+  // Generate instructions with custom instructions - memoized to prevent excessive calls
   const generateCurrentInstructions = useCallback(() => {
     return generateInstructions(tools, customInstructions, customInstructionsEnabled);
   }, [tools, customInstructions, customInstructionsEnabled]);
 
-  // Update instructions when tools or custom instructions change
+  // Memoize the actual current instructions to prevent unnecessary re-calculations
+  const currentInstructions = useMemo(() => {
+    return generateCurrentInstructions();
+  }, [generateCurrentInstructions]);
+
+  // Update instructions only when tools or custom instructions actually change (not on every render)
   useEffect(() => {
     if (tools.length > 0) {
-      logMessage('Generating instructions based on updated tools and custom instructions');
-      const newInstructions = generateCurrentInstructions();
-      setInstructions(newInstructions);
-      // Update global state
-      instructionsState.setInstructions(newInstructions);
+      // Only log and update if the instructions have actually changed
+      if (currentInstructions !== instructions) {
+        logMessage('Generating instructions based on updated tools and custom instructions');
+        setInstructions(currentInstructions);
+        // Update global state
+        instructionsState.setInstructions(currentInstructions);
+      }
     }
 
     return () => {
       logMessage('Cleaning up instruction generator effect');
     };
-  }, [toolsSignature, customInstructions, customInstructionsEnabled, generateCurrentInstructions]);
+  }, [toolsSignature, customInstructionsKey, currentInstructions, instructions]);
 
   // Update global state when local state changes
   useEffect(() => {
