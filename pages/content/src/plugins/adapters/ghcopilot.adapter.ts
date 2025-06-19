@@ -61,6 +61,9 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   private static instanceCount = 0;
   private instanceId: number;
 
+  // Adapter-specific button styling
+  private adapterStylesInjected: boolean = false;
+
   constructor() {
     super();
     GitHubCopilotAdapter.instanceCount++;
@@ -84,6 +87,9 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
 
     // Set up event listeners for the new architecture
     this.setupStoreEventListeners();
+
+    // Inject GitHub-specific button styles
+    this.injectGitHubButtonStyles();
   }
 
   async activate(): Promise<void> {
@@ -95,6 +101,9 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
 
     await super.activate();
     this.context.logger.info(`Activating GitHub Copilot adapter instance #${this.instanceId}...`);
+
+    // Inject GitHub-specific button styles
+    this.injectGitHubButtonStyles();
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -147,6 +156,14 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     if (this.popoverCheckInterval) {
       clearInterval(this.popoverCheckInterval);
       this.popoverCheckInterval = null;
+    }
+
+    // Remove injected adapter styles
+    const styleElement = document.getElementById('mcp-github-copilot-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.adapterStylesInjected = false;
+      this.context.logger.debug('GitHub Copilot button styles removed');
     }
 
     // Final cleanup
@@ -761,15 +778,25 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
+            // GitHub-specific button styling configuration
+            const adapterButtonConfig = {
+              className: 'mcp-gh-button-base',
+              contentClassName: 'mcp-gh-button-content',
+              textClassName: 'mcp-gh-button-text',
+              activeClassName: 'mcp-button-active'
+            };
+
             // Create React root and render
             const root = ReactDOM.createRoot(container);
             root.render(
               React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
+                toggleStateManager: toggleStateManager,
+                adapterButtonConfig: adapterButtonConfig,
+                adapterName: this.name
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.info('MCP popover rendered successfully with GitHub styling');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -1016,6 +1043,11 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     // Re-check support and re-inject UI if needed
     const stillSupported = this.isSupported();
     if (stillSupported) {
+      // Re-inject GitHub button styles after page change
+      setTimeout(() => {
+        this.injectGitHubButtonStyles();
+      }, 500); // Inject styles early
+
       // Re-setup UI integration after page change
       setTimeout(() => {
         this.setupUIIntegration();
@@ -1061,5 +1093,218 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     tools.forEach(tool => {
       this.context.stores.tool?.addDetectedTool?.(tool);
     });
+  }
+
+  /**
+   * Get GitHub Copilot specific button styles that match the native UI
+   * Mimics the styling of GitHub's Primer React Components
+   * 
+   * @returns CSS string with GitHub-specific button styles
+   * 
+   * @example
+   * // For other adapters, implement a similar method:
+   * // private getAdapterButtonStyles(): string {
+   * //   return `
+   * //     .mcp-adapter-button-base {
+   * //       // Your adapter-specific styling here
+   * //       // Match your host site's button design
+   * //     }
+   * //   `;
+   * // }
+   */
+  private getGitHubCopilotButtonStyles(): string {
+    return `
+/* GitHub Copilot MCP Button Styles - Matches Primer React Components */
+.mcp-gh-button-base {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  appearance: none;
+  text-decoration: none;
+  text-align: center;
+  border: 0;
+  transition: 80ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition-property: color, fill, background-color, border-color;
+  
+  /* Medium size styling */
+  height: 32px;
+  padding: 0 12px;
+  gap: 8px;
+  min-width: max-content;
+  
+  /* Invisible variant - matches GitHub's invisible button style */
+  color: var(--fgColor-muted, #656d76);
+  background-color: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.mcp-gh-button-base:hover:not(:disabled) {
+  background-color: var(--control-transparent-bgColor-hover, rgba(175, 184, 193, 0.2));
+  color: var(--fgColor-default, #1f2328);
+  text-decoration: none;
+  transition-duration: 80ms;
+}
+
+.mcp-gh-button-base:active:not(:disabled) {
+  background-color: var(--control-transparent-bgColor-active, rgba(175, 184, 193, 0.3));
+  transition: none;
+}
+
+.mcp-gh-button-base:focus:not(:disabled) {
+  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.mcp-gh-button-base:disabled {
+  color: var(--control-fgColor-disabled, #8c959f);
+  cursor: not-allowed;
+}
+
+.mcp-gh-button-base.mcp-button-active {
+  background-color: var(--control-transparent-bgColor-selected, rgba(175, 184, 193, 0.15));
+  color: var(--fgColor-accent, #0969da);
+}
+
+.mcp-gh-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.mcp-gh-button-text {
+  flex: 1 1 auto;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .mcp-gh-button-base {
+    color: var(--fgColor-muted, #8b949e);
+  }
+  
+  .mcp-gh-button-base:hover:not(:disabled) {
+    background-color: var(--control-transparent-bgColor-hover, rgba(177, 186, 196, 0.12));
+    color: var(--fgColor-default, #e6edf3);
+  }
+  
+  .mcp-gh-button-base:active:not(:disabled) {
+    background-color: var(--control-transparent-bgColor-active, rgba(177, 186, 196, 0.2));
+  }
+  
+  .mcp-gh-button-base:focus:not(:disabled) {
+    outline-color: var(--focus-outlineColor, #2f81f7);
+  }
+  
+  .mcp-gh-button-base:disabled {
+    color: var(--control-fgColor-disabled, #484f58);
+  }
+  
+  .mcp-gh-button-base.mcp-button-active {
+    background-color: var(--control-transparent-bgColor-selected, rgba(177, 186, 196, 0.08));
+    color: var(--fgColor-accent, #2f81f7);
+  }
+}
+
+/* Ensure button looks consistent with GitHub's toolbar */
+.ChatInput-module__toolbarLeft--cjV2H .mcp-gh-button-base,
+.ChatInput-module__toolbar--ZtCiG .mcp-gh-button-base {
+  margin: 0 2px;
+}
+
+/* Additional refinements for better integration */
+.mcp-gh-button-base svg {
+  flex-shrink: 0;
+  vertical-align: text-bottom;
+}
+
+.mcp-gh-button-base:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline-offset: -2px;
+}
+
+.mcp-gh-button-base:not(:focus-visible) {
+  outline: none;
+}
+`;
+  }
+
+  /**
+   * Inject GitHub-specific button styles into the page
+   * 
+   * @example
+   * // Template for other adapters:
+   * // 
+   * // private injectAdapterButtonStyles(): void {
+   * //   if (this.adapterStylesInjected) return;
+   * //   
+   * //   try {
+   * //     const styleId = 'mcp-[adapter-name]-button-styles';
+   * //     const existingStyles = document.getElementById(styleId);
+   * //     if (existingStyles) existingStyles.remove();
+   * //     
+   * //     const styleElement = document.createElement('style');
+   * //     styleElement.id = styleId;
+   * //     styleElement.textContent = this.getAdapterButtonStyles();
+   * //     document.head.appendChild(styleElement);
+   * //     
+   * //     this.adapterStylesInjected = true;
+   * //     this.context.logger.info('[Adapter] button styles injected successfully');
+   * //   } catch (error) {
+   * //     this.context.logger.error('Failed to inject [adapter] button styles:', error);
+   * //   }
+   * // }
+   * //
+   * // Then in renderMCPPopover method:
+   * // const adapterButtonConfig = {
+   * //   className: 'mcp-[adapter]-button-base',
+   * //   contentClassName: 'mcp-[adapter]-button-content', 
+   * //   textClassName: 'mcp-[adapter]-button-text',
+   * //   activeClassName: 'mcp-button-active'
+   * // };
+   */
+  private injectGitHubButtonStyles(): void {
+    if (this.adapterStylesInjected) {
+      this.context.logger.debug('GitHub button styles already injected, skipping');
+      return;
+    }
+
+    try {
+      const styleId = 'mcp-github-copilot-button-styles';
+      
+      // Remove existing styles if any
+      const existingStyles = document.getElementById(styleId);
+      if (existingStyles) {
+        existingStyles.remove();
+      }
+
+      // Inject new styles
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = this.getGitHubCopilotButtonStyles();
+      document.head.appendChild(styleElement);
+
+      this.adapterStylesInjected = true;
+      this.context.logger.info('GitHub Copilot button styles injected successfully');
+    } catch (error) {
+      this.context.logger.error('Failed to inject GitHub button styles:', error);
+    }
   }
 }

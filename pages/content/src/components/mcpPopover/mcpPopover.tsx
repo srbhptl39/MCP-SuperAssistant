@@ -39,6 +39,8 @@ const styles = `
 .mcp-main-button {
   display: flex;
   align-items: center;
+  width: max-content;
+  height: max-content;
   justify-content: center;
   padding: 4px 8px;
   border-radius: 10px;
@@ -435,6 +437,22 @@ interface MCPPopoverProps {
     setAutoExecute(enabled: boolean): void;
     updateUI(): void;
   };
+  /**
+   * Adapter-specific button styling configuration
+   * Allows adapters to override the default MCP button styling
+   * to match the host website's design system
+   */
+  adapterButtonConfig?: {
+    className?: string;        // Main button class (e.g., 'mcp-gh-button-base')
+    contentClassName?: string; // Content wrapper class (e.g., 'mcp-gh-button-content')  
+    textClassName?: string;    // Text label class (e.g., 'mcp-gh-button-text')
+    activeClassName?: string;  // Active state class (e.g., 'mcp-button-active')
+  };
+  /**
+   * Name of the adapter providing the styling
+   * Used for debugging and logging
+   */
+  adapterName?: string;
 }
 
 interface ToggleItemProps {
@@ -506,7 +524,7 @@ const ToggleItem: React.FC<ToggleItemProps> = ({ id, label, checked, disabled, o
   );
 };
 
-export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) => {
+export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adapterButtonConfig, adapterName }) => {
   const isDarkMode = useThemeDetector();
 
   // Use Zustand hooks for adapter and user preferences
@@ -524,9 +542,11 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
       pluginName: activePlugin?.name,
       hasInsertText: !!insertText,
       hasAttachFile: !!attachFile,
-      capabilities: activePlugin?.capabilities
+      capabilities: activePlugin?.capabilities,
+      adapterName,
+      hasAdapterButtonConfig: !!adapterButtonConfig
     });
-  }, [isAdapterActive, activePlugin, insertText, attachFile]);
+  }, [isAdapterActive, activePlugin, insertText, attachFile, adapterName, adapterButtonConfig]);
 
   // Debug: Log instructions state for debugging
   useEffect(() => {
@@ -862,16 +882,29 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   const autoSubmitDisabled = !state.mcpEnabled || !state.autoInsert;
   const autoExecuteDisabled = !state.mcpEnabled;
 
+  // Determine button styling based on adapter configuration
+  const buttonClassName = adapterButtonConfig?.className
+    ? `${adapterButtonConfig.className}${state.mcpEnabled && adapterButtonConfig.activeClassName ? ` ${adapterButtonConfig.activeClassName}` : ''}`
+    : `mcp-main-button${state.mcpEnabled ? '' : ' inactive'}`;
+
+  const buttonContent = adapterButtonConfig?.contentClassName ? (
+    <span className={adapterButtonConfig.contentClassName}>
+      <span className={adapterButtonConfig.textClassName || ''}>MCP</span>
+    </span>
+  ) : (
+    'MCP'
+  );
+
   return (
     <div className="mcp-popover-container" id="mcp-popover-container" ref={containerRef}>
       <button
-        className={`mcp-main-button${state.mcpEnabled ? '' : ' inactive'}`}
+        className={buttonClassName}
         aria-label={`MCP Settings - ${state.mcpEnabled ? 'Active' : 'Inactive'}`}
         title={`MCP Settings - ${state.mcpEnabled ? 'Sidebar Visible' : 'Sidebar Hidden'}`}
         type="button"
         ref={buttonRef}
         onClick={() => setIsPopoverOpen(!isPopoverOpen)}>
-        MCP
+        {buttonContent}
       </button>
       <PopoverPortal isOpen={isPopoverOpen} triggerRef={buttonRef}>
         <div
