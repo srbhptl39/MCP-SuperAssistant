@@ -12,7 +12,7 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  */
 export class MistralAdapter extends BaseAdapterPlugin {
   readonly name = 'MistralAdapter';
-  readonly version = '2.0.0'; // Incremented for new architecture
+  readonly version = '2.0.1'; // Updated for improved selectors
   readonly hostnames = ['chat.mistral.ai'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
@@ -24,21 +24,23 @@ export class MistralAdapter extends BaseAdapterPlugin {
   // CSS selectors for Mistral's UI elements
   // Updated selectors based on current Mistral interface
   private readonly selectors = {
-    // Primary chat input selector
-    CHAT_INPUT: 'textarea[name="message.text"], textarea[placeholder*="Ask le Chat"], textarea.border-default.ring-offset-background',
+    // Primary chat input selector - the ProseMirror editor div
+    CHAT_INPUT: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-placeholder="Ask le Chat"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label="Send question"], button[type="submit"], button.bg-state-primary',
+    SUBMIT_BUTTON: 'button[aria-label="Send question"], .ms-auto.flex.gap-2 button[type="submit"], button.bg-state-primary',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attach-file-button"], button[aria-label="Add files"]',
     FILE_INPUT: 'input[name="file-upload"], input[type="file"][multiple]',
     // Main panel and container selectors
-    MAIN_PANEL: '.relative.flex.w-full.flex-col.p-4, .chat-container, .main-content',
-    // Drop zones for file attachment - targeting the chat input area and its containers
-    DROP_ZONE: 'textarea[name="message.text"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.p-4, textarea[placeholder*="Ask le Chat"], textarea.border-default.ring-offset-background',
+    MAIN_PANEL: '.relative.flex.w-full.flex-col.p-4',
+    // Drop zones for file attachment - targeting the ProseMirror editor and containers
+    DROP_ZONE: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.p-4',
     // File preview elements - updated for Mistral's specific file attachment UI
     FILE_PREVIEW: 'div.relative.rounded-md.border.border-default.bg-muted, .file-preview, .attachment-preview, .uploaded-file',
     // Button insertion points (for MCP popover) - targeting the button container area
     BUTTON_INSERTION_CONTAINER: '.flex.w-full.max-w-full.items-center.justify-start.gap-4, .ms-auto.flex.gap-2',
+    // Tools button selector
+    TOOLS_BUTTON: 'button[data-testid="tools-selection-button"]',
     // Alternative insertion points
     FALLBACK_INSERTION: '.relative.flex.w-full.flex-col.p-4, .chat-input-container'
   };
@@ -161,7 +163,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   /**
    * Insert text into the Mistral chat input field
-   * Enhanced with better selector handling and event integration
+   * Enhanced with better selector handling and ProseMirror editor support
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
     this.context.logger.info(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
@@ -189,32 +191,129 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     try {
-      // Store the original value
-      const originalValue = targetElement.textContent || '';
+      // Store the original value - handle both ProseMirror and textarea
+      const originalValue = targetElement.textContent || targetElement.innerHTML || '';
 
       // Focus the input element
       targetElement.focus();
 
-      // Insert the text by updating the content and dispatching appropriate events
-      // Append the text to the original value on a new line if there's existing content
-      const newContent = originalValue ? originalValue + '\n' + text : text;
-      targetElement.value = newContent;
+      // Handle ProseMirror editor differently than textarea
+      if (targetElement.classList.contains('ProseMirror')) {
+        // For ProseMirror editor, we need to handle HTML structure properly
+        const existingParagraphs = targetElement.querySelectorAll('p');
+        
+        // Check if there's existing content (not just the empty trailing break)
+        const hasExistingContent = existingParagraphs.length > 1 || 
+          (existingParagraphs.length === 1 && 
+           existingParagraphs[0].textContent && 
+           existingParagraphs[0].textContent.trim() !== '');
+        
+        // Split text by newlines to create proper paragraph structure
+        // Keep empty lines to preserve blank lines in the text
+        const textLines = text.split('\n');
+        
+        if (hasExistingContent) {
+          // Find the last paragraph that has content
+          let lastContentParagraph = null;
+          for (let i = existingParagraphs.length - 1; i >= 0; i--) {
+            const p = existingParagraphs[i];
+            if (p.textContent && p.textContent.trim() !== '') {
+              lastContentParagraph = p;
+              break;
+            }
+          }
+          
+          if (lastContentParagraph) {
+            // Remove the trailing break from the last content paragraph
+            const trailingBreak = lastContentParagraph.querySelector('br.ProseMirror-trailingBreak');
+            if (trailingBreak) {
+              trailingBreak.remove();
+            }
+            
+            // Add the first line to the existing paragraph
+            if (textLines.length > 0) {
+              lastContentParagraph.appendChild(document.createElement('br'));
+              lastContentParagraph.appendChild(document.createTextNode(textLines[0]));
+                 // Add remaining lines as new paragraphs
+            for (let i = 1; i < textLines.length; i++) {
+              const newP = document.createElement('p');
+              if (textLines[i].trim() === '') {
+                // For empty lines, add a break element to maintain the blank line
+                const br = document.createElement('br');
+                br.className = 'ProseMirror-trailingBreak';
+                newP.appendChild(br);
+              } else {
+                newP.textContent = textLines[i];
+              }
+              targetElement.insertBefore(newP, targetElement.lastElementChild);
+            }
+            }
+          }
+        } else {
+          // No existing content, replace the empty paragraph structure
+          targetElement.innerHTML = '';
+          
+          // Create paragraphs for each line
+          textLines.forEach((line, index) => {
+            const p = document.createElement('p');
+            if (line.trim() === '') {
+              // For empty lines, add a break element to maintain the blank line
+              const br = document.createElement('br');
+              br.className = 'ProseMirror-trailingBreak';
+              p.appendChild(br);
+            } else {
+              p.textContent = line;
+            }
+            targetElement.appendChild(p);
+          });
+          
+          // Add the trailing break paragraph that ProseMirror expects
+          const trailingP = document.createElement('p');
+          const trailingBr = document.createElement('br');
+          trailingBr.className = 'ProseMirror-trailingBreak';
+          trailingP.appendChild(trailingBr);
+          targetElement.appendChild(trailingP);
+        }
+        
+        // Dispatch input events for ProseMirror
+        targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // Move cursor to end
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          const range = document.createRange();
+          range.selectNodeContents(targetElement);
+          range.collapse(false);
+          selection.addRange(range);
+        }
+      } else {
+        // Fallback for regular input/textarea elements
+        const newContent = originalValue ? originalValue + '\n' + text : text;
+        (targetElement as HTMLInputElement).value = newContent;
 
-      // Dispatch events to simulate user typing for better compatibility
-      targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-      targetElement.dispatchEvent(new Event('change', { bubbles: true }));
-      targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-      targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        // Dispatch events to simulate user typing for better compatibility
+        targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+        targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+        targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      }
 
       // Emit success event to the new event system
+      const finalContent = targetElement.classList.contains('ProseMirror') ? 
+        targetElement.textContent || '' : 
+        (targetElement as HTMLInputElement).value || '';
+        
       this.emitExecutionCompleted('insertText', { text }, {
         success: true,
         originalLength: originalValue.length,
         newLength: text.length,
-        totalLength: newContent.length
+        totalLength: finalContent.length,
+        editorType: targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'
       });
 
-      this.context.logger.info(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      this.context.logger.info(`Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -345,16 +444,16 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async attachFileDirectly(file: File): Promise<boolean> {
     try {
-      console.log('[system] Attempting direct file attachment via drag simulation on textarea');
+      console.log('[system] Attempting direct file attachment via drag simulation on ProseMirror editor');
       
-      // Find the textarea (drop zone) instead of the file input
-      const textarea = document.querySelector('textarea[name="message.text"]') as HTMLTextAreaElement;
-      if (!textarea) {
-        console.warn('[system] Textarea drop zone not found');
+      // Find the ProseMirror editor (drop zone) instead of textarea
+      const proseMirrorEditor = document.querySelector('div.Editor-indented.ProseMirror[contenteditable="true"]') as HTMLElement;
+      if (!proseMirrorEditor) {
+        console.warn('[system] ProseMirror editor drop zone not found');
         return false;
       }
 
-      // Create drag and drop events to simulate file drop on the textarea
+      // Create drag and drop events to simulate file drop on the ProseMirror editor
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
 
@@ -364,7 +463,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      textarea.dispatchEvent(dragEnterEvent);
+      proseMirrorEditor.dispatchEvent(dragEnterEvent);
 
       // Create and dispatch dragover event
       const dragOverEvent = new DragEvent('dragover', {
@@ -372,7 +471,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      textarea.dispatchEvent(dragOverEvent);
+      proseMirrorEditor.dispatchEvent(dragOverEvent);
 
       // Create and dispatch drop event
       const dropEvent = new DragEvent('drop', {
@@ -380,9 +479,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      textarea.dispatchEvent(dropEvent);
+      proseMirrorEditor.dispatchEvent(dropEvent);
 
-      console.log('[system] Direct drag simulation completed on textarea');
+      console.log('[system] Direct drag simulation completed on ProseMirror editor');
       return true;
     } catch (error) {
       console.error('[system] Direct drag simulation failed:', error);
@@ -703,8 +802,8 @@ export class MistralAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // First, try to find the "Tools" button specifically
-    const toolsButton = document.querySelector('button[data-testid="tools-selection-button"]');
+    // First, try to find the "Tools" button specifically using the correct selector
+    const toolsButton = document.querySelector(this.selectors.TOOLS_BUTTON);
     if (toolsButton && toolsButton.parentElement) {
       this.context.logger.debug('Found Tools button, placing MCP popover next to it');
       return { container: toolsButton.parentElement, insertAfter: toolsButton };
@@ -718,16 +817,19 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     // Try primary selector for general button containers
-    const wrapper = document.querySelector('.input-actions, .chat-actions, .message-actions');
-    if (wrapper) {
-      this.context.logger.debug('Found insertion point: .input-actions, .chat-actions, or .message-actions');
-      const btns = wrapper.querySelectorAll('button');
+    const buttonContainer = document.querySelector('.flex.w-full.max-w-full.items-center.justify-start.gap-4');
+    if (buttonContainer) {
+      this.context.logger.debug('Found button container: .flex.w-full.max-w-full.items-center.justify-start.gap-4');
+      const btns = buttonContainer.querySelectorAll('button');
       const after = btns.length > 1 ? btns[1] : btns.length > 0 ? btns[0] : null;
-      return { container: wrapper, insertAfter: after };
+      return { container: buttonContainer, insertAfter: after };
     }
 
     // Try fallback selectors
     const fallbackSelectors = [
+      '.input-actions',
+      '.chat-actions', 
+      '.message-actions',
       '.input-area .actions',
       '.chat-input-actions',
       '.conversation-input .actions',
