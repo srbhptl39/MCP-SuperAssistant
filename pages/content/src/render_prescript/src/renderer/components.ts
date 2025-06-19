@@ -822,14 +822,25 @@ export const extractFunctionParameters = (rawContent: string): Record<string, an
         break;
 
       default:
-        // Auto-detect only numeric and boolean values for better performance
-        // Note: JSON parsing should only happen when explicitly specified with type="json"
+        // Auto-detect numeric, boolean, and JSON-like values
         if (NUMBER_REGEX.test(value)) {
           value = parseFloat(value);
         } else if (BOOLEAN_REGEX.test(value)) {
           value = value.toLowerCase() === 'true';
+        } else {
+          // Try to parse as JSON if it looks like JSON (starts with { or [)
+          const trimmedValue = value.trim();
+          if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) || 
+              (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
+            try {
+              value = JSON.parse(trimmedValue);
+              if (CONFIG.debug) console.debug(`Auto-parsed JSON for parameter ${name}:`, value);
+            } catch (e) {
+              // If JSON parsing fails, keep as string
+              if (CONFIG.debug) console.debug(`Failed to auto-parse JSON for parameter ${name}, keeping as string`);
+            }
+          }
         }
-      // Removed automatic JSON parsing to prevent string parameters from being converted to objects
     }
 
     parameters[name] = value;
