@@ -152,6 +152,14 @@ export const WEBSITE_CONFIGS: Array<{
       function_result_selector: ['div[data-message-part-type="answer"]', '.select-text'],
     },
   },
+  {
+    urlPattern: 'github.com/copilot',
+    config: {
+      targetSelectors: ['pre'],
+      streamingContainerSelectors: ['pre'],
+      function_result_selector: ['.UserMessage-module__container--cAvvK','.ChatMessage-module__userMessage--xvIFp'],
+    },
+  },
   // Add more website-specific configurations as needed
   // Example:
   // {

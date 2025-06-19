@@ -8,6 +8,7 @@ import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, A
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
+import { GitHubCopilotAdapter } from './adapters/ghcopilot.adapter';
 import { DeepSeekAdapter } from './adapters/deepseek.adapter';
 import { GrokAdapter } from './adapters/grok.adapter';
 import { PerplexityAdapter } from './adapters/perplexity.adapter';
@@ -692,6 +693,29 @@ class PluginRegistry {
           name: 'Gemini Adapter',
           description: 'Specialized adapter for Google Gemini with chat input, form submission, and file attachment support',
           version: '1.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
+        },
+      });
+
+      // Register GitHubCopilotAdapter factory for GitHub Copilot
+      this.registerAdapterFactory({
+        name: 'github-copilot-adapter',
+        version: '2.0.0',
+        type: 'website-adapter',
+        hostnames: ['github.com'],
+        // capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        capabilities: ['text-insertion', 'form-submission'],
+        create: () => new GitHubCopilotAdapter(),
+        config: {
+          id: 'github-copilot-adapter',
+          name: 'GitHub Copilot Adapter',
+          description: 'Specialized adapter for GitHub Copilot with chat input, form submission, and file attachment support',
+          version: '2.0.0',
           enabled: true,
           priority: 5,
           settings: {

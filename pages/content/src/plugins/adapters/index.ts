@@ -15,6 +15,7 @@ export { OpenRouterAdapter } from './openrouter.adapter';
 export { DeepSeekAdapter } from './deepseek.adapter';
 export { T3ChatAdapter } from './t3chat.adapter';
 export { MistralAdapter } from './mistral.adapter';
+export { GitHubCopilotAdapter } from './ghcopilot.adapter';
 
 
 // Export types

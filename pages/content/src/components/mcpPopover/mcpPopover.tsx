@@ -577,7 +577,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
   const [instructions, setInstructions] = useState(instructionsState.instructions || '');
   const [copyStatus, setCopyStatus] = useState<'Copy' | 'Copied!' | 'Error'>('Copy');
   const [insertStatus, setInsertStatus] = useState<'Insert' | 'Inserted!' | 'No Adapter' | 'No Content' | 'Failed'>('Insert');
-  const [attachStatus, setAttachStatus] = useState<'Attach' | 'Attached!' | 'No File' | 'Error'>('Attach');
+  const [attachStatus, setAttachStatus] = useState<'Attach' | 'Attached!' | 'No File' |'Not Supported'| 'Error'>('Attach');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -776,7 +776,25 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
       });
     }
 
-    if (isAdapterActive && activePlugin && activePlugin.capabilities.includes('file-attachment')) {
+    if (!instructions.trim()) {
+      setAttachStatus('No File');
+      setTimeout(() => setAttachStatus('Attach'), 1200);
+      return;
+    }
+
+    // Try with a small delay first to allow state to propagate
+    if (!isAdapterActive || !activePlugin || !attachFile) {
+      console.log(`[MCPPopover] Adapter not immediately ready for attachment, waiting 100ms and retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (isAdapterActive && activePlugin && attachFile) {
+      if (!activePlugin.capabilities.includes('file-attachment')) {
+      setAttachStatus('Not Supported');
+      console.warn(`[MCPPopover] File attachment not supported by ${activePlugin.name} adapter`);
+      return;
+      }
+
       const isPerplexity = activePlugin.name === 'Perplexity';
       const isGemini = activePlugin.name === 'Gemini';
       const fileType = isPerplexity || isGemini ? 'text/plain' : 'text/markdown';
@@ -784,28 +802,28 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager }) =>
       const fileName = `mcp_superassistant_instructions${fileExtension}`;
       const file = new File([instructions], fileName, { type: fileType });
       try {
-        console.log(`[MCPPopover] Attempting to attach file using ${activePlugin.name} adapter`);
-        const success = await attachFile(file);
-        if (success) {
-          setAttachStatus('Attached!');
-          console.log(`[MCPPopover] File attached successfully using ${activePlugin.name} adapter`);
-        } else {
-          setAttachStatus('Error');
-          console.warn(`[MCPPopover] File attachment failed using ${activePlugin.name} adapter`);
-        }
-      } catch (error) {
-        console.error(`[MCPPopover] Error attaching file:`, error);
+      console.log(`[MCPPopover] Attempting to attach file using ${activePlugin.name} adapter`);
+      const success = await attachFile(file);
+      if (success) {
+        setAttachStatus('Attached!');
+        console.log(`[MCPPopover] File attached successfully using ${activePlugin.name} adapter`);
+      } else {
         setAttachStatus('Error');
+        console.warn(`[MCPPopover] File attachment failed using ${activePlugin.name} adapter`);
+      }
+      } catch (error) {
+      console.error(`[MCPPopover] Error attaching file:`, error);
+      setAttachStatus('Error');
       }
     } else {
       setAttachStatus('No File');
-      console.warn(`[MCPPopover] Cannot attach file. isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, supportsFileAttachment: ${activePlugin?.capabilities.includes('file-attachment')}`);
+      console.warn(`[MCPPopover] Cannot attach file. isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, attachFile: ${!!attachFile}`);
       if (activePlugin) {
-        console.warn(`[MCPPopover] Active plugin details:`, {
-          name: activePlugin.name,
-          capabilities: activePlugin.capabilities,
-          hasAttachFileMethod: !!activePlugin.attachFile
-        });
+      console.warn(`[MCPPopover] Active plugin details:`, {
+        name: activePlugin.name,
+        capabilities: activePlugin.capabilities,
+        hasAttachFileMethod: !!activePlugin.attachFile
+      });
       }
     }
     setTimeout(() => setAttachStatus('Attach'), 1200);

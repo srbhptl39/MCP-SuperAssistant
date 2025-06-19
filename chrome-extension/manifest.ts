@@ -43,6 +43,8 @@ const manifest = {
     '*://*.kagi.com/*',
     '*://*.t3.chat/*',
     '*://*.chat.mistral.ai/*',
+    '*://*.github.com/*',
+    '*://*.copilot.github.com/*',
   ],
 
   permissions: ['storage', 'clipboardWrite'],
@@ -130,6 +132,12 @@ const manifest = {
     // Specific content script for Mistral AI tool call parsing
     {
       matches: ['*://*.chat.mistral.ai/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+    // Specific content script for GitHub Copilot tool call parsing
+    {
+      matches: ['*://*.github.com/*', '*://*.copilot.github.com/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },
