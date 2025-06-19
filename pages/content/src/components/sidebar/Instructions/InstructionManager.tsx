@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateInstructions } from './instructionGenerator';
-import { useUserPreferences } from '../../../hooks';
+import { useUserPreferences, useToolEnablement } from '../../../hooks';
 import { Typography } from '../ui';
 import { cn } from '@src/lib/utils';
 import { logMessage } from '@src/utils/helpers';
@@ -79,8 +79,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, loading,
 };
 
 const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools }) => {
-  // Use Zustand hooks for user preferences
+  // Use Zustand hooks for user preferences and tool enablement
   const { preferences, updatePreferences } = useUserPreferences();
+  const { enabledTools: enabledToolsSet, isToolEnabled } = useToolEnablement();
 
   const [instructions, setInstructions] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -101,6 +102,21 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     return tools.map(tool => `${tool.name}:${tool.description || ''}`).sort().join('|');
   }, [tools]);
 
+  // Memoize enabled tools signature to track changes in tool enablement
+  const enabledToolsSignature = useMemo(() => {
+    const enabledToolNames = tools
+      .filter(tool => isToolEnabled(tool.name))
+      .map(tool => tool.name)
+      .sort()
+      .join('|');
+    return enabledToolNames;
+  }, [tools, isToolEnabled]);
+
+  // Filter tools to only include enabled ones for instruction generation
+  const enabledTools = useMemo(() => {
+    return tools.filter(tool => isToolEnabled(tool.name));
+  }, [tools, isToolEnabled]);
+
   // Memoize custom instructions key to prevent unnecessary updates
   const customInstructionsKey = useMemo(() => {
     return `${customInstructionsEnabled}:${customInstructions}`;
@@ -114,20 +130,20 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   // Generate instructions with custom instructions - memoized to prevent excessive calls
   const generateCurrentInstructions = useCallback(() => {
-    return generateInstructions(tools, customInstructions, customInstructionsEnabled);
-  }, [tools, customInstructions, customInstructionsEnabled]);
+    return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
+  }, [enabledTools, customInstructions, customInstructionsEnabled]);
 
   // Memoize the actual current instructions to prevent unnecessary re-calculations
   const currentInstructions = useMemo(() => {
     return generateCurrentInstructions();
   }, [generateCurrentInstructions]);
 
-  // Update instructions only when tools or custom instructions actually change (not on every render)
+  // Update instructions when tools or tool enablement changes or custom instructions change
   useEffect(() => {
     if (tools.length > 0) {
       // Only log and update if the instructions have actually changed
       if (currentInstructions !== instructions) {
-        logMessage('Generating instructions based on updated tools and custom instructions');
+        logMessage(`[InstructionManager] Regenerating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
         setInstructions(currentInstructions);
         // Update global state
         instructionsState.setInstructions(currentInstructions);
@@ -135,9 +151,9 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     }
 
     return () => {
-      logMessage('Cleaning up instruction generator effect');
+      logMessage('[InstructionManager] Cleaning up instruction generator effect');
     };
-  }, [toolsSignature, customInstructionsKey, currentInstructions, instructions]);
+  }, [toolsSignature, enabledToolsSignature, customInstructionsKey, currentInstructions, instructions, enabledTools.length, tools.length]);
 
   // Update global state when local state changes
   useEffect(() => {

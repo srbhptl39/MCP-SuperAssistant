@@ -22,6 +22,7 @@ export interface ToolPermission {
 
 const STORAGE_KEY = 'mcp_sidebar_preferences';
 const TOOL_PERMISSIONS_KEY = 'mcp_tool_permissions';
+const TOOL_ENABLEMENT_KEY = 'mcp_tool_enablement';
 
 // Default preferences
 const DEFAULT_PREFERENCES: SidebarPreferences = {
@@ -182,5 +183,70 @@ export const clearToolPermission = (serverName: string, toolName: string, url: s
     logMessage(`[Storage] Cleared permission for ${serverName}.${toolName} on URL: ${url}`);
   } catch (error) {
     logMessage(`[Storage] Error clearing tool permission: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Get tool enablement state from chrome.storage.local
+ * Returns a Set of enabled tool names
+ */
+export const getToolEnablementState = async (): Promise<Set<string>> => {
+  try {
+    if (!chrome.storage || !chrome.storage.local) {
+      logMessage('[Storage] Chrome storage API not available');
+      return new Set();
+    }
+
+    const result = await chrome.storage.local.get(TOOL_ENABLEMENT_KEY);
+    const enabledToolsArray = result && typeof result === 'object' ? (result[TOOL_ENABLEMENT_KEY] as string[]) : undefined;
+
+    if (!enabledToolsArray || !Array.isArray(enabledToolsArray)) {
+      logMessage('[Storage] No stored tool enablement state found, returning empty set');
+      return new Set();
+    }
+
+    logMessage(`[Storage] Retrieved tool enablement state: ${enabledToolsArray.length} enabled tools`);
+    return new Set(enabledToolsArray);
+  } catch (error) {
+    logMessage(
+      `[Storage] Error retrieving tool enablement state: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return new Set();
+  }
+};
+
+/**
+ * Save tool enablement state to chrome.storage.local
+ * Takes a Set of enabled tool names and persists it
+ */
+export const saveToolEnablementState = async (enabledTools: Set<string>): Promise<void> => {
+  try {
+    if (!chrome.storage || !chrome.storage.local) {
+      logMessage('[Storage] Chrome storage API not available');
+      return;
+    }
+
+    const enabledToolsArray = Array.from(enabledTools);
+    await chrome.storage.local.set({ [TOOL_ENABLEMENT_KEY]: enabledToolsArray });
+    logMessage(`[Storage] Saved tool enablement state: ${enabledToolsArray.length} enabled tools`);
+  } catch (error) {
+    logMessage(`[Storage] Error saving tool enablement state: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Clear all tool enablement state from storage
+ */
+export const clearToolEnablementState = async (): Promise<void> => {
+  try {
+    if (!chrome.storage || !chrome.storage.local) {
+      logMessage('[Storage] Chrome storage API not available');
+      return;
+    }
+
+    await chrome.storage.local.remove(TOOL_ENABLEMENT_KEY);
+    logMessage('[Storage] Cleared tool enablement state from storage');
+  } catch (error) {
+    logMessage(`[Storage] Error clearing tool enablement state: ${error instanceof Error ? error.message : String(error)}`);
   }
 };

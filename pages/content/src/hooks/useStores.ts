@@ -105,6 +105,20 @@ export const useToolExecution = () =>
     })
   ));
 
+export const useToolEnablement = () =>
+  useToolStore(useShallow(
+    (state) => ({
+      enabledTools: state.enabledTools,
+      isLoadingEnablement: state.isLoadingEnablement,
+      enableTool: state.enableTool,
+      disableTool: state.disableTool,
+      enableAllTools: state.enableAllTools,
+      disableAllTools: state.disableAllTools,
+      isToolEnabled: state.isToolEnabled,
+      loadToolEnablementState: state.loadToolEnablementState
+    })
+  ));
+
 // Additional Tool Store hooks
 export const useToolActions = () =>
   useToolStore(useShallow(

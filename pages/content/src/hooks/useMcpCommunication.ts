@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { mcpClient } from '../core/mcp-client';
-import { useConnectionStatus, useAvailableTools, useServerConfig } from './useStores';
+import { useConnectionStatus, useAvailableTools, useServerConfig, useToolEnablement } from './useStores';
 import { useToolStore } from '../stores/tool.store';
 import { logMessage } from '../utils/helpers';
 import type { ServerConfig, Tool, ConnectionType } from '../types/stores';
@@ -24,6 +24,7 @@ export const useMcpCommunication = () => {
   const connection = useConnectionStatus();
   const { tools } = useAvailableTools();
   const { config, setConfig } = useServerConfig();
+  const { isToolEnabled, isLoadingEnablement } = useToolEnablement();
   const toolActions = useToolStore();
 
   // Local state for operation tracking
@@ -273,6 +274,7 @@ export const useMcpCommunication = () => {
 
   // Normalize tools for consistent interface across components - MEMOIZED to prevent unnecessary re-renders
   const normalizedTools = useMemo(() => {
+    // First normalize the tools structure
     const normalized = tools.map((tool: Tool) => ({
       name: tool.name,
       description: tool.description || '',
@@ -284,13 +286,16 @@ export const useMcpCommunication = () => {
       input_schema: tool.input_schema
     }));
     
+    // Then filter out disabled tools
+    const enabledTools = normalized.filter(tool => isToolEnabled(tool.name));
+    
     // Only log when tools actually change (not on every render)
-    if (normalized.length > 0) {
-      logMessage(`[useMcpCommunication] Tools normalized: ${normalized.length} tools`);
+    if (enabledTools.length > 0) {
+      logMessage(`[useMcpCommunication] Tools normalized and filtered: ${enabledTools.length}/${normalized.length} enabled`);
     }
     
-    return normalized;
-  }, [tools]);
+    return enabledTools;
+  }, [tools, isToolEnabled]);
 
   // Throttled debug logging to prevent spam - only log significant changes
   useEffect(() => {
@@ -342,6 +347,7 @@ export const useMcpCommunication = () => {
     connectionHealth,
     isInitialized,
     initializationError,
+    isLoadingToolEnablement: isLoadingEnablement,
 
     /* -------------------------------------------------------------------- */
     /* Core operations                                                      */

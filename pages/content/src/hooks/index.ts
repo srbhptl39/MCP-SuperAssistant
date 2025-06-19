@@ -11,6 +11,7 @@ export {
   useAvailableTools,
   useDetectedTools,
   useToolExecution,
+  useToolEnablement,
   useToolActions,
   useSidebar,
   useSidebarState,
