@@ -24,6 +24,12 @@ export type AdapterCapability =
   | 'screenshot-capture'
   | 'dom-manipulation';
 
+export type PluginType = 
+  | 'sidebar'
+  | 'website-adapter'
+  | 'core-ui'
+  | 'extension';
+
 export interface PluginContext {
   eventBus: PluginEventBus; // Use the defined PluginEventBus interface
   stores: { 
@@ -65,6 +71,7 @@ export interface PluginUtils {
 export interface AdapterPlugin {
   readonly name: string;
   readonly version: string;
+  readonly type?: PluginType; // Made optional for backward compatibility
   readonly hostnames: (string | RegExp)[];
   readonly capabilities: AdapterCapability[];
 

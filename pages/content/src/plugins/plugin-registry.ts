@@ -4,7 +4,7 @@ import type { EventMap } from '../events';
 import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
 import { useAdapterStore } from '../stores/adapter.store';
-import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability } from './plugin-types';
+import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability, PluginType } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
 import { GeminiAdapter } from './adapters/gemini.adapter';
@@ -17,8 +17,25 @@ import { T3ChatAdapter } from './adapters/t3chat.adapter';
 import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 
+// Types for lazy initialization
+interface AdapterFactory {
+  name: string;
+  version: string;
+  type: PluginType;
+  hostnames: (string | RegExp)[];
+  capabilities: AdapterCapability[];
+  create: () => AdapterPlugin;
+  config: Partial<AdapterConfig>;
+}
+
+interface AdapterFactoryRegistration {
+  factory: AdapterFactory;
+  registeredAt: number;
+}
+
 class PluginRegistry {
   private plugins = new Map<string, PluginRegistration>();
+  private adapterFactories = new Map<string, AdapterFactoryRegistration>();
   private activePlugin: AdapterPlugin | null = null;
   private context: PluginContext | null = null;
   private isInitialized = false;
@@ -173,6 +190,84 @@ class PluginRegistry {
     }
   }
 
+  /**
+   * Register an adapter factory for lazy initialization
+   */
+  registerAdapterFactory(factory: AdapterFactory): void {
+    if (!this.isInitialized) {
+      throw new Error('Plugin registry not initialized');
+    }
+
+    const factoryName = factory.name;
+    
+    if (this.adapterFactories.has(factoryName)) {
+      console.warn(`[PluginRegistry] Adapter factory ${factoryName} is already registered`);
+      return;
+    }
+
+    if (this.plugins.has(factoryName)) {
+      console.warn(`[PluginRegistry] Plugin ${factoryName} is already registered as instance`);
+      return;
+    }
+
+    try {
+      // Validate factory
+      this.validateAdapterFactory(factory);
+
+      const registration: AdapterFactoryRegistration = {
+        factory,
+        registeredAt: Date.now(),
+      };
+
+      this.adapterFactories.set(factoryName, registration);
+      console.log(`[PluginRegistry] Registered adapter factory: ${factoryName} v${factory.version}`);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown factory registration error';
+      console.error(`[PluginRegistry] Failed to register adapter factory ${factoryName}:`, errorMessage);
+      throw new Error(`Failed to register adapter factory ${factoryName}: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Lazily initialize an adapter from its factory
+   */
+  private async initializeAdapterFromFactory(factoryName: string): Promise<AdapterPlugin | null> {
+    const factoryRegistration = this.adapterFactories.get(factoryName);
+    if (!factoryRegistration || !this.context) {
+      return null;
+    }
+
+    try {
+      console.log(`[PluginRegistry] Lazily initializing adapter: ${factoryName}`);
+      
+      const adapter = factoryRegistration.factory.create();
+      
+      // Register the initialized adapter
+      await this.register(adapter, factoryRegistration.factory.config);
+      
+      // Remove from factory registry since it's now initialized
+      this.adapterFactories.delete(factoryName);
+      
+      console.log(`[PluginRegistry] Successfully initialized adapter: ${factoryName}`);
+      return adapter;
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
+      console.error(`[PluginRegistry] Failed to initialize adapter ${factoryName}:`, errorMessage);
+      globalErrorHandler.handleError(
+        error as Error,
+        {
+          component: 'plugin-registry',
+          operation: 'lazy-initialization',
+          source: '[PluginRegistry]',
+          details: { factoryName, error: errorMessage }
+        }
+      );
+      return null;
+    }
+  }
+
   async unregister(pluginName: string): Promise<void> {
     const registration = this.plugins.get(pluginName);
     if (!registration) {
@@ -219,7 +314,7 @@ class PluginRegistry {
     try {
       console.log(`[PluginRegistry] activatePluginForHostname called for: ${hostname}${isInitialActivation ? ' (initial)' : ''}`);
       
-      const plugin = this.findPluginForHostname(hostname);
+      const plugin = await this.findOrInitializePluginForHostname(hostname);
       
       if (!plugin) {
         console.log(`[PluginRegistry] No plugin found for hostname: ${hostname}`);
@@ -355,39 +450,140 @@ class PluginRegistry {
   }
 
   private findPluginForHostname(hostname: string): AdapterPlugin | null {
+    console.log(`[PluginRegistry] findPluginForHostname called with hostname: ${hostname}`);
     let bestMatch: AdapterPlugin | null = null;
     let bestMatchScore = 0;
 
+    // Only look for website-adapter type plugins, not sidebar or core-ui plugins
     for (const [, registration] of this.plugins) {
       const { plugin, config } = registration;
       
-      if (!config.enabled) continue;
+      if (!config.enabled) {
+        console.log(`[PluginRegistry] Skipping disabled plugin: ${plugin.name}`);
+        continue;
+      }
+      
+      // Special handling for SidebarPlugin - exclude it from hostname matching
+      if (plugin.name === 'sidebar-plugin') {
+        console.log(`[PluginRegistry] Skipping sidebar plugin: ${plugin.name}`);
+        continue;
+      }
+      
+      // Default to 'website-adapter' if type is not specified, filter out 'sidebar' and 'core-ui'
+      const pluginType = plugin.type || 'website-adapter';
+      console.log(`[PluginRegistry] Checking plugin: ${plugin.name} (type: ${pluginType})`);
+      if (pluginType !== 'website-adapter') {
+        console.log(`[PluginRegistry] Skipping non-website-adapter plugin: ${plugin.name} (type: ${pluginType})`);
+        continue; // Filter by plugin type
+      }
 
       for (const ph of plugin.hostnames) {
         let match = false;
         let matchLength = 0;
         if (typeof ph === 'string') {
+          console.log(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
           if (hostname.includes(ph)) {
             match = true;
             matchLength = ph.length;
+            console.log(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
           }
         } else { // ph is RegExp
+          console.log(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
           if (ph.test(hostname)) {
             match = true;
             matchLength = ph.source.length; // Use source.length for RegExp scoring
+            console.log(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
           }
         }
         if (match) {
           const score = matchLength + (config.priority || 0); // Ensure priority is a number
+          console.log(`[PluginRegistry] Match found for ${plugin.name}: score ${score} (length: ${matchLength}, priority: ${config.priority || 0})`);
           if (score > bestMatchScore) {
             bestMatch = plugin;
             bestMatchScore = score;
+            console.log(`[PluginRegistry] New best match: ${plugin.name} with score ${score}`);
           }
         }
       }
     }
 
+    console.log(`[PluginRegistry] Best plugin match for ${hostname}:`, bestMatch?.name || 'none');
     return bestMatch;
+  }
+
+  private findFactoryForHostname(hostname: string): AdapterFactory | null {
+    console.log(`[PluginRegistry] findFactoryForHostname called with hostname: ${hostname}`);
+    let bestMatchFactory: AdapterFactory | null = null;
+    let bestMatchScore = 0;
+
+    // Only look for website-adapter type factories
+    for (const [, factoryRegistration] of this.adapterFactories) {
+      const { factory } = factoryRegistration;
+      console.log(`[PluginRegistry] Checking factory: ${factory.name} (type: ${factory.type}) with hostnames:`, factory.hostnames);
+      
+      if (factory.type !== 'website-adapter') {
+        console.log(`[PluginRegistry] Skipping factory ${factory.name} - not a website-adapter (type: ${factory.type})`);
+        continue; // Filter by plugin type
+      }
+
+      for (const ph of factory.hostnames) {
+        let match = false;
+        let matchLength = 0;
+        if (typeof ph === 'string') {
+          console.log(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
+          if (hostname.includes(ph)) {
+            match = true;
+            matchLength = ph.length;
+            console.log(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
+          }
+        } else { // ph is RegExp
+          console.log(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
+          if (ph.test(hostname)) {
+            match = true;
+            matchLength = ph.source.length;
+            console.log(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
+          }
+        }
+        if (match) {
+          const priority = factory.config.priority || 0;
+          const score = matchLength + priority;
+          console.log(`[PluginRegistry] Match found for ${factory.name}: score ${score} (length: ${matchLength}, priority: ${priority})`);
+          if (score > bestMatchScore) {
+            bestMatchFactory = factory;
+            bestMatchScore = score;
+            console.log(`[PluginRegistry] New best match: ${factory.name} with score ${score}`);
+          }
+        }
+      }
+    }
+
+    console.log(`[PluginRegistry] Best factory match for ${hostname}:`, bestMatchFactory?.name || 'none');
+    return bestMatchFactory;
+  }
+
+  private async findOrInitializePluginForHostname(hostname: string): Promise<AdapterPlugin | null> {
+    console.log(`[PluginRegistry] findOrInitializePluginForHostname called with: ${hostname}`);
+    
+    // First check for already initialized plugins
+    let plugin = this.findPluginForHostname(hostname);
+    if (plugin) {
+      console.log(`[PluginRegistry] Found initialized plugin for ${hostname}: ${plugin.name}`);
+      return plugin;
+    }
+
+    // Then check for factories that can be lazily initialized
+    const factory = this.findFactoryForHostname(hostname);
+    if (factory) {
+      console.log(`[PluginRegistry] Found factory for ${hostname}: ${factory.name}, initializing lazily`);
+      plugin = await this.initializeAdapterFromFactory(factory.name);
+      if (plugin) {
+        console.log(`[PluginRegistry] Successfully initialized ${plugin.name} for ${hostname}`);
+        return plugin;
+      }
+    }
+
+    console.log(`[PluginRegistry] No plugin or factory found for hostname: ${hostname}`);
+    return null;
   }
 
   private validatePlugin(plugin: AdapterPlugin): void {
@@ -407,9 +603,36 @@ class PluginRegistry {
       throw new Error('Plugin must specify at least one capability');
     }
 
+    // Type is optional, but if provided, it should be valid
+    if (plugin.type && !['sidebar', 'website-adapter', 'core-ui', 'extension'].includes(plugin.type)) {
+      throw new Error(`Plugin has invalid type: ${plugin.type}`);
+    }
+
     // Optional core methods like insertText and submitForm are checked by their usage 
     // or specific capability declarations rather than a blanket requirement here,
     // as they are optional in the AdapterPlugin interface.
+  }
+
+  private validateAdapterFactory(factory: AdapterFactory): void {
+    const required = ['name', 'version', 'type', 'hostnames', 'capabilities', 'create'];
+    
+    for (const prop of required) {
+      if (!(prop in factory)) {
+        throw new Error(`Adapter factory missing required property: ${prop}`);
+      }
+    }
+
+    if (!Array.isArray(factory.hostnames) || factory.hostnames.length === 0) {
+      throw new Error('Adapter factory must specify at least one hostname');
+    }
+
+    if (!Array.isArray(factory.capabilities) || factory.capabilities.length === 0) {
+      throw new Error('Adapter factory must specify at least one capability');
+    }
+
+    if (typeof factory.create !== 'function') {
+      throw new Error('Adapter factory must have a create function');
+    }
   }
 
   private createPluginConfig(plugin: AdapterPlugin, overrides?: Partial<AdapterConfig>): AdapterConfig {
@@ -437,7 +660,7 @@ class PluginRegistry {
 
   private async registerBuiltInAdapters(): Promise<void> {
     try {
-      // Register SidebarPlugin first (highest priority core functionality)
+      // Register SidebarPlugin first (highest priority core functionality) - EAGERLY INITIALIZED
       const sidebarPlugin = new SidebarPlugin();
       await this.register(sidebarPlugin, {
         id: 'sidebar-plugin',
@@ -453,155 +676,186 @@ class PluginRegistry {
         },
       });
 
-      // Register DefaultAdapter as fallback
-      // const defaultAdapter = new DefaultAdapter();
-      // await this.register(defaultAdapter, {
-      //   id: 'default-adapter',
-      //   name: 'Default Adapter',
-      //   description: 'A fallback adapter that works on any website',
-      //   version: '1.0.0',
-      //   enabled: true,
-      //   priority: 99, // Low priority, acts as fallback
-      //   settings: {
-      //     logLevel: 'info',
-      //   },
-      // });
-      
-      // Register ExampleForumAdapter for forum.example.com
-      // const exampleForumAdapter = new ExampleForumAdapter();
-      // await this.register(exampleForumAdapter, {
-      //   id: 'example-forum-adapter',
-      //   name: 'Example Forum Adapter',
-      //   description: 'Specialized adapter for forum.example.com with forum-specific functionality',
-      //   version: '1.0.0',
-      //   enabled: true,
-      //   priority: 10, // Higher priority than default
-      //   settings: {
-      //     logLevel: 'info',
-      //   },
-      // });
+      // Register adapter factories for LAZY INITIALIZATION
+      // Only initialize these adapters when their hostname is visited
 
-      // Register GeminiAdapter for Google Gemini
-      const geminiAdapter = new GeminiAdapter();
-      await this.register(geminiAdapter, {
-        id: 'gemini-adapter',
-        name: 'Gemini Adapter',
-        description: 'Specialized adapter for Google Gemini with chat input, form submission, and file attachment support',
+      // Register GeminiAdapter factory for Google Gemini
+      this.registerAdapterFactory({
+        name: 'gemini-adapter',
         version: '1.0.0',
-        enabled: true,
-        priority: 5, // High priority for Gemini
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['gemini.google.com'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new GeminiAdapter(),
+        config: {
+          id: 'gemini-adapter',
+          name: 'Gemini Adapter',
+          description: 'Specialized adapter for Google Gemini with chat input, form submission, and file attachment support',
+          version: '1.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register DeepSeekAdapter for DeepSeek Chat
-      const deepSeekAdapter = new DeepSeekAdapter();
-      await this.register(deepSeekAdapter, {
-        id: 'deepseek-adapter',
-        name: 'DeepSeek Adapter',
-        description: 'Specialized adapter for DeepSeek Chat with chat input, form submission, and file attachment support',
+      // Register DeepSeekAdapter factory for DeepSeek Chat
+      this.registerAdapterFactory({
+        name: 'deepseek-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for DeepSeek
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['chat.deepseek.com'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new DeepSeekAdapter(),
+        config: {
+          id: 'deepseek-adapter',
+          name: 'DeepSeek Adapter',
+          description: 'Specialized adapter for DeepSeek Chat with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register GrokAdapter for Grok (X.com/Grok.com)
-      const grokAdapter = new GrokAdapter();
-      await this.register(grokAdapter, {
-        id: 'grok-adapter',
-        name: 'Grok Adapter',
-        description: 'Specialized adapter for Grok (X.com/Grok.com) with chat input, form submission, and file attachment support',
+      // Register GrokAdapter factory for Grok (X.com/Grok.com)
+      this.registerAdapterFactory({
+        name: 'grok-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for Grok
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['grok.com', /x\.com.*grok/, /twitter\.com.*grok/],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new GrokAdapter(),
+        config: {
+          id: 'grok-adapter',
+          name: 'Grok Adapter',
+          description: 'Specialized adapter for Grok (X.com/Grok.com) with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register PerplexityAdapter for Perplexity AI
-      const perplexityAdapter = new PerplexityAdapter();
-      await this.register(perplexityAdapter, {
-        id: 'perplexity-adapter',
-        name: 'Perplexity Adapter',
-        description: 'Specialized adapter for Perplexity AI with chat input, form submission, and file attachment support',
+      // Register PerplexityAdapter factory for Perplexity AI
+      this.registerAdapterFactory({
+        name: 'perplexity-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for Perplexity
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['perplexity.ai'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new PerplexityAdapter(),
+        config: {
+          id: 'perplexity-adapter',
+          name: 'Perplexity Adapter',
+          description: 'Specialized adapter for Perplexity AI with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register AIStudioAdapter for Google AI Studio
-      const aiStudioAdapter = new AIStudioAdapter();
-      await this.register(aiStudioAdapter, {
-        id: 'aistudio-adapter',
-        name: 'AI Studio Adapter',
-        description: 'Specialized adapter for Google AI Studio with chat input, form submission, and file attachment support',
+      // Register AIStudioAdapter factory for Google AI Studio
+      this.registerAdapterFactory({
+        name: 'aistudio-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for AI Studio
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['aistudio.google.com'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new AIStudioAdapter(),
+        config: {
+          id: 'aistudio-adapter',
+          name: 'AI Studio Adapter',
+          description: 'Specialized adapter for Google AI Studio with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register OpenRouterAdapter for OpenRouter
-      const openRouterAdapter = new OpenRouterAdapter();
-      await this.register(openRouterAdapter, {
-        id: 'openrouter-adapter',
-        name: 'OpenRouter Adapter',
-        description: 'Specialized adapter for OpenRouter with chat input, form submission, and file attachment support',
+      // Register OpenRouterAdapter factory for OpenRouter
+      this.registerAdapterFactory({
+        name: 'openrouter-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for OpenRouter
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['openrouter.ai'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new OpenRouterAdapter(),
+        config: {
+          id: 'openrouter-adapter',
+          name: 'OpenRouter Adapter',
+          description: 'Specialized adapter for OpenRouter with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register T3ChatAdapter for T3 Chat
-      const t3ChatAdapter = new T3ChatAdapter();
-      await this.register(t3ChatAdapter, {
-        id: 't3chat-adapter',
-        name: 'T3Chat Adapter',
-        description: 'Specialized adapter for T3 Chat with chat input, form submission, and file attachment support',
+      // Register T3ChatAdapter factory for T3 Chat
+      this.registerAdapterFactory({
+        name: 't3chat-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for T3Chat
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['t3.chat'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new T3ChatAdapter(),
+        config: {
+          id: 't3chat-adapter',
+          name: 'T3Chat Adapter',
+          description: 'Specialized adapter for T3 Chat with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
 
-      // Register MistralAdapter for Mistral Chat
-      const mistralChatAdapter = new MistralAdapter();
-      await this.register(mistralChatAdapter, {
-        id: 'mistralchat-adapter',
-        name: 'Mistral Adapter',
-        description: 'Specialized adapter for Mistral chat with chat input, form submission, and file attachment support',
+      // Register MistralAdapter factory for Mistral Chat
+      this.registerAdapterFactory({
+        name: 'mistralchat-adapter',
         version: '2.0.0',
-        enabled: true,
-        priority: 5, // High priority for T3Chat
-        settings: {
-          logLevel: 'info',
-          urlCheckInterval: 1000,
+        type: 'website-adapter',
+        hostnames: ['chat.mistral.ai'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new MistralAdapter(),
+        config: {
+          id: 'mistralchat-adapter',
+          name: 'Mistral Adapter',
+          description: 'Specialized adapter for Mistral chat with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
         },
       });
       
-      console.log('[PluginRegistry] Successfully registered SidebarPlugin, DefaultAdapter, ExampleForumAdapter, GeminiAdapter, DeepSeekAdapter, GrokAdapter, PerplexityAdapter, AIStudioAdapter, OpenRouterAdapter, and T3ChatAdapter');
+      console.log(`[PluginRegistry] Successfully registered SidebarPlugin (initialized) and ${this.adapterFactories.size} adapter factories (lazy)`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
@@ -622,6 +876,13 @@ class PluginRegistry {
     }));
   }
 
+  getRegisteredFactories(): Array<{ name: string; factory: AdapterFactory }> {
+    return Array.from(this.adapterFactories.entries()).map(([name, registration]) => ({
+      name,
+      factory: registration.factory
+    }));
+  }
+
   getPluginByName(name: string): AdapterPlugin | null {
     const registration = this.plugins.get(name);
     return registration ? registration.plugin : null;
@@ -629,6 +890,10 @@ class PluginRegistry {
 
   isPluginRegistered(name: string): boolean {
     return this.plugins.has(name);
+  }
+
+  isFactoryRegistered(name: string): boolean {
+    return this.adapterFactories.has(name);
   }
 
   updatePluginConfig(pluginName: string, config: Partial<AdapterConfig>): void {
@@ -655,7 +920,9 @@ class PluginRegistry {
       isInitialized: this.isInitialized,
       activePlugin: this.activePlugin?.name || null,
       registeredPluginsCount: this.plugins.size,
+      registeredFactoriesCount: this.adapterFactories.size,
       plugins: Array.from(this.plugins.keys()),
+      factories: Array.from(this.adapterFactories.keys()),
     };
   }
 
@@ -676,8 +943,9 @@ class PluginRegistry {
         }
       }
       
-      // Clear plugins map
+      // Clear plugins map and factories map
       this.plugins.clear();
+      this.adapterFactories.clear();
       
       // Run context cleanup functions
       if (this.context?.cleanupFunctions) {
