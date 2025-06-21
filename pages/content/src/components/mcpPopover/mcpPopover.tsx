@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
@@ -416,6 +417,99 @@ input:checked + .mcp-toggle-slider:before {
     background-color: #8ab4f8;
   }
 }
+
+/* Hover overlay styles */
+.mcp-hover-overlay {
+  position: fixed !important;
+  background: #ffffff !important;
+  border: 1px solid #e1e5e9 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 6px 20px rgba(60,64,67,0.12), 0 2px 8px rgba(60,64,67,0.06) !important;
+  padding: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  align-items: stretch !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-8px) scale(0.95) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  z-index: 2147483647 !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  width: 130px !important;
+  min-width: 130px !important;
+  max-width: 130px !important;
+  box-sizing: border-box !important;
+  font-family: inherit !important;
+  font-synthesis: none !important;
+  text-rendering: optimizeLegibility !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+.mcp-hover-overlay.visible {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) scale(1) !important;
+  pointer-events: auto !important;
+}
+
+.mcp-hover-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 10px 12px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: #f8f9fa !important;
+  color: #374151 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  width: 100% !important;
+  min-width: 110px !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+  text-align: left !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+
+.mcp-hover-button:hover {
+  background: #e3f2fd !important;
+  color: #1565c0 !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.15) !important;
+}
+
+.mcp-hover-button:active {
+  transform: scale(0.98) !important;
+  box-shadow: 0 1px 3px rgba(21, 101, 192, 0.2) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mcp-hover-overlay {
+    background: #1f2937 !important;
+    border-color: #374151 !important;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3), 0 3px 10px rgba(0,0,0,0.2) !important;
+  }
+
+  .mcp-hover-button {
+    background: #374151 !important;
+    color: #d1d5db !important;
+  }
+
+  .mcp-hover-button:hover {
+    background: #1e3a8a !important;
+    color: #93c5fd !important;
+    box-shadow: 0 2px 8px rgba(147, 197, 253, 0.2) !important;
+  }
+}
 `;
 function useInjectStyles() {
   useEffect(() => {
@@ -600,8 +694,12 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const [insertStatus, setInsertStatus] = useState<'Insert' | 'Inserted!' | 'No Adapter' | 'No Content' | 'Failed'>('Insert');
   const [attachStatus, setAttachStatus] = useState<'Attach' | 'Attached!' | 'No File' |'Not Supported'| 'Error'>('Attach');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isHoverOverlayVisible, setIsHoverOverlayVisible] = useState(false);
+  const [hoverOverlayPosition, setHoverOverlayPosition] = useState({ x: 0, y: 0 });
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hoverOverlayRef = useRef<HTMLDivElement>(null);
 
   // Update state from manager
   const updateState = useCallback(() => {
@@ -850,6 +948,62 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     setTimeout(() => setAttachStatus('Attach'), 1200);
   };
 
+  // Update hover overlay position
+  const updateHoverOverlayPosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const overlayWidth = 130; // fixed width from CSS
+      const overlayHeight = 140; // approximate height for 3 buttons
+      
+      // Calculate position above the button
+      let x = rect.right - overlayWidth + 10; // Align to right edge with some offset
+      let y = rect.top - overlayHeight - 10; // Position above with gap
+      
+      // Keep within viewport bounds
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // Adjust horizontal position if going off screen
+      if (x < 10) {
+        x = 10;
+      } else if (x + overlayWidth > viewportWidth - 10) {
+        x = viewportWidth - overlayWidth - 10;
+      }
+      
+      // Adjust vertical position if going off screen
+      if (y < 10) {
+        y = rect.bottom + 10; // Position below if not enough space above
+      }
+      
+      setHoverOverlayPosition({ x, y });
+    }
+  }, []);
+
+  // Hover overlay handlers
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    updateHoverOverlayPosition();
+    setIsHoverOverlayVisible(true);
+  }, [updateHoverOverlayPosition]);
+
+  const handleMouseLeave = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHoverOverlayVisible(false);
+    }, 200);
+  }, []);
+
+  const handleHoverOverlayEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+  };
+
+  const handleHoverOverlayLeave = () => {
+    setIsHoverOverlayVisible(false);
+  };
+
   // Popover show/hide logic
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -877,6 +1031,35 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isPopoverOpen]);
+
+  // Update hover overlay position on scroll/resize
+  useEffect(() => {
+    if (isHoverOverlayVisible) {
+      updateHoverOverlayPosition();
+      
+      const handleScrollResize = () => {
+        updateHoverOverlayPosition();
+      };
+      
+      window.addEventListener('scroll', handleScrollResize, true);
+      window.addEventListener('resize', handleScrollResize);
+      
+      return () => {
+        window.removeEventListener('scroll', handleScrollResize, true);
+        window.removeEventListener('resize', handleScrollResize);
+      };
+    }
+    return undefined;
+  }, [isHoverOverlayVisible, updateHoverOverlayPosition]);
+
+  // Cleanup hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Derived disabled states
   const autoInsertDisabled = !state.mcpEnabled;
@@ -911,15 +1094,70 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
 
   return (
     <div className="mcp-popover-container" id="mcp-popover-container" ref={containerRef}>
-      <button
-        className={buttonClassName}
-        aria-label={`MCP Settings - ${state.mcpEnabled ? 'Active' : 'Inactive'}`}
-        title={`MCP Settings - ${state.mcpEnabled ? 'Sidebar Visible' : 'Sidebar Hidden'}`}
-        type="button"
-        ref={buttonRef}
-        onClick={() => setIsPopoverOpen(!isPopoverOpen)}>
-        {buttonContent}
-      </button>
+      <div 
+        style={{ position: 'relative', display: 'inline-block' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <button
+          className={buttonClassName}
+          aria-label={`MCP Settings - ${state.mcpEnabled ? 'Active' : 'Inactive'}`}
+          title={`MCP Settings - ${state.mcpEnabled ? 'Sidebar Visible' : 'Sidebar Hidden'}`}
+          type="button"
+          ref={buttonRef}
+          onClick={() => setIsPopoverOpen(!isPopoverOpen)}>
+          {buttonContent}
+        </button>
+      </div>
+      
+      {/* Hover overlay portal */}
+      {isHoverOverlayVisible && createPortal(
+        <div 
+          className={`mcp-hover-overlay ${isHoverOverlayVisible ? 'visible' : ''}`}
+          ref={hoverOverlayRef}
+          onMouseEnter={handleHoverOverlayEnter}
+          onMouseLeave={handleHoverOverlayLeave}
+          style={{
+            left: `${hoverOverlayPosition.x}px`,
+            top: `${hoverOverlayPosition.y}px`,
+          }}
+        >
+          <button
+            className="mcp-hover-button"
+            onClick={handleInsert}
+            title="Insert instructions"
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            Insert
+          </button>
+          <button
+            className="mcp-hover-button"
+            onClick={handleAttach}
+            title="Attach instructions as file"
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+            </svg>
+            Attach
+          </button>
+          <button
+            className="mcp-hover-button"
+            onClick={() => setIsPopoverOpen(!isPopoverOpen)}
+            title="Configure MCP settings"
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+            </svg>
+            Configure
+          </button>
+        </div>,
+        document.body
+      )}
       <PopoverPortal isOpen={isPopoverOpen} triggerRef={buttonRef}>
         <div
           className="mcp-popover position-above"
