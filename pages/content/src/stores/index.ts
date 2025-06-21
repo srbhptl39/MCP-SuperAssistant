@@ -3,6 +3,7 @@ import { useConnectionStore } from './connection.store';
 import { useToolStore } from './tool.store';
 import { useUIStore } from './ui.store';
 import { useAdapterStore } from './adapter.store';
+import { useConfigStore } from './config.store';
 
 // Export all stores
 export { useAppStore } from './app.store';
@@ -19,6 +20,9 @@ export type { UIState } from './ui.store';
 
 export { useAdapterStore } from './adapter.store';
 export type { AdapterState } from './adapter.store';
+
+export { useConfigStore } from './config.store';
+export type { ConfigState, FeatureFlag, UserProperties, NotificationConfig, RemoteNotification } from './config.store';
 
 // Potentially a root store or combined state if needed, though Zustand encourages individual store usage.
 // For now, individual exports are fine.
@@ -53,6 +57,17 @@ export async function initializeAllStores(): Promise<void> {
   useToolStore.getState();
   useUIStore.getState();
   useAdapterStore.getState();
+  
+  // Initialize config store with current user properties
+  const configStore = useConfigStore.getState();
+  configStore.setUserProperties({
+    extensionVersion: chrome?.runtime?.getManifest?.()?.version || '0.0.0',
+    lastActiveDate: new Date().toISOString(),
+    browserVersion: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
   
   // AppStore's initialize is more involved, handle it carefully
   // It might depend on other systems like eventBus or pluginRegistry being ready.

@@ -4,6 +4,11 @@ import type { EventMap } from '../events';
 import performanceMonitor from '../core/performance';
 import globalErrorHandler from '../core/error-handler';
 import { useAdapterStore } from '../stores/adapter.store';
+import { useAppStore } from '../stores/app.store';
+import { useConnectionStore } from '../stores/connection.store';
+import { useToolStore } from '../stores/tool.store';
+import { useUIStore } from '../stores/ui.store';
+import { useConfigStore } from '../stores/config.store';
 import type { AdapterPlugin, PluginRegistration, PluginContext, AdapterConfig, AdapterCapability, PluginType } from './plugin-types';
 import { DefaultAdapter } from './adapters/default.adapter';
 // import { ExampleForumAdapter } from './adapters/example-forum.adapter';
@@ -18,6 +23,7 @@ import { T3ChatAdapter } from './adapters/t3chat.adapter';
 import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
+import { RemoteConfigPlugin } from './remote-config.plugin';
 
 // Types for lazy initialization
 interface AdapterFactory {
@@ -662,6 +668,22 @@ class PluginRegistry {
 
   private async registerBuiltInAdapters(): Promise<void> {
     try {
+
+            // Register Remote Config Plugin (core extension functionality) - EAGERLY INITIALIZED
+      const remoteConfigPlugin = new RemoteConfigPlugin();
+      await this.register(remoteConfigPlugin, {
+        id: 'remote-config-plugin',
+        name: 'Remote Config Plugin',
+        description: 'Firebase Remote Config integration for feature flags and notifications',
+        version: '1.0.0',
+        enabled: true,
+        priority: 2, // High priority for core functionality
+        settings: {
+          logLevel: 'info',
+          autoActivate: true,
+        },
+      });
+
       // Register SidebarPlugin first (highest priority core functionality) - EAGERLY INITIALIZED
       const sidebarPlugin = new SidebarPlugin();
       await this.register(sidebarPlugin, {
@@ -1027,12 +1049,13 @@ export async function initializePluginRegistry(): Promise<void> {
   const context: PluginContext = {
     eventBus,
     stores: {
-      // Placeholder store instances - these would be actual store instances in a full implementation
-      app: {},
-      connection: {},
-      tool: {},
-      ui: {},
-      adapter: {},
+      // Use actual store instances for plugin access
+      app: useAppStore,
+      connection: useConnectionStore,
+      tool: useToolStore,
+      ui: useUIStore,
+      adapter: useAdapterStore,
+      config: useConfigStore,
     },
     utils: {
       createElement: <K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Record<string, any>, children?: (Node | string)[]) => {

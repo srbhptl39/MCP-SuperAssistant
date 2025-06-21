@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { devtools } from 'zustand/middleware'; // persist is now imported with createJSONStorage
 import { eventBus } from '../events';
 import type { UserPreferences, SidebarState, Notification, GlobalSettings } from '../types/stores';
+import type { RemoteNotification, NotificationAction } from './config.store';
 import { useAppStore, type AppState } from './app.store'; // Assuming AppState includes theme
 
 export interface UIState {
@@ -21,7 +22,9 @@ export interface UIState {
   setSidebarVisibility: (visible: boolean, reason?: string) => void;
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp'>) => string; // Returns notification ID
+  addRemoteNotification: (notification: RemoteNotification) => string; // Enhanced remote notification support
   removeNotification: (id: string) => void;
+  dismissNotification: (id: string, reason?: string) => void;
   clearNotifications: () => void;
   openModal: (modalName: string) => void;
   closeModal: () => void;
@@ -51,7 +54,7 @@ const initialUserPreferences: UserPreferences = {
   customInstructionsEnabled: false,
 };
 
-const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'removeNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme' | 'setMCPEnabled'> = {
+const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'addRemoteNotification' | 'removeNotification' | 'dismissNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme' | 'setMCPEnabled'> = {
   sidebar: initialSidebarState,
   preferences: initialUserPreferences,
   notifications: [],
@@ -120,10 +123,117 @@ export const useUIStore = create<UIState>()(
           return newNotification.id;
         },
 
+        addRemoteNotification: (notification: RemoteNotification): string => {
+          // Import config store to check notification limits
+          const { useConfigStore } = require('./config.store');
+          const configStore = useConfigStore.getState();
+          
+          // Check if notifications are enabled
+          if (!configStore.notificationConfig.enabled) {
+            console.log('[UIStore] Remote notifications disabled, ignoring:', notification.id);
+            return '';
+          }
+          
+          // Check frequency limits
+          const today = new Date().toDateString();
+          const todayNotifications = get().notifications.filter(n => 
+            new Date(n.timestamp).toDateString() === today &&
+            (n as any).source === 'remote'
+          ).length;
+          
+          if (todayNotifications >= configStore.notificationConfig.maxPerDay) {
+            console.log('[UIStore] Daily notification limit reached, ignoring:', notification.id);
+            eventBus.emit('notification:frequency-limited', {
+              notificationId: notification.id,
+              reason: 'Daily limit exceeded'
+            });
+            return '';
+          }
+          
+          // Create enhanced notification
+          const newNotification: Notification & { 
+            source: 'remote'; 
+            campaignId?: string; 
+            actions?: NotificationAction[]; 
+            priority?: number;
+          } = {
+            id: notification.id || `remote_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            duration: notification.duration,
+            timestamp: Date.now(),
+            source: 'remote',
+            campaignId: notification.campaignId,
+            actions: notification.actions,
+            priority: notification.priority || 1
+          };
+          
+          // Add to notifications list, sorting by priority
+          set(state => ({ 
+            notifications: [...state.notifications, newNotification]
+              .sort((a, b) => ((b as any).priority || 1) - ((a as any).priority || 1))
+          }));
+          
+          // Mark as shown in config store
+          configStore.markNotificationShown(newNotification.id);
+          configStore.addNotificationToHistory(newNotification.id);
+          
+          // Emit events
+          eventBus.emit('ui:notification-added', { notification: newNotification });
+          eventBus.emit('notification:shown', {
+            notificationId: newNotification.id,
+            source: 'remote',
+            timestamp: Date.now()
+          });
+          
+          // Emit analytics event
+          eventBus.emit('analytics:track', {
+            event: 'notification_shown',
+            parameters: {
+              notification_id: newNotification.id,
+              campaign_id: notification.campaignId,
+              type: notification.type,
+              source: 'remote'
+            }
+          });
+          
+          console.log('[UIStore] Remote notification added:', newNotification);
+          return newNotification.id;
+        },
+
         removeNotification: (id: string) => {
           set(state => ({ notifications: state.notifications.filter(n => n.id !== id) }));
           console.log(`[UIStore] Notification removed: ${id}`);
           eventBus.emit('ui:notification-removed', { id });
+        },
+
+        dismissNotification: (id: string, reason?: string) => {
+          const notification = get().notifications.find(n => n.id === id);
+          if (notification) {
+            // Track dismissal for remote notifications
+            if ((notification as any).source === 'remote') {
+              eventBus.emit('notification:dismissed', {
+                notificationId: id,
+                reason: reason || 'user_dismissed',
+                timestamp: Date.now()
+              });
+              
+              // Emit analytics event
+              eventBus.emit('analytics:track', {
+                event: 'notification_dismissed',
+                parameters: {
+                  notification_id: id,
+                  campaign_id: (notification as any).campaignId,
+                  reason: reason || 'user_dismissed',
+                  source: 'remote'
+                }
+              });
+            }
+          }
+          
+          // Remove the notification
+          get().removeNotification(id);
         },
 
         clearNotifications: () => {

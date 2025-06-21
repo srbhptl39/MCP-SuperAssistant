@@ -11,6 +11,8 @@ import { mcpClient } from './core/mcp-client';
 import { eventBus } from './events/event-bus';
 import type { ConnectionStatus } from './types/stores';
 import { useConnectionStore } from './stores/connection.store';
+import { useUIStore } from './stores/ui.store';
+import { useConfigStore } from './stores/config.store';
 
 // Import the new initialization system
 import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
@@ -444,6 +446,94 @@ if (document.readyState === 'loading') {
   }
 }
 
+// Remote Config message handler
+function handleRemoteConfigMessage(message: any, sendResponse: (response: any) => void): void {
+  console.log(`[Content] Processing Remote Config message: ${message.type}`);
+  
+  try {
+    switch (message.type) {
+      case 'remote-config:feature-flags-updated': {
+        const { flags, timestamp } = message.data;
+        console.log(`[Content] Received feature flags update: ${Object.keys(flags).length} flags`);
+        
+        // Update config store
+        const configStore = useConfigStore.getState();
+        configStore.updateFeatureFlags(flags);
+        
+        // Emit event
+        eventBus.emit('feature-flags:updated', { flags, timestamp });
+        
+        sendResponse({ success: true, timestamp: Date.now() });
+        break;
+      }
+      
+      case 'remote-config:notifications-received': {
+        const { notifications, timestamp } = message.data;
+        console.log(`[Content] Received notifications: ${notifications.length} notifications`);
+        
+        // Process notifications through the UI store
+        const uiStore = useUIStore.getState();
+        const configStore = useConfigStore.getState();
+        
+        for (const notification of notifications) {
+          if (configStore.canShowNotification(notification)) {
+            uiStore.addRemoteNotification(notification);
+          }
+        }
+        
+        sendResponse({ success: true, processed: notifications.length, timestamp: Date.now() });
+        break;
+      }
+      
+      case 'remote-config:version-config-updated': {
+        const { config, timestamp } = message.data;
+        console.log('[Content] Received version-specific config update');
+        
+        // Emit event for version config update
+        eventBus.emit('remote-config:updated', { 
+          changes: ['version_config'], 
+          timestamp 
+        });
+        
+        sendResponse({ success: true, timestamp: Date.now() });
+        break;
+      }
+      
+      default:
+        console.warn(`[Content] Unknown remote config message type: ${message.type}`);
+        sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Content] Error handling remote config message:`, error);
+    sendResponse({ success: false, error: errorMessage });
+  }
+}
+
+// App version update handler
+function handleVersionUpdate(message: any, sendResponse: (response: any) => void): void {
+  try {
+    const { oldVersion, newVersion, timestamp } = message.data;
+    console.log(`[Content] Extension updated from ${oldVersion} to ${newVersion}`);
+    
+    // Update config store with new version
+    const configStore = useConfigStore.getState();
+    configStore.setUserProperties({ 
+      extensionVersion: newVersion,
+      lastActiveDate: new Date().toISOString()
+    });
+    
+    // Emit version update event
+    eventBus.emit('app:version-updated', { oldVersion, newVersion, timestamp });
+    
+    sendResponse({ success: true, timestamp: Date.now() });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Content] Error handling version update:`, error);
+    sendResponse({ success: false, error: errorMessage });
+  }
+}
+
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   logMessage(`Message received in content script: ${JSON.stringify(message)}`); // Log all incoming messages
@@ -539,6 +629,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       logMessage('Cannot configure renderer: Not initialized.');
       sendResponse({ success: false, error: 'Renderer not initialized' });
     }
+  } 
+  // Remote Config message handling
+  else if (message.type && message.type.startsWith('remote-config:')) {
+    handleRemoteConfigMessage(message, sendResponse);
+    return true; // Async response
+  }
+  // App version update handling
+  else if (message.type === 'app:version-updated') {
+    handleVersionUpdate(message, sendResponse);
+    return true; // Async response
   }
 
   // Always return true if you want to use sendResponse asynchronously

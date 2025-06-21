@@ -40,6 +40,7 @@ export interface PluginContext {
     tool: any;
     ui: any;
     adapter: any;
+    config: any; // Added config store
   };
   utils: PluginUtils;
   chrome: {

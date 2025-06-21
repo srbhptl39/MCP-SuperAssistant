@@ -1,5 +1,6 @@
 import type { DetectedTool, ToolExecution, ConnectionStatus, UserPreferences, Notification, GlobalSettings, Tool } from '../types/stores';
 import type { AdapterConfig } from '../plugins/plugin-types'; // Added for plugin:config-updated
+import type { RemoteNotification, FeatureFlag } from '../stores/config.store';
 
 export interface EventMap {
   // App lifecycle events
@@ -49,6 +50,38 @@ export interface EventMap {
   'plugin:activation-requested': { pluginName: string; timestamp: number };
   'plugin:deactivation-requested': { pluginName: string; timestamp: number };
   'plugin:config-updated': { name: string; config: AdapterConfig; timestamp: number };
+
+  // Remote Config events
+  'remote-config:fetched': { timestamp: number; success: boolean; configCount?: number };
+  'remote-config:fetch-failed': { error: string; timestamp: number; retryCount?: number };
+  'remote-config:updated': { changes: string[]; timestamp: number };
+  'remote-config:initialized': { timestamp: number; version: string };
+  
+  // Feature Flag events
+  'feature-flags:updated': { flags: Record<string, FeatureFlag>; timestamp: number };
+  'feature-flags:evaluated': { flagName: string; enabled: boolean; userSegment: string };
+  'feature-flag:enabled': { flagName: string; config?: any; timestamp: number };
+  'feature-flag:disabled': { flagName: string; reason?: string; timestamp: number };
+  
+  // Notification events (enhanced)
+  'notification:remote-received': { notification: RemoteNotification; timestamp: number };
+  'notification:targeted': { notificationId: string; targeting: any; matched: boolean };
+  'notification:frequency-limited': { notificationId: string; reason: string };
+  'notification:shown': { notificationId: string; source: string; timestamp: number };
+  'notification:clicked': { notificationId: string; action?: string; timestamp: number };
+  'notification:dismissed': { notificationId: string; reason: string; timestamp: number };
+  
+  // User Targeting events
+  'user:segment-changed': { oldSegment: string; newSegment: string; timestamp: number };
+  'user:properties-updated': { properties: Record<string, any>; timestamp: number };
+  
+  // Analytics events
+  'analytics:track': { event: string; parameters: Record<string, any> };
+  'analytics:user-property': { property: string; value: any };
+  
+  // App version events
+  'app:version-updated': { oldVersion: string; newVersion: string; timestamp: number };
+  'app:changelog-requested': { version: string; timestamp: number };
 
   // Performance events
   'performance:measurement': { name: string; duration: number; timestamp: number; context?: Record<string, any> };

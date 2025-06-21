@@ -1,5 +1,6 @@
 import 'webextension-polyfill';
 import { exampleThemeStorage } from '@extension/storage';
+import { RemoteConfigManager } from './remote-config-manager';
 import {
   runWithBackwardsCompatibility,
   isMcpServerConnected,
@@ -42,6 +43,9 @@ const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3006/message';
 // Connection type management
 type ConnectionType = 'sse' | 'websocket';
 const DEFAULT_CONNECTION_TYPE: ConnectionType = 'sse';
+
+// Remote Config Manager
+let remoteConfigManager: RemoteConfigManager | null = null;
 
 // Background script state management with connection type support
 let serverUrl: string = DEFAULT_SSE_URL;
@@ -243,6 +247,9 @@ async function initializeExtension() {
 
   // Set initial connection status
   updateConnectionStatus(false);
+
+  // Initialize Remote Config Manager
+  await initializeRemoteConfig();
 
   console.log('Extension initialized successfully');
 
@@ -457,18 +464,62 @@ self.addEventListener('error', event => {
 
 // --- Lifecycle Events ---
 
-chrome.runtime.onInstalled.addListener(details => {
+chrome.runtime.onInstalled.addListener(async details => {
   console.log('Extension installed or updated:', details.reason);
   sendAnalyticsEvent('extension_installed', { reason: details.reason });
+  
+  const currentVersion = chrome.runtime.getManifest().version;
 
   // Perform initial setup on first install
   if (details.reason === 'install') {
-    // You might want to set default settings here
     console.log('Performing first-time installation setup.');
-    // Example: Set default server URL if not already set (although initializeServerUrl handles this)
+    
+    // Set install date for Remote Config targeting
+    await chrome.storage.local.set({ 
+      installDate: new Date().toISOString(),
+      version: currentVersion
+    });
+    
+    // Initialize Remote Config after installation
+    if (remoteConfigManager && remoteConfigManager.initialized) {
+      await remoteConfigManager.fetchConfig(true);
+    }
+    
   } else if (details.reason === 'update') {
-    console.log(`Extension updated from ${details.previousVersion}`);
-    // Handle updates if needed
+    const previousVersion = details.previousVersion || 'unknown';
+    console.log(`Extension updated from ${previousVersion} to ${currentVersion}`);
+    
+    // Store version information
+    await chrome.storage.local.set({ 
+      version: currentVersion,
+      previousVersion: previousVersion,
+      lastUpdateDate: new Date().toISOString()
+    });
+    
+    // Notify Remote Config about version update
+    if (remoteConfigManager && remoteConfigManager.initialized) {
+      await remoteConfigManager.fetchConfig(true);
+    }
+    
+    // Broadcast version update to content scripts
+    setTimeout(() => {
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+          if (tab.id) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'app:version-updated',
+              data: {
+                oldVersion: previousVersion,
+                newVersion: currentVersion,
+                timestamp: Date.now()
+              }
+            }).catch(() => {
+              // Ignore errors for tabs that can't receive messages
+            });
+          }
+        });
+      });
+    }, 1000); // Delay to ensure content scripts are ready
   }
 
   // Re-initialize after install/update (optional, depending on setup)
@@ -546,6 +597,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (typeof message.type === 'string' && message.type.startsWith('mcp:')) {
     // Handle MCP messages asynchronously
     handleMcpMessage(message, sender, sendResponse);
+    return true; // Keep channel open for async response
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Remote Config integration                                           */
+  /* ------------------------------------------------------------------ */
+  if (typeof message.type === 'string' && message.type.startsWith('remote-config:')) {
+    // Handle Remote Config messages asynchronously
+    handleRemoteConfigMessage(message, sender, sendResponse);
     return true; // Keep channel open for async response
   }
 
@@ -932,5 +992,109 @@ function broadcastConfigUpdateToContentScripts(config: { uri: string; type?: str
       }
     });
   });
+}
+
+/**
+ * Enhanced Remote Config message handler
+ * 
+ * @param message - The message received from the content script
+ * @param sender - Chrome runtime message sender information
+ * @param sendResponse - Callback function to send response back to sender
+ */
+async function handleRemoteConfigMessage(
+  message: any, 
+  sender: chrome.runtime.MessageSender, 
+  sendResponse: (response: any) => void
+) {
+  const startTime = Date.now();
+  
+  try {
+    console.log(`[Background] Processing Remote Config message: ${message.type}`);
+    
+    if (!remoteConfigManager || !remoteConfigManager.initialized) {
+      throw new Error('Remote Config Manager not initialized');
+    }
+    
+    let result: any = null;
+
+    switch (message.type) {
+      case 'remote-config:fetch': {
+        const { force = false } = message.payload || {};
+        console.log(`[Background] Fetching remote config (force: ${force})`);
+        await remoteConfigManager.fetchConfig(force);
+        result = { success: true, timestamp: Date.now() };
+        break;
+      }
+
+      case 'remote-config:get-feature-flag': {
+        const { flagName } = message.payload || {};
+        if (!flagName) {
+          throw new Error('Feature flag name is required');
+        }
+        
+        console.log(`[Background] Getting feature flag: ${flagName}`);
+        result = await remoteConfigManager.getFeatureFlag(flagName);
+        break;
+      }
+
+      case 'remote-config:get-config': {
+        console.log('[Background] Getting all remote config');
+        result = await remoteConfigManager.getAllConfig();
+        break;
+      }
+
+      case 'remote-config:get-status': {
+        console.log('[Background] Getting remote config status');
+        result = {
+          initialized: remoteConfigManager.initialized,
+          lastFetchTime: await remoteConfigManager.getLastFetchTimePublic(),
+          timestamp: Date.now()
+        };
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown remote config message type: ${message.type}`);
+    }
+
+    // Send success response
+    const response = {
+      success: true,
+      data: result,
+      processingTime: Date.now() - startTime,
+      timestamp: Date.now()
+    };
+    
+    console.log(`[Background] Remote Config message processed successfully: ${message.type} (${response.processingTime}ms)`);
+    sendResponse(response);
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Background] Error processing Remote Config message ${message.type}:`, error);
+    
+    // Send error response
+    const response = {
+      success: false,
+      error: errorMessage,
+      processingTime: Date.now() - startTime,
+      timestamp: Date.now()
+    };
+    
+    sendResponse(response);
+  }
+}
+
+/**
+ * Initialize Remote Config Manager
+ */
+async function initializeRemoteConfig(): Promise<void> {
+  try {
+    remoteConfigManager = new RemoteConfigManager();
+    await remoteConfigManager.initialize();
+    console.log('[Background] Remote Config Manager initialized successfully');
+  } catch (error) {
+    console.error('[Background] Failed to initialize Remote Config Manager:', error);
+    // Don't throw - let the extension continue without remote config
+  }
 }
 
