@@ -59,6 +59,8 @@ export class SidebarManager extends BaseSidebarManager {
   private isFirstLoad: boolean = true;
   private isRendering: boolean = false; // CRITICAL FIX: Prevent multiple concurrent renders
   private lastRenderTime: number = 0; // CRITICAL FIX: Throttle renders
+  private isInitializing: boolean = false; // CRITICAL FIX: Prevent multiple simultaneous initializations
+  private initializationTimeout: NodeJS.Timeout | null = null; // Debounce initialization
 
   private constructor(siteType: SiteType) {
     super(siteType);
@@ -192,19 +194,33 @@ export class SidebarManager extends BaseSidebarManager {
       window.activeSidebarManager = this;
     }
 
+    // CRITICAL FIX: Prevent multiple simultaneous initializations
+    if (this.isInitializing) {
+      logMessage('[SidebarManager] Already initializing, skipping duplicate call');
+      return;
+    }
+
+    // CRITICAL FIX: Debounce initialization to prevent race conditions
+    if (this.initializationTimeout) {
+      clearTimeout(this.initializationTimeout);
+      this.initializationTimeout = null;
+    }
+
+    this.isInitializing = true;
+
     // Add delay to ensure host website has fully loaded and won't interfere
     logMessage('[SidebarManager] Scheduling sidebar initialization with 500ms delay');
 
-    setTimeout(async () => {
-      logMessage('[SidebarManager] Starting delayed sidebar initialization');
-
-      // Verify window reference is still set after delay
-      if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
-        logMessage('[SidebarManager] Re-setting window.activeSidebarManager reference after delay');
-        window.activeSidebarManager = this;
-      }
-
+    this.initializationTimeout = setTimeout(async () => {
       try {
+        logMessage('[SidebarManager] Starting delayed sidebar initialization');
+
+        // Verify window reference is still set after delay
+        if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
+          logMessage('[SidebarManager] Re-setting window.activeSidebarManager reference after delay');
+          window.activeSidebarManager = this;
+        }
+
         // Check if MCP is enabled from persistent state before showing sidebar
         const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
         const mcpEnabled = zustandState.state?.mcpEnabled ?? false;
@@ -215,13 +231,13 @@ export class SidebarManager extends BaseSidebarManager {
           // MCP is enabled, so show the sidebar
           logMessage('[SidebarManager] MCP is enabled, showing sidebar');
           // Initialize with collapsed state to restore preferences including push mode
-          await this.initializeCollapsedState();
+          await this.initializeCollapsedStateWithErrorHandling();
           logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
         } else {
           // MCP is disabled, ensure sidebar is hidden but still initialize for later use
           logMessage('[SidebarManager] MCP is disabled, initializing sidebar but keeping it hidden');
           // Initialize without showing the sidebar
-          await this.initialize();
+          await this.safeInitialize();
           // Keep sidebar hidden
           if (this.shadowHost) {
             this.shadowHost.style.display = 'none';
@@ -234,29 +250,15 @@ export class SidebarManager extends BaseSidebarManager {
         logMessage(
           `[SidebarManager] Error during initialization: ${error instanceof Error ? error.message : String(error)}`,
         );
-        // Fallback to basic show method
-        try {
-          await this.initialize();
-          if (this.shadowHost) {
-            this.shadowHost.style.display = 'block';
-            this.shadowHost.style.opacity = '1';
-            this.shadowHost.classList.add('initialized');
-            this._isVisible = true;
-
-            // Single render call
-            this.render();
-            logMessage('[SidebarManager] Fallback initialization completed');
-          }
-        } catch (showError) {
-          logMessage(
-            `[SidebarManager] Even fallback initialization failed: ${showError instanceof Error ? showError.message : String(showError)}`,
-          );
-        }
+        // Fallback to basic show method with error handling
+        await this.fallbackInitialization();
+      } finally {
+        // Always mark initialization as complete
+        this.isInitializing = false;
+        this.isFirstLoad = false;
+        this.initializationTimeout = null;
       }
     }, 500);
-
-    // Mark as no longer first load regardless of success/failure
-    this.isFirstLoad = false;
   }
 
   /**
@@ -355,6 +357,70 @@ export class SidebarManager extends BaseSidebarManager {
         this.render();
         logMessage('[SidebarManager] Fallback initialization completed');
       }
+    }
+  }
+
+  /**
+   * Initialize the sidebar in collapsed state with comprehensive error handling
+   */
+  private async initializeCollapsedStateWithErrorHandling(): Promise<void> {
+    try {
+      await this.initializeCollapsedState();
+    } catch (error) {
+      logMessage(
+        `[SidebarManager] Error in initializeCollapsedState: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Fallback to basic initialization
+      await this.fallbackInitialization();
+    }
+  }
+
+  /**
+   * Safe initialization that won't throw errors
+   */
+  private async safeInitialize(): Promise<void> {
+    try {
+      await this.initialize();
+    } catch (error) {
+      logMessage(
+        `[SidebarManager] Error in safeInitialize: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Continue without throwing - just log the error
+    }
+  }
+
+  /**
+   * Fallback initialization when normal initialization fails
+   */
+  private async fallbackInitialization(): Promise<void> {
+    try {
+      await this.initialize();
+      if (this.shadowHost) {
+        this.shadowHost.setAttribute('data-initial-minimized', 'false');
+        this.shadowHost.style.display = 'block';
+        this.shadowHost.style.opacity = '1';
+        this.shadowHost.classList.add('initialized');
+        this._isVisible = true;
+
+        // Sync Zustand store with actual visibility state
+        this.syncZustandVisibilityState(true);
+
+        // Single render call with error protection
+        setTimeout(() => {
+          try {
+            this.render();
+            logMessage('[SidebarManager] Fallback initialization completed');
+          } catch (renderError) {
+            logMessage(
+              `[SidebarManager] Fallback render failed: ${renderError instanceof Error ? renderError.message : String(renderError)}`,
+            );
+          }
+        }, 50);
+      }
+    } catch (error) {
+      logMessage(
+        `[SidebarManager] Even fallback initialization failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

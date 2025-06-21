@@ -57,6 +57,9 @@ export class GrokAdapter extends BaseAdapterPlugin {
   private domObserversSetup: boolean = false;
   private uiIntegrationSetup: boolean = false;
   
+  // Adapter-specific styling
+  private adapterStylesInjected: boolean = false;
+  
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
@@ -95,6 +98,9 @@ export class GrokAdapter extends BaseAdapterPlugin {
 
     await super.activate();
     this.context.logger.info(`Activating Grok adapter instance #${this.instanceId}...`);
+
+    // Inject Grok-specific button styles
+    this.injectGrokButtonStyles();
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -147,6 +153,13 @@ export class GrokAdapter extends BaseAdapterPlugin {
     if (this.popoverCheckInterval) {
       clearInterval(this.popoverCheckInterval);
       this.popoverCheckInterval = null;
+    }
+
+    // Remove injected adapter styles
+    const styleElement = document.getElementById('mcp-grok-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.adapterStylesInjected = false;
     }
 
     // Final cleanup
@@ -534,6 +547,176 @@ export class GrokAdapter extends BaseAdapterPlugin {
     }
   }
 
+  // Grok-specific button styling methods
+
+  /**
+   * Get Grok-specific button styles that match the design system
+   * Based on the reference button styling from Grok's interface
+   */
+  private getGrokButtonStyles(): string {
+    return `
+      .mcp-grok-button-base {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid var(--border-l2, #e5e7eb);
+        border-radius: 9999px;
+        height: 40px;
+        min-height: 40px;
+        padding: 8px 14px;
+        font-size: 14px;
+        line-height: 1.2;
+        background-color: transparent;
+        color: var(--fg-primary, #111827);
+        transition: all 100ms ease-in-out;
+        position: relative;
+        overflow: hidden;
+        user-select: none;
+        font-family: inherit;
+        vertical-align: middle;
+        box-sizing: border-box;
+        flex-direction: row;
+        flex-wrap: nowrap;
+      }
+
+      .mcp-grok-button-content {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-direction: row;
+        flex-wrap: nowrap;
+      }
+
+      .mcp-grok-button-base:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 1px var(--ring, #3b82f6);
+      }
+
+      .mcp-grok-button-base:hover {
+        background-color: var(--button-ghost-hover, rgba(0, 0, 0, 0.05));
+      }
+
+      .mcp-grok-button-base:hover .mcp-grok-button-icon {
+        color: var(--fg-primary, #111827);
+      }
+
+      .mcp-grok-button-base:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .mcp-grok-button-base:disabled:hover {
+        background-color: transparent;
+      }
+
+      .mcp-grok-button-icon {
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        min-height: 18px;
+        stroke-width: 2;
+        color: var(--fg-secondary, #6b7280);
+        transition: color 100ms ease-in-out;
+        flex-shrink: 0;
+        flex-grow: 0;
+        align-self: center;
+      }
+
+      .mcp-grok-button-text {
+        font-size: 14px;
+        font-weight: 500;
+        color: inherit;
+        line-height: 1.2;
+        flex-shrink: 0;
+        flex-grow: 0;
+        align-self: center;
+        margin: 0;
+        padding: 0;
+      }
+
+      .mcp-button-active {
+        background-color: var(--button-ghost-hover, rgba(0, 0, 0, 0.1));
+        border-color: var(--border-l1, #d1d5db);
+      }
+
+      /* Dark mode support */
+      @media (prefers-color-scheme: dark) {
+        .mcp-grok-button-base {
+          border-color: var(--border-l2-dark, #374151);
+          color: var(--fg-primary-dark, #f9fafb);
+          background-color: transparent;
+        }
+
+        .mcp-grok-button-base:hover {
+          background-color: var(--button-ghost-hover-dark, rgba(255, 255, 255, 0.05));
+        }
+
+        .mcp-grok-button-base:hover .mcp-grok-button-icon {
+          color: var(--fg-primary-dark, #f9fafb);
+        }
+
+        .mcp-grok-button-icon {
+          color: var(--fg-secondary-dark, #9ca3af);
+        }
+
+        .mcp-button-active {
+          background-color: var(--button-ghost-hover-dark, rgba(255, 255, 255, 0.1));
+          border-color: var(--border-l1-dark, #4b5563);
+        }
+      }
+
+      /* Integration with Grok's existing button group styles */
+      .mcp-grok-button-base + .mcp-grok-button-base {
+        margin-left: 4px;
+      }
+
+      /* Ensure proper stacking context */
+      .mcp-grok-button-base {
+        z-index: 1;
+      }
+
+      /* Match Grok's button focus ring exactly */
+      .mcp-grok-button-base:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 1px var(--ring, #3b82f6);
+      }
+
+      /* Additional hover states for better UX */
+      .mcp-grok-button-base:active {
+        transform: scale(0.98);
+        transition: transform 50ms ease-in-out;
+      }
+    `;
+  }
+
+  /**
+   * Inject Grok-specific button styles into the page
+   */
+  private injectGrokButtonStyles(): void {
+    if (this.adapterStylesInjected) return;
+
+    try {
+      const styleId = 'mcp-grok-button-styles';
+      const existingStyles = document.getElementById(styleId);
+      if (existingStyles) existingStyles.remove();
+
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = this.getGrokButtonStyles();
+      document.head.appendChild(styleElement);
+
+      this.adapterStylesInjected = true;
+      this.context.logger.info('Grok button styles injected successfully');
+    } catch (error) {
+      this.context.logger.error('Failed to inject Grok button styles:', error);
+    }
+  }
+
   // New architecture integration methods
 
   private setupStoreEventListeners(): void {
@@ -795,11 +978,22 @@ export class GrokAdapter extends BaseAdapterPlugin {
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
+            // Create adapter button configuration with Grok-specific styling
+            const adapterButtonConfig = {
+              className: 'mcp-grok-button-base',
+              contentClassName: 'mcp-grok-button-content',
+              textClassName: 'mcp-grok-button-text',
+              iconClassName: 'mcp-grok-button-icon',
+              activeClassName: 'mcp-button-active'
+            };
+
             // Create React root and render
             const root = ReactDOM.createRoot(container);
             root.render(
               React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
+                toggleStateManager: toggleStateManager,
+                adapterButtonConfig: adapterButtonConfig,
+                adapterName: this.name
               })
             );
 
@@ -958,46 +1152,6 @@ export class GrokAdapter extends BaseAdapterPlugin {
     return !!document.getElementById('mcp-popover-container');
   }
 
-  private async checkFilePreview(): Promise<boolean> {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
-        if (filePreview) {
-          this.context.logger.info('File preview element found after attachment');
-          resolve(true);
-        } else {
-          this.context.logger.warn('File preview element not found after attachment');
-          resolve(false);
-        }
-      }, 500);
-    });
-  }
-
-  private emitExecutionCompleted(toolName: string, parameters: any, result: any): void {
-    this.context.eventBus.emit('tool:execution-completed', {
-      execution: {
-        id: this.generateCallId(),
-        toolName,
-        parameters,
-        result,
-        timestamp: Date.now(),
-        status: 'success'
-      }
-    });
-  }
-
-  private emitExecutionFailed(toolName: string, error: string): void {
-    this.context.eventBus.emit('tool:execution-failed', {
-      toolName,
-      error,
-      callId: this.generateCallId()
-    });
-  }
-
-  private generateCallId(): string {
-    return `grok-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-  }
-
   /**
    * Check if the sidebar is properly available after navigation
    */
@@ -1047,6 +1201,11 @@ export class GrokAdapter extends BaseAdapterPlugin {
     // Update URL tracking
     this.lastUrl = url;
 
+    // Re-inject button styles after page navigation
+    setTimeout(() => {
+      this.injectGrokButtonStyles();
+    }, 500);
+
     // Re-check support and re-inject UI if needed
     const stillSupported = this.isSupported();
     if (stillSupported) {
@@ -1094,6 +1253,60 @@ export class GrokAdapter extends BaseAdapterPlugin {
     // Forward to tool store
     tools.forEach(tool => {
       this.context.stores.tool?.addDetectedTool?.(tool);
+    });
+  }
+
+  // Helper methods for event emission and file checking
+
+  private emitExecutionCompleted(operation: string, params: any, result: any): void {
+    if (this.context.eventBus) {
+      try {
+        this.context.eventBus.emit('tool:execution-completed', {
+          execution: {
+            id: this.generateCallId(),
+            toolName: operation,
+            parameters: params,
+            result,
+            timestamp: Date.now(),
+            status: 'success'
+          }
+        });
+      } catch (error) {
+        this.context.logger.warn('Failed to emit execution completed event:', error);
+      }
+    }
+  }
+
+  private emitExecutionFailed(operation: string, error: string): void {
+    if (this.context.eventBus) {
+      try {
+        this.context.eventBus.emit('tool:execution-failed', {
+          toolName: operation,
+          error,
+          callId: this.generateCallId()
+        });
+      } catch (error) {
+        this.context.logger.warn('Failed to emit execution failed event:', error);
+      }
+    }
+  }
+
+  private generateCallId(): string {
+    return `grok-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  private async checkFilePreview(): Promise<boolean> {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
+        if (filePreview) {
+          this.context.logger.info('File preview element found after attachment');
+          resolve(true);
+        } else {
+          this.context.logger.warn('File preview element not found after attachment');
+          resolve(false);
+        }
+      }, 500);
     });
   }
 }

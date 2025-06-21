@@ -49,6 +49,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
   // State management integration
   private mcpPopoverContainer: HTMLElement | null = null;
+  private mcpPopoverRoot: any = null; // Store React root to prevent multiple roots
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
   
@@ -870,10 +871,42 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   private cleanupUIIntegration(): void {
     this.context.logger.debug('Cleaning up UI integration for ChatGPT adapter');
 
-    // Remove MCP popover if it exists
-    const popoverContainer = document.getElementById('mcp-popover-container');
-    if (popoverContainer) {
-      popoverContainer.remove();
+    try {
+      // Clean up React root first
+      if (this.mcpPopoverRoot) {
+        try {
+          this.mcpPopoverRoot.unmount();
+          this.context.logger.debug('React root unmounted successfully');
+        } catch (unmountError) {
+          this.context.logger.warn('Error unmounting React root during cleanup:', unmountError);
+        }
+        this.mcpPopoverRoot = null;
+      }
+
+      // Remove MCP popover if it exists with proper error handling
+      const popoverContainer = document.getElementById('mcp-popover-container');
+      if (popoverContainer) {
+        // Check if element is still connected to DOM before attempting removal
+        if (popoverContainer.isConnected && popoverContainer.parentNode) {
+          try {
+            popoverContainer.parentNode.removeChild(popoverContainer);
+            this.context.logger.debug('MCP popover container removed successfully');
+          } catch (removeError) {
+            this.context.logger.warn('Error removing popover container, trying alternative method:', removeError);
+            // Alternative removal method
+            try {
+              popoverContainer.remove();
+              this.context.logger.debug('MCP popover container removed using alternative method');
+            } catch (altRemoveError) {
+              this.context.logger.error('Failed to remove popover container with both methods:', altRemoveError);
+            }
+          }
+        } else {
+          this.context.logger.debug('MCP popover container already disconnected from DOM');
+        }
+      }
+    } catch (error) {
+      this.context.logger.error('Error during UI integration cleanup:', error);
     }
 
     this.mcpPopoverContainer = null;
@@ -973,10 +1006,22 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Rendering MCP popover with new architecture integration');
 
     try {
+      // Check if container is still valid before rendering
+      if (!container || !container.isConnected) {
+        this.context.logger.warn('Container is not connected to DOM, skipping render');
+        return;
+      }
+
       // Import React and ReactDOM dynamically to avoid bundling issues
       import('react').then(React => {
         import('react-dom/client').then(ReactDOM => {
           import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
+            // Double-check container is still valid
+            if (!container || !container.isConnected) {
+              this.context.logger.warn('Container became invalid during async import, aborting render');
+              return;
+            }
+
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
@@ -988,17 +1033,41 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
               activeClassName: 'mcp-button-active'
             };
 
-            // Create React root and render
-            const root = ReactDOM.createRoot(container);
-            root.render(
-              React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager,
-                adapterButtonConfig: adapterButtonConfig,
-                adapterName: this.name
-              })
-            );
+            try {
+              // Prevent multiple React roots on the same container
+              if (this.mcpPopoverRoot) {
+                this.context.logger.debug('Unmounting existing React root before creating new one');
+                try {
+                  this.mcpPopoverRoot.unmount();
+                } catch (unmountError) {
+                  this.context.logger.warn('Error unmounting existing React root:', unmountError);
+                }
+                this.mcpPopoverRoot = null;
+              }
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+              // Create React root and render with error boundary
+              this.mcpPopoverRoot = ReactDOM.createRoot(container);
+              this.mcpPopoverRoot.render(
+                React.createElement(MCPPopover, {
+                  toggleStateManager: toggleStateManager,
+                  adapterButtonConfig: adapterButtonConfig,
+                  adapterName: this.name
+                })
+              );
+
+              this.context.logger.info('MCP popover rendered successfully with new architecture');
+            } catch (renderError) {
+              this.context.logger.error('Error during React render:', renderError);
+              // Clean up failed root
+              if (this.mcpPopoverRoot) {
+                try {
+                  this.mcpPopoverRoot.unmount();
+                } catch (cleanupError) {
+                  this.context.logger.warn('Error cleaning up failed React root:', cleanupError);
+                }
+                this.mcpPopoverRoot = null;
+              }
+            }
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });

@@ -446,6 +446,7 @@ interface MCPPopoverProps {
     className?: string;        // Main button class (e.g., 'mcp-gh-button-base')
     contentClassName?: string; // Content wrapper class (e.g., 'mcp-gh-button-content')  
     textClassName?: string;    // Text label class (e.g., 'mcp-gh-button-text')
+    iconClassName?: string;    // Icon class (e.g., 'mcp-gh-button-icon')
     activeClassName?: string;  // Active state class (e.g., 'mcp-button-active')
   };
   /**
@@ -892,7 +893,8 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       <img 
         src={chrome.runtime.getURL('icon-34.png')} 
         alt="MCP Logo" 
-        style={{ width: '20px', height: '20px', marginRight: '1px', verticalAlign: 'middle', borderRadius: '50%' }}
+        className={adapterButtonConfig.iconClassName || ''}
+        style={{ width: '20px', height: '20px', borderRadius: '50%' }}
       />
       <span className={adapterButtonConfig.textClassName || ''}>MCP</span>
     </span>

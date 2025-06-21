@@ -1,5 +1,4 @@
-import type React from 'react';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useCurrentAdapter } from '@src/hooks/useAdapter';
 import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
 import { useUIStore } from '@src/stores/ui.store';
@@ -73,8 +72,11 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   // Error states that could block rendering
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [extensionContextInvalid, setExtensionContextInvalid] = useState<boolean>(false);
+  const [isComponentMounted, setIsComponentMounted] = useState<boolean>(false);
+  const [renderKey, setRenderKey] = useState<number>(0); // Force re-render key
+  const [isInitializing, setIsInitializing] = useState<boolean>(true); // Track initialization state
 
-  // Get communication methods with guaranteed safe fallbacks
+  // Get communication methods with guaranteed safe fallbacks and error boundaries
   let communicationMethods;
   try {
     communicationMethods = useMcpCommunication();
@@ -82,8 +84,12 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     // Handle extension context invalidation gracefully
     if (error instanceof Error && error.message.includes('Extension context invalidated')) {
       logMessage('[Sidebar] Extension context invalidated during hook initialization');
-      setExtensionContextInvalid(true);
-      setInitializationError('Extension was reloaded. Please refresh the page to restore functionality.');
+      // Don't set state during render - use useEffect instead
+      React.useEffect(() => {
+        setExtensionContextInvalid(true);
+        setInitializationError('Extension was reloaded. Please refresh the page to restore functionality.');
+      }, []);
+      
       // Provide fallback methods
       communicationMethods = {
         availableTools: [],
@@ -95,7 +101,17 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
         getServerConfig: async () => ({ uri: '' })
       };
     } else {
-      throw error; // Re-throw other errors
+      logMessage(`[Sidebar] Unexpected error in useMcpCommunication: ${error instanceof Error ? error.message : String(error)}`);
+      // Provide safe fallback methods for any other error
+      communicationMethods = {
+        availableTools: [],
+        sendMessage: async () => 'Communication error',
+        refreshTools: async () => [],
+        forceReconnect: async () => false,
+        serverStatus: 'disconnected' as const,
+        updateServerConfig: async () => false,
+        getServerConfig: async () => ({ uri: '' })
+      };
     }
   }
 
@@ -106,10 +122,33 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   const refreshTools = communicationMethods?.refreshTools || (async () => []);
   const forceReconnect = communicationMethods?.forceReconnect || (async () => false);
 
+  // Component mounting and stability tracking
+  useEffect(() => {
+    setIsComponentMounted(true);
+    logMessage(`[Sidebar] Component mounted (ID: ${componentId.current})`);
+    
+    // Mark initialization as complete after a brief delay
+    const initTimer = setTimeout(() => {
+      setIsInitializing(false);
+      logMessage(`[Sidebar] Component initialization completed (ID: ${componentId.current})`);
+    }, 100);
+    
+    return () => {
+      clearTimeout(initTimer);
+      setIsComponentMounted(false);
+      logMessage(`[Sidebar] Component unmounting (ID: ${componentId.current})`);
+    };
+  }, []);
+
+  // Prevent rendering if component is not properly mounted
+  const isStable = isComponentMounted && !isInitializing;
+
   // Debug logging for serverStatus changes
   useEffect(() => {
-    logMessage(`[Sidebar] serverStatus changed to: "${serverStatus}", passing to ServerStatus component`);
-  }, [serverStatus]);
+    if (isStable) {
+      logMessage(`[Sidebar] serverStatus changed to: "${serverStatus}", passing to ServerStatus component`);
+    }
+  }, [serverStatus, isStable]);
 
   // Monitor activeSidebarManager availability for debugging
   useEffect(() => {
