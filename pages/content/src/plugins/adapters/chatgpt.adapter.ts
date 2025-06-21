@@ -2,18 +2,18 @@ import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
 
 /**
- * Perplexity Adapter for Perplexity AI (perplexity.ai)
+ * ChatGPT Adapter for OpenAI ChatGPT (chatgpt.com)
  *
- * This adapter provides specialized functionality for interacting with Perplexity AI's
+ * This adapter provides specialized functionality for interacting with ChatGPT's
  * chat interface, including text insertion, form submission, and file attachment capabilities.
  *
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
-export class PerplexityAdapter extends BaseAdapterPlugin {
-  readonly name = 'PerplexityAdapter';
+export class ChatGPTAdapter extends BaseAdapterPlugin {
+  readonly name = 'ChatGPTAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
-  readonly hostnames = ['perplexity.ai', 'www.perplexity.ai'];
+  readonly hostnames = ['chatgpt.com'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
@@ -21,26 +21,26 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     'dom-manipulation'
   ];
 
-  // CSS selectors for Perplexity's UI elements
-  // Updated selectors based on current Perplexity interface
+  // CSS selectors for ChatGPT's UI elements
+  // Updated selectors based on current ChatGPT interface
   private readonly selectors = {
-    // Primary chat input selectors
-    CHAT_INPUT: '#ask-input[contenteditable="true"], #ask-input[role="textbox"], div[role="textbox"][contenteditable="true"], textarea[placeholder="Ask anything..."], textarea[placeholder="Ask follow-up"], textarea[placeholder*="Ask"], div[contenteditable="true"][data-lexical-editor="true"]',
+    // Primary chat input selector (ProseMirror contenteditable)
+    CHAT_INPUT: '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label="Submit"], button[aria-label="Send"], button[type="submit"]',
+    SUBMIT_BUTTON: 'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid="fruitjuice-send-button"], button:has(svg) + button:has(svg[viewBox="0 0 20 20"])',
     // File upload related selectors
-    FILE_UPLOAD_BUTTON: 'button[aria-label*="Attach"], button[aria-label*="attach"]',
-    FILE_INPUT: 'input[type="file"][multiple][accept*=".pdf"], input[type="file"][multiple]',
+    FILE_UPLOAD_BUTTON: '#upload-file-btn, button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
+    FILE_INPUT: 'input[type="file"][multiple]',
     // Main panel and container selectors
-    MAIN_PANEL: '.main-content, .chat-container, .conversation-container',
+    MAIN_PANEL: 'main, .chat-container, [data-testid="conversation-turn-wrapper"]',
     // Drop zones for file attachment
-    DROP_ZONE: 'textarea[placeholder*="Ask"], .input-area, .chat-input-container',
+    DROP_ZONE: '#prompt-textarea, .ProseMirror, [data-testid="composer-text-input"], .composer-parent',
     // File preview elements
-    FILE_PREVIEW: '.file-preview, .attachment-preview, .file-upload-preview',
-    // Button insertion points (for MCP popover) - looking for search/research toggle area
-    BUTTON_INSERTION_CONTAINER: 'div[role="radiogroup"].group.relative.isolate.flex, .flex.items-center, div.flex.items-end.gap-sm',
+    FILE_PREVIEW: '.file-preview, .attachment-preview, [data-testid="file-attachment"]',
+    // Button insertion points (for MCP popover)
+    BUTTON_INSERTION_CONTAINER: '[data-testid="composer-footer-actions"], .composer-footer-actions, .flex.items-center[data-testid*="composer"]',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.input-area, .chat-input-container, .conversation-input'
+    FALLBACK_INSERTION: '.composer-parent, .relative.flex.w-full.items-end, [data-testid="composer-trailing-actions"]'
   };
 
   // URL patterns for navigation tracking
@@ -61,25 +61,25 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   private static instanceCount = 0;
   private instanceId: number;
   
-  // Style injection tracking
-  private adapterStylesInjected: boolean = false;
+  // Styling state tracking
+  private chatgptStylesInjected: boolean = false;
 
   constructor() {
     super();
-    PerplexityAdapter.instanceCount++;
-    this.instanceId = PerplexityAdapter.instanceCount;
-    console.log(`[PerplexityAdapter] Instance #${this.instanceId} created. Total instances: ${PerplexityAdapter.instanceCount}`);
+    ChatGPTAdapter.instanceCount++;
+    this.instanceId = ChatGPTAdapter.instanceCount;
+    console.log(`[ChatGPTAdapter] Instance #${this.instanceId} created. Total instances: ${ChatGPTAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
     // Guard against multiple initialization
     if (this.currentStatus === 'initializing' || this.currentStatus === 'active') {
-      this.context?.logger.warn(`Perplexity adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
+      this.context?.logger.warn(`ChatGPT adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
       return;
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing Perplexity adapter instance #${this.instanceId}...`);
+    this.context.logger.info(`Initializing ChatGPT adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -92,15 +92,15 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   async activate(): Promise<void> {
     // Guard against multiple activation
     if (this.currentStatus === 'active') {
-      this.context?.logger.warn(`Perplexity adapter instance #${this.instanceId} already active, skipping re-activation`);
+      this.context?.logger.warn(`ChatGPT adapter instance #${this.instanceId} already active, skipping re-activation`);
       return;
     }
 
     await super.activate();
-    this.context.logger.info(`Activating Perplexity adapter instance #${this.instanceId}...`);
+    this.context.logger.info(`Activating ChatGPT adapter instance #${this.instanceId}...`);
 
-    // Inject Perplexity-specific button styles
-    this.injectPerplexityButtonStyles();
+    // Inject ChatGPT-specific button styles
+    this.injectChatGPTButtonStyles();
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -116,12 +116,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   async deactivate(): Promise<void> {
     // Guard against double deactivation
     if (this.currentStatus === 'inactive' || this.currentStatus === 'disabled') {
-      this.context?.logger.warn('Perplexity adapter already inactive, skipping deactivation');
+      this.context?.logger.warn('ChatGPT adapter already inactive, skipping deactivation');
       return;
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating Perplexity adapter...');
+    this.context.logger.info('Deactivating ChatGPT adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -141,7 +141,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up Perplexity adapter...');
+    this.context.logger.info('Cleaning up ChatGPT adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -155,39 +155,40 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       this.popoverCheckInterval = null;
     }
 
-    // Remove injected adapter styles
-    const styleElement = document.getElementById('mcp-perplexity-button-styles');
-    if (styleElement) {
-      styleElement.remove();
-      this.adapterStylesInjected = false;
-    }
-
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    
+    // Remove injected ChatGPT styles
+    const styleElement = document.getElementById('mcp-chatgpt-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.chatgptStylesInjected = false;
+    }
     
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
     this.uiIntegrationSetup = false;
+    this.chatgptStylesInjected = false;
   }
 
   /**
-   * Insert text into the Perplexity chat input field
+   * Insert text into the ChatGPT chat input field (ProseMirror editor)
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into Perplexity chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.info(`Attempting to insert text into ChatGPT chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
-    let targetElement: HTMLTextAreaElement | null = null;
+    let targetElement: HTMLElement | null = null;
 
     if (options?.targetElement) {
-      targetElement = options.targetElement as HTMLTextAreaElement;
+      targetElement = options.targetElement;
     } else {
       // Try multiple selectors for better compatibility
       const selectors = this.selectors.CHAT_INPUT.split(', ');
       for (const selector of selectors) {
-        targetElement = document.querySelector(selector.trim()) as HTMLTextAreaElement;
+        targetElement = document.querySelector(selector.trim()) as HTMLElement;
         if (targetElement) {
           this.context.logger.debug(`Found chat input using selector: ${selector.trim()}`);
           break;
@@ -196,56 +197,69 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
 
     if (!targetElement) {
-      this.context.logger.error('Could not find Perplexity chat input element');
+      this.context.logger.error('Could not find ChatGPT chat input element');
       this.emitExecutionFailed('insertText', 'Chat input element not found');
       return false;
     }
 
     try {
-      // Store the original value
-      const originalValue = targetElement.value || '';
+      // Store the original content
+      const originalContent = targetElement.textContent || '';
 
       // Focus the input element
       targetElement.focus();
 
-      // Insert the text by updating the value and dispatching appropriate events
-      // Append the text to the original value on a new line if there's existing content
-      const newContent = originalValue ? originalValue + '\n\n' + text : text;
-      targetElement.value = newContent;
+      // For ProseMirror editor, we need to handle the content differently
+      // Remove placeholder if present
+      const placeholder = targetElement.querySelector('[data-placeholder]');
+      if (placeholder) {
+        placeholder.remove();
+      }
+
+      // Create a new paragraph element with the text
+      const newContent = originalContent ? originalContent + '\n' + text : text;
+      
+      // Clear existing content and insert new content
+      targetElement.innerHTML = '';
+      const paragraph = document.createElement('p');
+      paragraph.textContent = newContent;
+      targetElement.appendChild(paragraph);
 
       // Dispatch events to simulate user typing for better compatibility
       targetElement.dispatchEvent(new Event('input', { bubbles: true }));
       targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+      targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+      targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
 
       // Emit success event to the new event system
       this.emitExecutionCompleted('insertText', { text }, {
         success: true,
-        originalLength: originalValue.length,
+        originalLength: originalContent.length,
         newLength: text.length,
         totalLength: newContent.length
       });
 
-      this.context.logger.info(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      this.context.logger.info(`Text inserted successfully. Original: ${originalContent.length}, Added: ${text.length}, Total: ${newContent.length}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`Error inserting text into Perplexity chat input: ${errorMessage}`);
+      this.context.logger.error(`Error inserting text into ChatGPT chat input: ${errorMessage}`);
       this.emitExecutionFailed('insertText', errorMessage);
       return false;
     }
   }
 
   /**
-   * Submit the current text in the Perplexity chat input
+   * Submit the current text in the ChatGPT chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit Perplexity chat input');
+    this.context.logger.info('Attempting to submit ChatGPT chat input');
 
-    // First try to find submit button
     let submitButton: HTMLButtonElement | null = null;
+
+    // Try multiple selectors for better compatibility
     const selectors = this.selectors.SUBMIT_BUTTON.split(', ');
-    
     for (const selector of selectors) {
       submitButton = document.querySelector(selector.trim()) as HTMLButtonElement;
       if (submitButton) {
@@ -254,141 +268,52 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // Also check for generic button near chat input
     if (!submitButton) {
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT) as HTMLTextAreaElement;
-      if (chatInput) {
-        submitButton = chatInput.parentElement?.querySelector('button') as HTMLButtonElement;
-        if (submitButton) {
-          this.context.logger.debug('Found submit button near chat input');
-        }
-      }
+      this.context.logger.error('Could not find ChatGPT submit button');
+      this.emitExecutionFailed('submitForm', 'Submit button not found');
+      return false;
     }
 
-    if (submitButton) {
-      try {
-        // Check if the button is disabled
-        const isDisabled = submitButton.disabled || 
-                          submitButton.getAttribute('disabled') !== null ||
-                          submitButton.getAttribute('aria-disabled') === 'true' ||
-                          submitButton.classList.contains('disabled');
-
-        if (isDisabled) {
-          this.context.logger.warn('Perplexity submit button is disabled, waiting for it to be enabled');
-          
-          // Wait for button to be enabled (with timeout)
-          const maxWaitTime = 5000; // 5 seconds
-          const startTime = Date.now();
-          
-          while (Date.now() - startTime < maxWaitTime) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // Re-check if button is now enabled
-            const stillDisabled = submitButton!.disabled || 
-                                 submitButton!.getAttribute('disabled') !== null ||
-                                 submitButton!.getAttribute('aria-disabled') === 'true' ||
-                                 submitButton!.classList.contains('disabled');
-            
-            if (!stillDisabled) {
-              break;
-            }
-          }
-          
-          // Final check
-          const finallyDisabled = submitButton.disabled || 
-                                 submitButton.getAttribute('disabled') !== null ||
-                                 submitButton.getAttribute('aria-disabled') === 'true' ||
-                                 submitButton.classList.contains('disabled');
-          
-          if (finallyDisabled) {
-            this.context.logger.warn('Submit button remained disabled, falling back to Enter key');
-            return this.submitWithEnterKey();
-          }
-        }
-
-        // Check if the button is visible and clickable
-        const rect = submitButton.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-          this.context.logger.warn('Perplexity submit button is not visible, falling back to Enter key');
-          return this.submitWithEnterKey();
-        }
-
-        // Click the submit button to send the message
-        submitButton.click();
-
-        // Emit success event to the new event system
-        this.emitExecutionCompleted('submitForm', {
-          formElement: options?.formElement?.tagName || 'unknown'
-        }, {
-          success: true,
-          method: 'submitButton.click',
-          buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
-        });
-
-        this.context.logger.info('Perplexity chat input submitted successfully via button click');
-        return true;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.context.logger.error(`Error clicking submit button: ${errorMessage}, falling back to Enter key`);
-        return this.submitWithEnterKey();
-      }
-    } else {
-      this.context.logger.warn('Could not find Perplexity submit button, falling back to Enter key');
-      return this.submitWithEnterKey();
-    }
-  }
-
-  /**
-   * Fallback method to submit using Enter key
-   */
-  private async submitWithEnterKey(): Promise<boolean> {
     try {
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT) as HTMLTextAreaElement;
-      if (!chatInput) {
-        this.emitExecutionFailed('submitForm', 'Chat input element not found for Enter key fallback');
+      // Check if the button is disabled
+      if (submitButton.disabled) {
+        this.context.logger.warn('ChatGPT submit button is disabled');
+        this.emitExecutionFailed('submitForm', 'Submit button is disabled');
         return false;
       }
 
-      // Focus the textarea
-      chatInput.focus();
-
-      // Simulate Enter key press
-      const enterEvents = ['keydown', 'keypress', 'keyup'];
-      for (const eventType of enterEvents) {
-        chatInput.dispatchEvent(new KeyboardEvent(eventType, {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true
-        }));
+      // Check if the button is visible and clickable
+      const rect = submitButton.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        this.context.logger.warn('ChatGPT submit button is not visible');
+        this.emitExecutionFailed('submitForm', 'Submit button is not visible');
+        return false;
       }
 
-      // Try form submission as additional fallback
-      const form = chatInput.closest('form') as HTMLFormElement;
-      if (form) {
-        this.context.logger.debug('Submitting form as additional fallback');
-        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
-      }
+      // Click the submit button to send the message
+      submitButton.click();
 
-      this.emitExecutionCompleted('submitForm', {}, {
+      // Emit success event to the new event system
+      this.emitExecutionCompleted('submitForm', {
+        formElement: options?.formElement?.tagName || 'unknown'
+      }, {
         success: true,
-        method: 'enterKey+formSubmit'
+        method: 'submitButton.click',
+        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
       });
 
-      this.context.logger.info('Perplexity chat input submitted successfully via Enter key');
+      this.context.logger.info('ChatGPT chat input submitted successfully');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`Error submitting with Enter key: ${errorMessage}`);
+      this.context.logger.error(`Error submitting ChatGPT chat input: ${errorMessage}`);
       this.emitExecutionFailed('submitForm', errorMessage);
       return false;
     }
   }
 
   /**
-   * Attach a file to the Perplexity chat input
+   * Attach a file to the ChatGPT chat input
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
@@ -407,163 +332,64 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         return false;
       }
 
-      // Method 1: Try using hidden file input element
-      const success1 = await this.attachFileViaInput(file);
-      if (success1) {
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size
-        }, {
-          success: true,
-          method: 'file-input'
-        });
-        this.context.logger.info(`File attached successfully via input: ${file.name}`);
-        return true;
+      // Try to find file input element
+      let fileInput: HTMLInputElement | null = options?.inputElement || null;
+      
+      if (!fileInput) {
+        fileInput = document.querySelector(this.selectors.FILE_INPUT) as HTMLInputElement;
       }
 
-      // Method 2: Fallback to drag and drop simulation
-      const success2 = await this.attachFileViaDragDrop(file);
-      if (success2) {
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size
-        }, {
-          success: true,
-          method: 'drag-drop'
-        });
-        this.context.logger.info(`File attached successfully via drag-drop: ${file.name}`);
-        return true;
-      }
+      if (fileInput) {
+        // Use the direct file input approach
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
 
-      // Method 3: Try clipboard as final fallback
-      const success3 = await this.attachFileViaClipboard(file);
-      this.emitExecutionCompleted('attachFile', {
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size
-      }, {
-        success: success3,
-        method: 'clipboard'
-      });
-
-      if (success3) {
-        this.context.logger.info(`File copied to clipboard for manual paste: ${file.name}`);
+        // Trigger change event
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        this.context.logger.warn(`All file attachment methods failed for: ${file.name}`);
-      }
-
-      return success3;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`Error attaching file to Perplexity: ${errorMessage}`);
-      this.emitExecutionFailed('attachFile', errorMessage);
-      return false;
-    }
-  }
-
-  /**
-   * Method 1: Attach file via hidden file input
-   */
-  private async attachFileViaInput(file: File): Promise<boolean> {
-    try {
-      const selectors = this.selectors.FILE_INPUT.split(', ');
-      let fileInput: HTMLInputElement | null = null;
-
-      for (const selector of selectors) {
-        fileInput = document.querySelector(selector.trim()) as HTMLInputElement;
-        if (fileInput) {
-          this.context.logger.debug(`Found file input using selector: ${selector.trim()}`);
-          break;
+        // Fallback to drag-drop simulation
+        const success = await this.simulateFileDrop(file);
+        if (!success) {
+          this.emitExecutionFailed('attachFile', 'Failed to simulate file drop');
+          return false;
         }
       }
 
-      if (!fileInput) {
-        this.context.logger.debug('No file input element found');
-        return false;
+      // Check for file preview to confirm success
+      const previewFound = await this.checkFilePreview();
+
+      if (previewFound) {
+        this.emitExecutionCompleted('attachFile', {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          inputElement: options?.inputElement?.tagName || 'unknown'
+        }, {
+          success: true,
+          previewFound: true,
+          method: fileInput ? 'file-input' : 'drag-drop-simulation'
+        });
+        this.context.logger.info(`File attached successfully: ${file.name}`);
+        return true;
+      } else {
+        // Still consider it successful even if preview not found (optimistic)
+        this.emitExecutionCompleted('attachFile', {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size
+        }, {
+          success: true,
+          previewFound: false,
+          method: fileInput ? 'file-input' : 'drag-drop-simulation'
+        });
+        this.context.logger.info(`File attachment initiated (preview not confirmed): ${file.name}`);
+        return true;
       }
-
-      // Create a DataTransfer object and add the file
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-
-      // Set the files property on the input element
-      fileInput.files = dataTransfer.files;
-
-      // Trigger the change event to notify the application
-      const changeEvent = new Event('change', { bubbles: true });
-      fileInput.dispatchEvent(changeEvent);
-
-      return true;
     } catch (error) {
-      this.context.logger.debug(`File input method failed: ${error}`);
-      return false;
-    }
-  }
-
-  /**
-   * Method 2: Attach file via drag and drop simulation
-   */
-  private async attachFileViaDragDrop(file: File): Promise<boolean> {
-    try {
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT) as HTMLTextAreaElement;
-      if (!chatInput) {
-        this.context.logger.debug('No chat input found for drag-drop');
-        return false;
-      }
-
-      // Create a DataTransfer object
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-
-      // Create custom events
-      const dragOverEvent = new DragEvent('dragover', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer,
-      });
-
-      const dropEvent = new DragEvent('drop', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer,
-      });
-
-      // Prevent default on dragover to enable drop
-      chatInput.addEventListener('dragover', e => e.preventDefault(), { once: true });
-      chatInput.dispatchEvent(dragOverEvent);
-
-      // Simulate the drop event
-      chatInput.dispatchEvent(dropEvent);
-
-      return true;
-    } catch (error) {
-      this.context.logger.debug(`Drag-drop method failed: ${error}`);
-      return false;
-    }
-  }
-
-  /**
-   * Method 3: Copy file to clipboard as fallback
-   */
-  private async attachFileViaClipboard(file: File): Promise<boolean> {
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [file.type]: file,
-        }),
-      ]);
-
-      // Focus the textarea to make it easier to paste
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT) as HTMLTextAreaElement;
-      if (chatInput) {
-        chatInput.focus();
-      }
-
-      return true;
-    } catch (error) {
-      this.context.logger.debug(`Clipboard method failed: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.context.logger.error(`Error attaching file to ChatGPT: ${errorMessage}`);
+      this.emitExecutionFailed('attachFile', errorMessage);
       return false;
     }
   }
@@ -576,10 +402,10 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     const currentHost = window.location.hostname;
     const currentUrl = window.location.href;
 
-    this.context.logger.debug(`Checking if Perplexity adapter supports: ${currentUrl}`);
+    this.context.logger.debug(`Checking if ChatGPT adapter supports: ${currentUrl}`);
 
     // Check hostname first
-    const isPerplexityHost = this.hostnames.some(hostname => {
+    const isChatGPTHost = this.hostnames.some(hostname => {
       if (typeof hostname === 'string') {
         return currentHost.includes(hostname);
       }
@@ -587,22 +413,23 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       return (hostname as RegExp).test(currentHost);
     });
 
-    if (!isPerplexityHost) {
-      this.context.logger.debug(`Host ${currentHost} not supported by Perplexity adapter`);
+    if (!isChatGPTHost) {
+      this.context.logger.debug(`Host ${currentHost} not supported by ChatGPT adapter`);
       return false;
     }
 
-    // Check if we're on a supported Perplexity page
+    // Check if we're on a supported ChatGPT page
     const supportedPatterns = [
-      /^https:\/\/(?:www\.)?perplexity\.ai\/search\/.*/,  // Search pages
-      /^https:\/\/(?:www\.)?perplexity\.ai\/$/,           // Home page
-      /^https:\/\/(?:www\.)?perplexity\.ai\/library\/.*/  // Library pages
+      /^https:\/\/chatgpt\.com\/$/,           // Main page
+      /^https:\/\/chatgpt\.com\/c\/.*/,      // Specific conversations
+      /^https:\/\/chatgpt\.com\/g\/.*/,      // Custom GPTs
+      /^https:\/\/chatgpt\.com\/\?.*/        // Chat with query params
     ];
 
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`Perplexity adapter supports current page: ${currentUrl}`);
+      this.context.logger.info(`ChatGPT adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -615,14 +442,14 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector checking and better detection
    */
   supportsFileUpload(): boolean {
-    this.context.logger.debug('Checking file upload support for Perplexity');
+    this.context.logger.debug('Checking file upload support for ChatGPT');
 
-    // Check for file input elements
-    const fileInputSelectors = this.selectors.FILE_INPUT.split(', ');
-    for (const selector of fileInputSelectors) {
-      const fileInput = document.querySelector(selector.trim());
-      if (fileInput) {
-        this.context.logger.debug(`Found file input with selector: ${selector.trim()}`);
+    // Check for drop zones
+    const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
+    for (const selector of dropZoneSelectors) {
+      const dropZone = document.querySelector(selector.trim());
+      if (dropZone) {
+        this.context.logger.debug(`Found drop zone with selector: ${selector.trim()}`);
         return true;
       }
     }
@@ -637,14 +464,11 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // Check for drop zones
-    const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
-    for (const selector of dropZoneSelectors) {
-      const dropZone = document.querySelector(selector.trim());
-      if (dropZone) {
-        this.context.logger.debug(`Found drop zone with selector: ${selector.trim()}`);
-        return true;
-      }
+    // Check for file input elements
+    const fileInput = document.querySelector(this.selectors.FILE_INPUT);
+    if (fileInput) {
+      this.context.logger.debug('Found file input element');
+      return true;
     }
 
     this.context.logger.debug('No file upload support detected');
@@ -652,6 +476,232 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   // Private helper methods
+
+  /**
+   * Get ChatGPT-specific button styles that match the composer button design
+   * Based on ChatGPT's current design system with dark/light theme support
+   */
+  private getChatGPTButtonStyles(): string {
+    return `
+      /* ChatGPT MCP Button Styles - Matching composer-btn design */
+      .mcp-chatgpt-button-base {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        box-sizing: border-box;
+        min-width: 36px;
+        height: 36px;
+        padding: 8px;
+        margin: 0 2px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #8e8ea0;
+        font-family: "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        overflow: hidden;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      /* Hover state - matches ChatGPT's composer button hover */
+      .mcp-chatgpt-button-base:hover {
+        background-color: rgba(142, 142, 160, 0.1);
+        color: #acacbe;
+      }
+
+      /* Active/pressed state */
+      .mcp-chatgpt-button-base:active {
+        background-color: rgba(142, 142, 160, 0.15);
+        transform: scale(0.98);
+      }
+
+      /* Focus state for accessibility */
+      .mcp-chatgpt-button-base:focus-visible {
+        outline: 2px solid #1e90ff;
+        outline-offset: 2px;
+      }
+
+      /* Active toggle state - matches ChatGPT's active button state */
+      .mcp-chatgpt-button-base.mcp-button-active {
+        background-color: rgba(30, 144, 255, 0.1);
+        color: #1e90ff;
+      }
+
+      .mcp-chatgpt-button-base.mcp-button-active:hover {
+        background-color: rgba(30, 144, 255, 0.15);
+      }
+
+      /* Button content container */
+      .mcp-chatgpt-button-content {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Text styling to match ChatGPT's typography */
+      .mcp-chatgpt-button-text {
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        white-space: nowrap;
+      }
+
+      /* Icon styling matching ChatGPT's icon system */
+      .mcp-chatgpt-button-base .mcp-button-icon {
+        width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+
+      /* Dark mode support - ChatGPT's dark theme */
+      @media (prefers-color-scheme: dark) {
+        .mcp-chatgpt-button-base {
+          color: #c5c5d2;
+        }
+
+        .mcp-chatgpt-button-base:hover {
+          background-color: rgba(197, 197, 210, 0.1);
+          color: #ececf1;
+        }
+
+        .mcp-chatgpt-button-base:active {
+          background-color: rgba(197, 197, 210, 0.15);
+        }
+
+        .mcp-chatgpt-button-base.mcp-button-active {
+          background-color: rgba(30, 144, 255, 0.15);
+          color: #4da6ff;
+        }
+
+        .mcp-chatgpt-button-base.mcp-button-active:hover {
+          background-color: rgba(30, 144, 255, 0.2);
+        }
+      }
+
+      /* High contrast mode support */
+      @media (prefers-contrast: high) {
+        .mcp-chatgpt-button-base {
+          border: 1px solid currentColor;
+        }
+
+        .mcp-chatgpt-button-base:focus-visible {
+          outline-width: 3px;
+        }
+      }
+
+      /* Reduced motion support */
+      @media (prefers-reduced-motion: reduce) {
+        .mcp-chatgpt-button-base {
+          transition: none;
+        }
+
+        .mcp-chatgpt-button-base:active {
+          transform: none;
+        }
+      }
+
+      /* Integration with ChatGPT's composer layout */
+      [data-testid="composer-footer-actions"] .mcp-chatgpt-button-base,
+      .composer-footer-actions .mcp-chatgpt-button-base {
+        margin: 0 4px;
+      }
+
+      /* Ensure proper stacking with ChatGPT's UI elements */
+      .mcp-chatgpt-button-base {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Responsive design for mobile */
+      @media (max-width: 768px) {
+        .mcp-chatgpt-button-base {
+          min-width: 32px;
+          height: 32px;
+          padding: 6px;
+        }
+
+        .mcp-chatgpt-button-base .mcp-button-icon {
+          width: 18px;
+          height: 18px;
+          font-size: 18px;
+        }
+
+        .mcp-chatgpt-button-text {
+          font-size: 13px;
+        }
+      }
+
+      /* Tooltip styling for better UX */
+      .mcp-chatgpt-button-base[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1000;
+        pointer-events: none;
+        margin-bottom: 4px;
+      }
+
+      /* Ensure button looks consistent with ChatGPT's composer */
+      .relative.flex.w-full.items-end .mcp-chatgpt-button-base {
+        align-self: flex-end;
+        margin-bottom: 2px;
+      }
+    `;
+  }
+
+  /**
+   * Inject ChatGPT-specific button styles into the page
+   */
+  private injectChatGPTButtonStyles(): void {
+    if (this.chatgptStylesInjected) {
+      this.context.logger.debug('ChatGPT button styles already injected, skipping');
+      return;
+    }
+
+    try {
+      const styleId = 'mcp-chatgpt-button-styles';
+      const existingStyles = document.getElementById(styleId);
+      if (existingStyles) {
+        existingStyles.remove();
+      }
+
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = this.getChatGPTButtonStyles();
+      document.head.appendChild(styleElement);
+
+      this.chatgptStylesInjected = true;
+      this.context.logger.info('ChatGPT button styles injected successfully');
+    } catch (error) {
+      this.context.logger.error('Failed to inject ChatGPT button styles:', error);
+    }
+  }
 
   private setupUrlTracking(): void {
     if (!this.urlCheckInterval) {
@@ -679,7 +729,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       return;
     }
 
-    this.context.logger.debug(`Setting up store event listeners for Perplexity adapter instance #${this.instanceId}`);
+    this.context.logger.debug(`Setting up store event listeners for ChatGPT adapter instance #${this.instanceId}`);
 
     // Listen for tool execution events from the store
     this.context.eventBus.on('tool:execution-completed', (data) => {
@@ -702,7 +752,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       return;
     }
 
-    this.context.logger.debug(`Setting up DOM observers for Perplexity adapter instance #${this.instanceId}`);
+    this.context.logger.debug(`Setting up DOM observers for ChatGPT adapter instance #${this.instanceId}`);
 
     // Set up mutation observer to detect page changes and re-inject UI if needed
     this.mutationObserver = new MutationObserver((mutations) => {
@@ -738,7 +788,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     if (this.uiIntegrationSetup) {
       this.context.logger.debug(`UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`);
     } else {
-      this.context.logger.debug(`Setting up UI integration for Perplexity adapter instance #${this.instanceId}`);
+      this.context.logger.debug(`Setting up UI integration for ChatGPT adapter instance #${this.instanceId}`);
       this.uiIntegrationSetup = true;
     }
 
@@ -809,7 +859,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   private cleanupDOMObservers(): void {
-    this.context.logger.debug('Cleaning up DOM observers for Perplexity adapter');
+    this.context.logger.debug('Cleaning up DOM observers for ChatGPT adapter');
 
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
@@ -818,7 +868,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   private cleanupUIIntegration(): void {
-    this.context.logger.debug('Cleaning up UI integration for Perplexity adapter');
+    this.context.logger.debug('Cleaning up UI integration for ChatGPT adapter');
 
     // Remove MCP popover if it exists
     const popoverContainer = document.getElementById('mcp-popover-container');
@@ -830,11 +880,11 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   private handleToolExecutionCompleted(data: any): void {
-    this.context.logger.debug('Handling tool execution completion in Perplexity adapter:', data);
+    this.context.logger.debug('Handling tool execution completion in ChatGPT adapter:', data);
 
     // Use the base class method to check if we should handle events
     if (!this.shouldHandleEvents()) {
-      this.context.logger.debug('Perplexity adapter should not handle events, ignoring tool execution event');
+      this.context.logger.debug('ChatGPT adapter should not handle events, ignoring tool execution event');
       return;
     }
 
@@ -850,37 +900,30 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try to find the search/research toggle area first (primary insertion point)
-    const radioGroup = document.querySelector('div[role="radiogroup"].group.relative.isolate.flex');
-    if (radioGroup) {
-      const container = radioGroup.closest('.flex.items-center');
-      if (container) {
-        this.context.logger.debug('Found search/research toggle container, placing MCP button next to it');
-        const wrapperDiv = radioGroup.parentElement;
-        return { container, insertAfter: wrapperDiv };
-      }
-    }
-
-    // Fallback: Look for the main input area's action buttons container
-    const actionsContainer = document.querySelector('div.flex.items-end.gap-sm');
-    if (actionsContainer) {
-      this.context.logger.debug('Found actions container (fallback)');
-      const fileUploadButton = actionsContainer.querySelector('button[aria-label*="Attach"]');
-      return { container: actionsContainer, insertAfter: fileUploadButton };
+    // Try primary selector first - ChatGPT's composer footer actions
+    const footerActions = document.querySelector('[data-testid="composer-footer-actions"]');
+    if (footerActions) {
+      this.context.logger.debug('Found insertion point: [data-testid="composer-footer-actions"]');
+      const buttons = footerActions.querySelectorAll('button');
+      const lastButton = buttons.length > 0 ? buttons[buttons.length - 1] : null;
+      return { container: footerActions, insertAfter: lastButton };
     }
 
     // Try fallback selectors
     const fallbackSelectors = [
-      '.input-area .actions',
-      '.chat-input-actions',
-      '.conversation-input .actions'
+      '.composer-footer-actions',
+      '.flex.items-center[data-testid*="composer"]',
+      '.relative.flex.w-full.items-end',
+      '[data-testid="composer-trailing-actions"]'
     ];
 
     for (const selector of fallbackSelectors) {
       const container = document.querySelector(selector);
       if (container) {
         this.context.logger.debug(`Found fallback insertion point: ${selector}`);
-        return { container, insertAfter: null };
+        const buttons = container.querySelectorAll('button');
+        const lastButton = buttons.length > 0 ? buttons[buttons.length - 1] : null;
+        return { container, insertAfter: lastButton };
       }
     }
 
@@ -889,7 +932,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   private injectMCPPopover(insertionPoint: { container: Element; insertAfter: Element | null }): void {
-    this.context.logger.debug('Injecting MCP popover into Perplexity interface');
+    this.context.logger.debug('Injecting MCP popover into ChatGPT interface');
 
     try {
       // Check if popover already exists
@@ -937,11 +980,11 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
-            // Create adapter button configuration
+            // Create adapter button configuration for ChatGPT styling
             const adapterButtonConfig = {
-              className: 'mcp-perplexity-button-base',
-              contentClassName: 'mcp-perplexity-button-content',
-              textClassName: 'mcp-perplexity-button-text',
+              className: 'mcp-chatgpt-button-base',
+              contentClassName: 'mcp-chatgpt-button-content',
+              textClassName: 'mcp-chatgpt-button-text',
               activeClassName: 'mcp-button-active'
             };
 
@@ -1110,6 +1153,67 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     return !!document.getElementById('mcp-popover-container');
   }
 
+  private async simulateFileDrop(file: File): Promise<boolean> {
+    try {
+      // Find drop zone
+      const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
+      let dropZone: Element | null = null;
+      
+      for (const selector of dropZoneSelectors) {
+        dropZone = document.querySelector(selector.trim());
+        if (dropZone) break;
+      }
+
+      if (!dropZone) {
+        this.context.logger.error('No drop zone found for file simulation');
+        return false;
+      }
+
+      // Create drag events
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+
+      // Simulate drag events
+      const dragEnterEvent = new DragEvent('dragenter', {
+        bubbles: true,
+        dataTransfer: dataTransfer
+      });
+      const dragOverEvent = new DragEvent('dragover', {
+        bubbles: true,
+        dataTransfer: dataTransfer
+      });
+      const dropEvent = new DragEvent('drop', {
+        bubbles: true,
+        dataTransfer: dataTransfer
+      });
+
+      // Dispatch events
+      dropZone.dispatchEvent(dragEnterEvent);
+      dropZone.dispatchEvent(dragOverEvent);
+      dropZone.dispatchEvent(dropEvent);
+
+      return true;
+    } catch (error) {
+      this.context.logger.error('Error simulating file drop:', error);
+      return false;
+    }
+  }
+
+  private async checkFilePreview(): Promise<boolean> {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
+        if (filePreview) {
+          this.context.logger.info('File preview element found after attachment');
+          resolve(true);
+        } else {
+          this.context.logger.warn('File preview element not found after attachment');
+          resolve(false);
+        }
+      }, 500);
+    });
+  }
+
   private emitExecutionCompleted(toolName: string, parameters: any, result: any): void {
     this.context.eventBus.emit('tool:execution-completed', {
       execution: {
@@ -1132,7 +1236,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   private generateCallId(): string {
-    return `perplexity-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    return `chatgpt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
@@ -1179,7 +1283,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`Perplexity page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.info(`ChatGPT page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1187,10 +1291,9 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     // Re-check support and re-inject UI if needed
     const stillSupported = this.isSupported();
     if (stillSupported) {
-      // Re-inject styles on page navigation
-      this.adapterStylesInjected = false;
-      this.injectPerplexityButtonStyles();
-
+      // Re-inject styles after page change
+      this.injectChatGPTButtonStyles();
+      
       // Re-setup UI integration after page change
       setTimeout(() => {
         this.setupUIIntegration();
@@ -1212,12 +1315,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`Perplexity host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.info(`ChatGPT host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
     if (!stillSupported) {
-      this.context.logger.warn('Perplexity adapter no longer supported on this host/page');
+      this.context.logger.warn('ChatGPT adapter no longer supported on this host/page');
       // Emit deactivation event using available event type
       this.context.eventBus.emit('adapter:deactivated', {
         pluginName: this.name,
@@ -1230,220 +1333,11 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in Perplexity adapter:`, tools);
+    this.context.logger.info(`Tools detected in ChatGPT adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {
       this.context.stores.tool?.addDetectedTool?.(tool);
     });
-  }
-
-  // Perplexity-specific button styling methods
-
-  /**
-   * Get Perplexity-specific button styles that match the platform's segmented control design system
-   */
-  private getPerplexityButtonStyles(): string {
-    return `
-      .mcp-perplexity-button-base {
-        /* Base button styling matching Perplexity's segmented-control design */
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        outline: none;
-        cursor: pointer;
-        white-space: nowrap;
-        user-select: none;
-        border-radius: 8px;
-        height: 32px;
-        min-width: 36px;
-        padding: 0 0px;
-        gap: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        border: none;
-        background: transparent;
-        transition: all 300ms ease-out;
-        
-        /* Default colors - using Perplexity's actual theme colors */
-        color: oklch(var(--text-color-200, 50.2% 0.008 106.677)); /* Inactive text */
-        
-        /* Focus states */
-        &:focus {
-          outline: none;
-        }
-        
-        /* Hover states */
-        &:hover {
-          color: oklch(var(--text-color-100, 30.4% 0.04 213.681)); /* Active text on hover */
-        }
-        
-        /* Active/selected state - matches the checked segmented control */
-        &.mcp-button-active {
-          color: oklch(var(--text-super-color-100, 55.3% 0.086 208.538)); /* Super color for active state */
-        }
-        
-        /* Active button overlay styling (matches data-state="checked" div) */
-        &.mcp-button-active::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          border-radius: 8px;
-          border: 1px solid oklch(var(--text-super-color-100, 55.3% 0.086 208.538));
-          background-color: oklch(0.963 0.007 106.523); /* Light background */
-          box-shadow: 0 1px 3px 0 oklch(var(--text-super-color-100, 55.3% 0.086 208.538) / 0.3);
-          transition: all 300ms ease-out;
-          opacity: 1;
-        }
-      }
-      
-      /* Dark mode support */
-      @media (prefers-color-scheme: dark) {
-        .mcp-perplexity-button-base {
-          color: oklch(var(--dark-text-color-200, 65.3% 0.005 197.042)); /* Dark mode inactive text */
-          
-          &:hover {
-            color: oklch(var(--dark-text-color-100, 93% 0.003 106.451)); /* Dark mode hover text */
-          }
-          
-          &.mcp-button-active {
-            color: oklch(var(--text-super-color-100, 55.3% 0.086 208.538)); /* Keep super color in dark mode */
-          }
-          
-          &.mcp-button-active::before {
-            background-color: oklch(var(--lt-color-text-dark, 0.113 0.005 247.858)); /* Dark background equivalent */
-            border-color: oklch(var(--text-super-color-100, 55.3% 0.086 208.538));
-            box-shadow: 0 1px 3px 0 oklch(var(--text-super-color-100, 55.3% 0.086 208.538) / 0.2);
-          }
-        }
-      }
-      
-      .mcp-perplexity-button-content {
-        /* Content container styling - matches the inner div structure */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        min-width: 0;
-        font-weight: 500;
-        position: relative;
-        z-index: 10; /* matches relative z-10 */
-        height: 32px;
-        min-width: 36px;
-        padding: 4px 10px; /* matches py-xs px-2.5 equivalent */
-      }
-      
-      .mcp-perplexity-button-text {
-        font-size: 14px;
-        font-weight: 500;
-        line-height: 1.2;
-        color: inherit; /* Inherit color from parent */
-      }
-      
-      /* Icon styling within button */
-      .mcp-perplexity-button-base svg,
-      .mcp-perplexity-button-base img {
-        width: 16px;
-        height: 16px;
-        transition: all 300ms ease-out;
-        flex-shrink: 0;
-      }
-      
-      .mcp-perplexity-button-base img {
-        border-radius: 50%;
-        margin-right: 1px;
-      }
-      
-      /* Integration with Perplexity's button group layout */
-      .gap-xs .mcp-perplexity-button-base,
-      .gap-sm .mcp-perplexity-button-base,
-      .flex.items-center .mcp-perplexity-button-base {
-        margin: 0 2px;
-      }
-      
-      /* Special styling for group context (matches p-two flex items-center structure) */
-      .p-two .mcp-perplexity-button-base,
-      [class*="p-"] .mcp-perplexity-button-base {
-        margin: 0 1px;
-      }
-      
-      /* Focus-visible styling for accessibility */
-      .mcp-perplexity-button-base:focus-visible {
-        outline: 2px solid oklch(var(--text-super-color-100, 55.3% 0.086 208.538));
-        outline-offset: 2px;
-        outline-style: dashed;
-      }
-      
-      .mcp-perplexity-button-base:focus-visible::before {
-        border-style: dashed !important;
-      }
-      
-      /* Responsive adjustments */
-      @media (max-width: 640px) {
-        .mcp-perplexity-button-base {
-          height: 28px;
-          min-width: 32px;
-          padding: 0 8px;
-          font-size: 13px;
-        }
-        
-        .mcp-perplexity-button-content {
-          height: 28px;
-          min-width: 32px;
-          padding: 2px 8px;
-        }
-        
-        .mcp-perplexity-button-base svg,
-        .mcp-perplexity-button-base img {
-          width: 14px;
-          height: 14px;
-        }
-        
-        /* Adjust ring size for mobile */
-        .mcp-perplexity-button-base.mcp-button-active::before {
-          border-width: 1px; /* Keep consistent border width on mobile */
-        }
-      }
-      
-      /* CSS custom properties for Perplexity theming */
-      :root {
-        --text-color-100: 30.4% 0.04 213.681;
-        --text-color-200: 50.2% 0.008 106.677;
-        --text-super-color-100: 55.3% 0.086 208.538;
-        --text-max-color-100: 0.77 0.1629 60.28;
-        --dark-text-color-100: 93% 0.003 106.451;
-        --dark-text-color-200: 65.3% 0.005 197.042;
-        --light-text-color-100: 30.4% 0.04 213.681;
-        --lt-color-text-dark: 0.113 0.005 247.858;
-        --lt-color-text-default: 0.196 0.007 247.858;
-        --lt-color-text-light: 0.373 0.008 247.858;
-        --lt-color-text-very-light: 0.559 0.005 247.858;
-      }
-    `;
-  }
-
-  /**
-   * Inject Perplexity-specific button styles into the page
-   */
-  private injectPerplexityButtonStyles(): void {
-    if (this.adapterStylesInjected) return;
-    
-    try {
-      const styleId = 'mcp-perplexity-button-styles';
-      const existingStyles = document.getElementById(styleId);
-      if (existingStyles) existingStyles.remove();
-      
-      const styleElement = document.createElement('style');
-      styleElement.id = styleId;
-      styleElement.textContent = this.getPerplexityButtonStyles();
-      document.head.appendChild(styleElement);
-      
-      this.adapterStylesInjected = true;
-      this.context.logger.info('Perplexity button styles injected successfully');
-    } catch (error) {
-      this.context.logger.error('Failed to inject Perplexity button styles:', error);
-    }
   }
 }

@@ -17,6 +17,7 @@ import { OpenRouterAdapter } from './adapters/openrouter.adapter';
 import { T3ChatAdapter } from './adapters/t3chat.adapter';
 import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
+import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
 
 // Types for lazy initialization
 interface AdapterFactory {
@@ -715,6 +716,28 @@ class PluginRegistry {
           id: 'github-copilot-adapter',
           name: 'GitHub Copilot Adapter',
           description: 'Specialized adapter for GitHub Copilot with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
+        },
+      });
+
+      // Register ChatGPTAdapter factory for OpenAI ChatGPT
+      this.registerAdapterFactory({
+        name: 'chatgpt-adapter',
+        version: '2.0.0',
+        type: 'website-adapter',
+        hostnames: ['chatgpt.com'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new ChatGPTAdapter(),
+        config: {
+          id: 'chatgpt-adapter',
+          name: 'ChatGPT Adapter',
+          description: 'Specialized adapter for OpenAI ChatGPT with chat input, form submission, and file attachment support',
           version: '2.0.0',
           enabled: true,
           priority: 5,
