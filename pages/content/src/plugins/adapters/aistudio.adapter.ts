@@ -54,6 +54,9 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private static instanceCount = 0;
   private instanceId: number;
 
+  // Adapter styling integration
+  private adapterStylesInjected: boolean = false;
+
   constructor() {
     super();
     AIStudioAdapter.instanceCount++;
@@ -89,6 +92,9 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     await super.activate();
     this.context.logger.info(`Activating AI Studio adapter instance #${this.instanceId}...`);
 
+    // Inject adapter-specific button styles
+    this.injectAIStudioButtonStyles();
+
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
     this.setupUIIntegration();
@@ -113,6 +119,13 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+
+    // Remove injected adapter styles
+    const styleElement = document.getElementById('mcp-aistudio-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.adapterStylesInjected = false;
+    }
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -142,6 +155,13 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       this.popoverCheckInterval = null;
     }
 
+    // Remove injected adapter styles
+    const styleElement = document.getElementById('mcp-aistudio-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.adapterStylesInjected = false;
+    }
+
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
@@ -150,6 +170,176 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
     this.uiIntegrationSetup = false;
+  }
+
+  /**
+   * Get AI Studio-specific button styles that match Material Design Components
+   */
+  private getAIStudioButtonStyles(): string {
+    return `
+      .mcp-aistudio-button-base {
+        /* Base Material Design button styling */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        border: none;
+        outline: none;
+        line-height: inherit;
+        user-select: none;
+        appearance: none;
+        overflow: visible;
+        vertical-align: middle;
+        background: transparent;
+        
+        /* AI Studio Color System */
+        color: var(--color-on-surface);
+        background-color: transparent;
+        
+        /* Typography */
+        font-family: 'Google Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0.0892857143em;
+        text-decoration: none;
+        text-transform: none;
+        
+        /* Spacing and sizing */
+        padding: 8px 16px;
+        min-width: 64px;
+        height: 36px;
+        border-radius: 18px;
+        
+        /* Transitions */
+        transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+                    box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+                    border-color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+                    color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+        
+        /* Focus and active states */
+        position: relative;
+        cursor: pointer;
+        margin: 0 4px;
+      }
+      
+      .mcp-aistudio-button-base:hover {
+        background-color: var(--color-surface-container);
+        color: var(--color-primary);
+      }
+      
+      .mcp-aistudio-button-base:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-primary-container);
+      }
+      
+      .mcp-aistudio-button-base:active {
+        background-color: var(--color-surface-container-high);
+        transform: translateY(1px);
+      }
+      
+      .mcp-aistudio-button-base.inactive {
+        color: var(--color-on-surface-variant);
+        background-color: var(--color-run-button-disabled-background-transparent, rgba(226, 226, 229, 0.9));
+        border: 1px solid var(--color-outline-variant);
+      }
+      
+      .mcp-aistudio-button-base.inactive:hover {
+        background-color: var(--color-surface-container);
+        color: var(--color-on-surface);
+      }
+      
+      .mcp-aistudio-button-base.active {
+        background-color: var(--color-primary);
+        color: var(--color-on-primary);
+      }
+      
+      .mcp-aistudio-button-base.active:hover {
+        background-color: var(--color-primary-container);
+        color: var(--color-on-primary-container);
+      }
+      
+      /* Content styling */
+      .mcp-aistudio-button-content {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      
+      .mcp-aistudio-button-text {
+        font-weight: 500;
+        font-size: 14px;
+      }
+      
+      /* Dark mode support - now handled by CSS variables */
+      :root .dark-theme .mcp-aistudio-button-base,
+      @media (prefers-color-scheme: dark) {
+        .mcp-aistudio-button-base {
+          /* Colors automatically handled by CSS variables */
+        }
+      }
+      
+      /* Integration with AI Studio's button wrapper */
+      .button-wrapper .mcp-aistudio-button-base {
+        margin: 0;
+        height: 40px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      /* Ensure the MCP button wrapper behaves like other button wrappers */
+      #mcp-button-wrapper {
+        display: flex;
+        align-items: center;
+      }
+      
+      /* Ripple effect (simplified) - using AI Studio colors */
+      .mcp-aistudio-button-base::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background-color: var(--color-primary);
+        opacity: 0;
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s, opacity 0.6s;
+        pointer-events: none;
+      }
+      
+      .mcp-aistudio-button-base:active::after {
+        width: 100px;
+        height: 100px;
+        opacity: 0.1;
+        transition: 0s;
+      }
+    `;
+  }
+
+  /**
+   * Inject AI Studio-specific button styles
+   */
+  private injectAIStudioButtonStyles(): void {
+    if (this.adapterStylesInjected) return;
+    
+    try {
+      const styleId = 'mcp-aistudio-button-styles';
+      const existingStyles = document.getElementById(styleId);
+      if (existingStyles) existingStyles.remove();
+      
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = this.getAIStudioButtonStyles();
+      document.head.appendChild(styleElement);
+      
+      this.adapterStylesInjected = true;
+      this.context.logger.info('AI Studio button styles injected successfully');
+    } catch (error) {
+      this.context.logger.error('Failed to inject AI Studio button styles:', error);
+    }
   }
 
   /**
@@ -567,7 +757,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       this.context.logger.debug(`Attempting MCP popover injection (attempt ${attempt}/${maxRetries})`);
 
       // Check if popover already exists
-      if (document.getElementById('mcp-popover-container')) {
+      if (document.getElementById('mcp-button-wrapper') || document.getElementById('mcp-popover-container')) {
         this.context.logger.debug('MCP popover already exists');
         return;
       }
@@ -612,7 +802,13 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private cleanupUIIntegration(): void {
     this.context.logger.debug('Cleaning up UI integration for AI Studio adapter');
 
-    // Remove MCP popover if it exists
+    // Remove MCP button wrapper and popover if they exist
+    const buttonWrapper = document.getElementById('mcp-button-wrapper');
+    if (buttonWrapper) {
+      buttonWrapper.remove();
+    }
+
+    // Also remove the popover container directly if it somehow exists standalone
     const popoverContainer = document.getElementById('mcp-popover-container');
     if (popoverContainer) {
       popoverContainer.remove();
@@ -642,41 +838,42 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try to find the prompt input wrapper first (primary insertion point)
+    // Look for the prompt input wrapper container that holds the button wrappers
+    const promptInputWrapperContainer = document.querySelector('.prompt-input-wrapper-container');
+    if (promptInputWrapperContainer) {
+      this.context.logger.debug('Found prompt input wrapper container');
+      
+      // Find all .button-wrapper elements inside the container - these contain the Add and Run buttons
+      const buttonWrappers = promptInputWrapperContainer.querySelectorAll('.button-wrapper');
+      if (buttonWrappers.length > 0) {
+        // Find the parent container that holds all button wrappers
+        const buttonContainer = buttonWrappers[0].parentElement;
+        if (buttonContainer) {
+          // Insert after the last button wrapper (Run button) but within the same container
+          const lastButtonWrapper = buttonWrappers[buttonWrappers.length - 1];
+          this.context.logger.debug('Found button container, placing MCP button after the Run button');
+          return { container: buttonContainer, insertAfter: lastButtonWrapper };
+        }
+      }
+    }
+
+    // Fallback: Try to find the prompt input wrapper directly
     const promptInputWrapper = document.querySelector('.prompt-input-wrapper');
     if (promptInputWrapper) {
-      this.context.logger.debug('Found prompt input wrapper, placing MCP button inside it');
-      // Find all .button-wrapper elements inside the prompt input wrapper
+      this.context.logger.debug('Found prompt input wrapper (fallback)');
       const buttonWrappers = promptInputWrapper.querySelectorAll('.button-wrapper');
       if (buttonWrappers.length > 0) {
-        // Insert after the last button-wrapper
         const lastButtonWrapper = buttonWrappers[buttonWrappers.length - 1];
         return { container: promptInputWrapper, insertAfter: lastButtonWrapper };
       }
-      // Fallback: just insert at the end of the prompt input wrapper
       return { container: promptInputWrapper, insertAfter: null };
     }
 
-    // Fallback: Look for actions container
+    // Final fallback: Look for actions container
     const actionsContainer = document.querySelector('footer .actions-container, .actions-container');
     if (actionsContainer) {
-      this.context.logger.debug('Found actions container (fallback)');
+      this.context.logger.debug('Found actions container (final fallback)');
       return { container: actionsContainer, insertAfter: null };
-    }
-
-    // Try fallback selectors
-    const fallbackSelectors = [
-      '.input-area .actions',
-      '.chat-input-actions',
-      '.conversation-input .actions'
-    ];
-
-    for (const selector of fallbackSelectors) {
-      const container = document.querySelector(selector);
-      if (container) {
-        this.context.logger.debug(`Found fallback insertion point: ${selector}`);
-        return { container, insertAfter: null };
-      }
     }
 
     this.context.logger.warn('Could not find suitable insertion point for MCP popover');
@@ -688,25 +885,32 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
     try {
       // Check if popover already exists
-      if (document.getElementById('mcp-popover-container')) {
+      if (document.getElementById('mcp-button-wrapper') || document.getElementById('mcp-popover-container')) {
         this.context.logger.debug('MCP popover already exists, skipping injection');
         return;
       }
 
-      // Create container for the popover
+      // Create a button wrapper div to match AI Studio's structure
+      const buttonWrapper = document.createElement('div');
+      buttonWrapper.className = 'button-wrapper';
+      buttonWrapper.id = 'mcp-button-wrapper';
+
+      // Create container for the React component inside the button wrapper
       const reactContainer = document.createElement('div');
       reactContainer.id = 'mcp-popover-container';
-      reactContainer.style.display = 'inline-block';
-      reactContainer.style.margin = '0 4px';
+      reactContainer.style.display = 'contents'; // Use contents to not interfere with layout
+      
+      // Add the React container to the button wrapper
+      buttonWrapper.appendChild(reactContainer);
 
       // Insert at appropriate location
       const { container, insertAfter } = insertionPoint;
       if (insertAfter && insertAfter.parentNode === container) {
-        container.insertBefore(reactContainer, insertAfter.nextSibling);
-        this.context.logger.debug('Inserted popover container after specified element');
+        container.insertBefore(buttonWrapper, insertAfter.nextSibling);
+        this.context.logger.debug('Inserted MCP button wrapper after specified element');
       } else {
-        container.appendChild(reactContainer);
-        this.context.logger.debug('Appended popover container to container element');
+        container.appendChild(buttonWrapper);
+        this.context.logger.debug('Appended MCP button wrapper to container element');
       }
 
       // Store reference
@@ -728,27 +932,38 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       // Import React and ReactDOM dynamically to avoid bundling issues
       import('react').then(React => {
         import('react-dom/client').then(ReactDOM => {
+          // Import MCPPopover component
           import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
-            // Create toggle state manager that integrates with new stores
-            const toggleStateManager = this.createToggleStateManager();
+            // Create state manager with new architecture integration
+            const stateManager = this.createToggleStateManager();
+            
+            // Create adapter button configuration for AI Studio styling
+            const adapterButtonConfig = {
+              className: 'mcp-aistudio-button-base',
+              contentClassName: 'mcp-aistudio-button-content', 
+              textClassName: 'mcp-aistudio-button-text',
+              activeClassName: 'active'
+            };
 
-            // Create React root and render
+            // Create root and render
             const root = ReactDOM.createRoot(container);
             root.render(
               React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
+                toggleStateManager: stateManager,
+                adapterButtonConfig: adapterButtonConfig,
+                adapterName: this.name
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.info('MCP popover rendered successfully with AI Studio styling');
           }).catch(error => {
-            this.context.logger.error('Failed to import MCPPopover component:', error);
+            this.context.logger.error('Failed to load MCPPopover component:', error);
           });
         }).catch(error => {
-          this.context.logger.error('Failed to import ReactDOM:', error);
+          this.context.logger.error('Failed to load ReactDOM:', error);
         });
       }).catch(error => {
-        this.context.logger.error('Failed to import React:', error);
+        this.context.logger.error('Failed to load React:', error);
       });
     } catch (error) {
       this.context.logger.error('Failed to render MCP popover:', error);
@@ -892,7 +1107,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Check if MCP popover is currently injected
    */
   public isMCPPopoverInjected(): boolean {
-    return !!document.getElementById('mcp-popover-container');
+    return !!document.getElementById('mcp-button-wrapper') || !!document.getElementById('mcp-popover-container');
   }
 
   private emitExecutionCompleted(toolName: string, parameters: any, result: any): void {
@@ -968,6 +1183,9 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
     // Update URL tracking
     this.lastUrl = url;
+
+    // Re-inject adapter styles after page navigation
+    this.injectAIStudioButtonStyles();
 
     // Re-check support and re-inject UI if needed
     const stillSupported = this.isSupported();

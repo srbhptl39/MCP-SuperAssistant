@@ -60,6 +60,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
+  
+  // Styling state tracking
+  private geminiStylesInjected: boolean = false;
 
   constructor() {
     super();
@@ -95,6 +98,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
     await super.activate();
     this.context.logger.info(`Activating Gemini adapter instance #${this.instanceId}...`);
+
+    // Inject Gemini-specific button styles
+    this.injectGeminiButtonStyles();
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -153,10 +159,18 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
     
+    // Remove injected Gemini styles
+    const styleElement = document.getElementById('mcp-gemini-button-styles');
+    if (styleElement) {
+      styleElement.remove();
+      this.geminiStylesInjected = false;
+    }
+    
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
     this.uiIntegrationSetup = false;
+    this.geminiStylesInjected = false;
   }
 
   /**
@@ -451,6 +465,244 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
   // Private helper methods
 
+  /**
+   * Get Gemini-specific button styles that match the toolbox drawer items
+   * Based on the Material Design Components used in Gemini's interface
+   */
+  private getGeminiButtonStyles(): string {
+    return `
+      /* Gemini MCP Button Styles - Matching toolbox-drawer-item style */
+      .mcp-gemini-button-base {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        box-sizing: border-box;
+        min-width: 40px;
+        height: 40px;
+        padding: 8px 12px;
+        margin: 0 2px;
+        border: none;
+        border-radius: 20px;
+        background: transparent;
+        color: #3c4043;
+        font-family: 'Google Sans', Roboto, Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.2, 0.0, 0.2, 1);
+        overflow: hidden;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        outline: none;
+        /* Match toolbox drawer item appearance */
+        letter-spacing: 0.0178571429em;
+      }
+
+      /* Hover state - matches Material Design ripple */
+      .mcp-gemini-button-base:hover {
+        background-color: rgba(60, 64, 67, 0.04);
+      }
+
+      /* Active/pressed state */
+      .mcp-gemini-button-base:active {
+        background-color: rgba(60, 64, 67, 0.08);
+        transform: scale(0.98);
+      }
+
+      /* Focus state for accessibility */
+      .mcp-gemini-button-base:focus-visible {
+        outline: 2px solid #1a73e8;
+        outline-offset: 2px;
+      }
+
+      /* Active toggle state - matches Gemini's toolbox drawer pressed state */
+      .mcp-gemini-button-base.mcp-button-active {
+        background-color: rgba(138, 180, 248, 0.2);
+        color: #1557c0;
+      }
+
+      .mcp-gemini-button-base.mcp-button-active:hover {
+        background-color: rgba(138, 180, 248, 0.24);
+      }
+
+      /* Button content container */
+      .mcp-gemini-button-content {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Text styling to match GDS label */
+      .mcp-gemini-button-text {
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        letter-spacing: 0.0178571429em;
+        white-space: nowrap;
+      }
+
+      /* Material ripple effect overlay */
+      .mcp-gemini-button-base::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: currentColor;
+        opacity: 0;
+        border-radius: inherit;
+        transition: opacity 0.15s cubic-bezier(0.2, 0.0, 0.2, 1);
+        pointer-events: none;
+      }
+
+      .mcp-gemini-button-base:hover::before {
+        opacity: 0.04;
+      }
+
+      .mcp-gemini-button-base:active::before {
+        opacity: 0.08;
+      }
+
+      /* Icon styling matching Google Material Symbols */
+      .mcp-gemini-button-base .mcp-button-icon {
+        width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        line-height: 1;
+        font-family: 'Material Symbols Outlined', 'Google Material Icons';
+      }
+
+      /* Dark mode support */
+      @media (prefers-color-scheme: dark) {
+        .mcp-gemini-button-base {
+          color: #e8eaed;
+        }
+
+        .mcp-gemini-button-base:hover {
+          background-color: rgba(232, 234, 237, 0.04);
+        }
+
+        .mcp-gemini-button-base:active {
+          background-color: rgba(232, 234, 237, 0.08);
+        }
+
+        .mcp-gemini-button-base.mcp-button-active {
+          background-color: rgba(138, 180, 248, 0.12);
+          color: #8ab4f8;
+        }
+
+        .mcp-gemini-button-base.mcp-button-active:hover {
+          background-color: rgba(138, 180, 248, 0.16);
+        }
+      }
+
+      /* High contrast mode support */
+      @media (prefers-contrast: high) {
+        .mcp-gemini-button-base {
+          border: 1px solid currentColor;
+        }
+
+        .mcp-gemini-button-base:focus-visible {
+          outline-width: 3px;
+        }
+      }
+
+      /* Reduced motion support */
+      @media (prefers-reduced-motion: reduce) {
+        .mcp-gemini-button-base {
+          transition: none;
+        }
+
+        .mcp-gemini-button-base:active {
+          transform: none;
+        }
+
+        .mcp-gemini-button-base::before {
+          transition: none;
+        }
+      }
+
+      /* Integration with Gemini's toolbox drawer layout */
+      .leading-actions-wrapper .mcp-gemini-button-base,
+      .input-area .mcp-gemini-button-base,
+      .chat-input-actions .mcp-gemini-button-base {
+        margin: 0 2px;
+      }
+
+      /* Ensure proper stacking with Gemini's UI elements */
+      .mcp-gemini-button-base {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Match the exact styling of toolbox drawer items when in sidebar */
+      .toolbox-drawer-item-button .mcp-gemini-button-base,
+      .mcp-gemini-button-base.toolbox-style {
+        width: 100%;
+        height: 48px;
+        padding: 12px 16px;
+        margin: 0;
+        border-radius: 0;
+        justify-content: flex-start;
+        gap: 12px;
+        font-size: 14px;
+        line-height: 20px;
+      }
+
+      .toolbox-drawer-item-button .mcp-gemini-button-base .mcp-button-icon,
+      .mcp-gemini-button-base.toolbox-style .mcp-button-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 24px;
+        margin-right: 12px;
+      }
+
+      .toolbox-drawer-item-button .mcp-gemini-button-base .mcp-gemini-button-text,
+      .mcp-gemini-button-base.toolbox-style .mcp-gemini-button-text {
+        text-align: left;
+        flex: 1;
+      }
+    `;
+  }
+
+  /**
+   * Inject Gemini-specific button styles into the page
+   */
+  private injectGeminiButtonStyles(): void {
+    if (this.geminiStylesInjected) {
+      this.context.logger.debug('Gemini button styles already injected, skipping');
+      return;
+    }
+
+    try {
+      const styleId = 'mcp-gemini-button-styles';
+      const existingStyles = document.getElementById(styleId);
+      if (existingStyles) {
+        existingStyles.remove();
+      }
+
+      const styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      styleElement.textContent = this.getGeminiButtonStyles();
+      document.head.appendChild(styleElement);
+
+      this.geminiStylesInjected = true;
+      this.context.logger.info('Gemini button styles injected successfully');
+    } catch (error) {
+      this.context.logger.error('Failed to inject Gemini button styles:', error);
+    }
+  }
+
   private setupUrlTracking(): void {
     if (!this.urlCheckInterval) {
       this.urlCheckInterval = setInterval(() => {
@@ -725,11 +977,21 @@ export class GeminiAdapter extends BaseAdapterPlugin {
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
+            // Create adapter button configuration for Gemini styling
+            const adapterButtonConfig = {
+              className: 'mcp-gemini-button-base',
+              contentClassName: 'mcp-gemini-button-content',
+              textClassName: 'mcp-gemini-button-text',
+              activeClassName: 'mcp-button-active'
+            };
+
             // Create React root and render
             const root = ReactDOM.createRoot(container);
             root.render(
               React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
+                toggleStateManager: toggleStateManager,
+                adapterButtonConfig: adapterButtonConfig,
+                adapterName: this.name
               })
             );
 
@@ -1009,6 +1271,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Re-check support and re-inject UI if needed
     const stillSupported = this.isSupported();
     if (stillSupported) {
+      // Re-inject styles after page change
+      this.injectGeminiButtonStyles();
+      
       // Re-setup UI integration after page change
       setTimeout(() => {
         this.setupUIIntegration();
