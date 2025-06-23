@@ -54,3 +54,38 @@ node_modules/
 # Task files
 tasks.json
 tasks/ 
+
+
+
+.windsurfrules
+ADAPTER_BUTTON_STYLING.md
+bun.lock
+commit_diff.patch
+DYNAMIC_THEMING.md
+file_structure.md
+FIREBASE_REMOTE_CONFIG_ADAPTER_INTEGRATION.md
+FIREBASE_REMOTE_CONFIG_INTEGRATION copy.md
+FIREBASE_REMOTE_CONFIG_INTEGRATION.md
+FIREBASE_REMOTE_CONFIG_SUMMARY.md
+FIREBASE_REMOTE_CONFIG_TESTING.md
+FIREBASE_SERVICE_WORKER_SOLUTION.md
+FIREBASE_SETUP_GUIDE.md
+firebase-remote-config-gemini-production.json
+firebase-remote-config-gemini.json
+firebase-remote-config-unified.json
+MCP_CLIENT_REWRITE_COMPLETE.md
+MCP_COMMUNICATION_FIXES.md
+SESSION_10_COMPLETE.md
+TEST_MCP_TOGGLE.md
+websocket doc.md
+chrome-extension/public/icon-16.png
+chrome-extension/public/icon-34 copy.png
+chrome-extension/public/icon-34.png
+chrome-extension/src/mcpclient/architecture-option-3-plugin-based.md
+pages/content/src/plugins/adapters/gemini-migration-guide.md
+pages/content/src/plugins/adapters/scira.adapter.ts
+pages/content/src/plugins/adapters/defaultConfigs/README.md
+pages/content/src/shared/firebase-config.ts
+pages/content/src/utils/migration-bridge.ts
+pages/content/src/utils/siteAdapter.ts
+pages/content/src/utils/themeDetector.ts
