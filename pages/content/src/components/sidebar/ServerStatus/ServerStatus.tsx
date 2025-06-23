@@ -129,6 +129,24 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     }
   }, [serverConfig.uri, serverConfig.connectionType, isEditingUri]);
 
+  // Force immediate connection status check on mount
+  useEffect(() => {
+    const checkImmediateStatus = async () => {
+      if (communicationMethods.forceConnectionStatusCheck) {
+        try {
+          logMessage('[ServerStatus] Forcing immediate connection status check on mount');
+          await communicationMethods.forceConnectionStatusCheck();
+        } catch (error) {
+          logMessage(`[ServerStatus] Immediate status check failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    };
+
+    // Small delay to ensure everything is initialized
+    const timeoutId = setTimeout(checkImmediateStatus, 100);
+    return () => clearTimeout(timeoutId);
+  }, []); // Run only once on mount
+
   // Update status message based on connection state from store
   useEffect(() => {
     // During reconnection, don't override the status message
@@ -733,11 +751,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                 >
                   <option value="sse">Server-Sent Events (SSE)</option>
                   <option value="websocket">WebSocket</option>
+                  <option value="streamable-http">Streamable HTTP</option>
                 </select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {connectionType === 'sse' 
                     ? 'HTTP-based streaming connection (traditional)' 
-                    : 'Full-duplex WebSocket connection (faster, more features)'}
+                    : connectionType === 'websocket'
+                      ? 'Full-duplex WebSocket connection (faster, more features)'
+                      : 'Advanced HTTP streaming (modern MCP protocol)'}
                 </p>
               </div>
 
@@ -754,7 +775,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onBlur={handleServerUriBlur}
                   placeholder={connectionType === 'sse' 
                     ? "Enter SSE URI (e.g., http://localhost:3000/sse)" 
-                    : "Enter WebSocket URI (e.g., ws://localhost:3000)"}
+                    : connectionType === 'websocket'
+                      ? "Enter WebSocket URI (e.g., ws://localhost:3000)"
+                      : "Enter HTTP URI (e.g., http://localhost:3000)"}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
                 />
               </div>
@@ -837,9 +860,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                     'px-2 py-1 rounded-full text-xs font-medium',
                     connectionType === 'websocket' 
                       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                      : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
+                      : connectionType === 'streamable-http'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
                   )}>
-                    {connectionType === 'websocket' ? 'WebSocket' : 'SSE'}
+                    {connectionType === 'websocket' ? 'WebSocket' : connectionType === 'streamable-http' ? 'Streamable HTTP' : 'SSE'}
                   </span>
                 </div>
 

@@ -199,18 +199,12 @@ async function initializeApplicationState(): Promise<void> {
     const serverConfig = connectionStore.serverConfig;
 
     if (serverConfig && serverConfig.uri) {
-      logger.log('Server configuration found, attempting initial connection...');
+      logger.log('Server configuration found, connection will be handled by background script and MCP client');
       await circuitBreaker.execute(async () => {
-        // Set connecting status
-        connectionStore.setStatus('connecting');
-
-        // In a real implementation, this would be handled by the MCP handler
-        // For now, we'll just simulate the connection attempt
-        logger.log('Connection attempt initiated (simulated)');
-
-        // The actual connection logic would be handled by mcpHandler or similar
-        // connectionStore.setStatus('connected');
-      }, 'initial-connection');
+        // Don't set 'connecting' status here - let the background script and MCP client handle connection status
+        // The actual connection logic is handled by the background script and MCP client
+        logger.log('Deferring connection management to background script');
+      }, 'config-check');
     }
   });
   

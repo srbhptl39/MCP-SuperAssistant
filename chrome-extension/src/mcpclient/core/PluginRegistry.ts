@@ -3,6 +3,7 @@ import type { ITransportPlugin, TransportType, PluginConfig } from '../types/plu
 import type { RegistryEvents } from '../types/events.js';
 import { SSEPlugin } from '../plugins/sse/SSEPlugin.js';
 import { WebSocketPlugin } from '../plugins/websocket/WebSocketPlugin.js';
+import { StreamableHttpPlugin } from '../plugins/streamable-http/StreamableHttpPlugin.js';
 
 export class PluginRegistry extends EventEmitter<RegistryEvents> {
   private plugins = new Map<TransportType, ITransportPlugin>();
@@ -99,6 +100,7 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
       // Use static imports - plugins are imported at the top of the file
       await this.register(new SSEPlugin());
       await this.register(new WebSocketPlugin());
+      await this.register(new StreamableHttpPlugin());
 
       const loadedCount = this.plugins.size;
       console.log(`[PluginRegistry] Loaded ${loadedCount} default plugins`);

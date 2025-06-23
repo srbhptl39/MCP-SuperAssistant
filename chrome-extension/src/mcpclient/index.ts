@@ -129,6 +129,8 @@ function detectTransportType(uri: string): import('./types/plugin.js').Transport
     if (url.protocol === 'ws:' || url.protocol === 'wss:') {
       return 'websocket';
     }
+    // For HTTP/HTTPS, default to SSE (traditional behavior)
+    // Users can manually select streamable-http if desired
     return 'sse';
   } catch {
     return 'sse';
@@ -157,13 +159,14 @@ export async function checkMcpServerConnection(): Promise<boolean> {
 export async function callToolWithBackwardsCompatibility(
   uri: string,
   toolName: string,
-  args: { [key: string]: unknown }
+  args: { [key: string]: unknown },
+  transportType?: import('./types/plugin.js').TransportType
 ): Promise<any> {
   const client = await getGlobalClient();
-  const transportType = detectTransportType(uri);
+  const type = transportType || detectTransportType(uri);
   
   if (!client.isConnected()) {
-    await client.connect({ uri, type: transportType });
+    await client.connect({ uri, type });
   }
   
   return await client.callTool(toolName, args);
@@ -171,13 +174,14 @@ export async function callToolWithBackwardsCompatibility(
 
 export async function getPrimitivesWithBackwardsCompatibility(
   uri: string,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  transportType?: import('./types/plugin.js').TransportType
 ): Promise<any[]> {
   const client = await getGlobalClient();
-  const transportType = detectTransportType(uri);
+  const type = transportType || detectTransportType(uri);
   
   if (!client.isConnected()) {
-    await client.connect({ uri, type: transportType });
+    await client.connect({ uri, type });
   }
   
   const response = await client.getPrimitives(forceRefresh);
@@ -200,22 +204,22 @@ export async function getPrimitivesWithBackwardsCompatibility(
   return primitives;
 }
 
-export async function forceReconnectToMcpServer(uri: string): Promise<void> {
+export async function forceReconnectToMcpServer(uri: string, transportType?: import('./types/plugin.js').TransportType): Promise<void> {
   const client = await getGlobalClient();
-  const transportType = detectTransportType(uri);
+  const type = transportType || detectTransportType(uri);
   
   if (client.isConnected()) {
     await client.disconnect();
   }
   
-  await client.connect({ uri, type: transportType });
+  await client.connect({ uri, type });
 }
 
-export async function runWithBackwardsCompatibility(uri: string): Promise<void> {
+export async function runWithBackwardsCompatibility(uri: string, transportType?: import('./types/plugin.js').TransportType): Promise<void> {
   const client = await getGlobalClient();
-  const transportType = detectTransportType(uri);
+  const type = transportType || detectTransportType(uri);
   
-  await client.connect({ uri, type: transportType });
+  await client.connect({ uri, type });
   
   const response = await client.getPrimitives();
   console.log(`Connected, found ${response.tools.length} tools, ${response.resources.length} resources, ${response.prompts.length} prompts`);

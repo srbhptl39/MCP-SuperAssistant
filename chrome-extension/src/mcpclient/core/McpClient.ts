@@ -6,6 +6,7 @@ import { EventEmitter } from './EventEmitter.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { SSEPlugin } from '../plugins/sse/SSEPlugin.js';
 import { WebSocketPlugin } from '../plugins/websocket/WebSocketPlugin.js';
+import { StreamableHttpPlugin } from '../plugins/streamable-http/StreamableHttpPlugin.js';
 import type { ClientConfig, ConnectionRequest } from '../types/config.js';
 import { DEFAULT_CLIENT_CONFIG } from '../types/config.js';
 import type { TransportType, ITransportPlugin, PluginConfig } from '../types/plugin.js';
@@ -80,6 +81,7 @@ export class McpClient extends EventEmitter<AllEvents> {
     // Use static imports that are available at module level
     await this.registry.register(new SSEPlugin());
     await this.registry.register(new WebSocketPlugin());
+    await this.registry.register(new StreamableHttpPlugin());
 
     console.log('[McpClient] Manual plugin registration completed');
   }

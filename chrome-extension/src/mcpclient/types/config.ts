@@ -23,12 +23,22 @@ export interface WebSocketPluginConfig extends PluginConfig {
   binaryType?: 'blob' | 'arraybuffer';
 }
 
+export interface StreamableHttpPluginConfig extends PluginConfig {
+  keepAlive?: boolean;
+  connectionTimeout?: number;
+  readTimeout?: number;
+  headers?: Record<string, string>;
+  fallbackToSSE?: boolean;
+  maxRetries?: number;
+}
+
 export interface ClientConfig {
   defaultTransport: TransportType;
   defaultUri: string;
   plugins: {
     sse?: SSEPluginConfig;
     websocket?: WebSocketPluginConfig;
+    'streamable-http'?: StreamableHttpPluginConfig;
   };
   global: GlobalConfig;
 }
@@ -54,6 +64,13 @@ export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
       pongTimeout: 5000,
       maxReconnectAttempts: 3,
       binaryType: 'arraybuffer',
+    },
+    'streamable-http': {
+      keepAlive: true,
+      connectionTimeout: 5000,
+      readTimeout: 30000,
+      fallbackToSSE: false,
+      maxRetries: 2,
     },
   },
   global: {

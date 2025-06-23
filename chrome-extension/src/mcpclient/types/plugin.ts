@@ -1,7 +1,7 @@
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
-export type TransportType = 'sse' | 'websocket';
+export type TransportType = 'sse' | 'websocket' | 'streamable-http';
 
 export interface PluginConfig {
   [key: string]: any;

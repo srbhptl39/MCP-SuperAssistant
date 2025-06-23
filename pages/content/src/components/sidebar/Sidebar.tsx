@@ -252,7 +252,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     // Small delay to ensure everything is initialized
     const timeoutId = setTimeout(loadInitialTools, 1000);
     return () => clearTimeout(timeoutId);
-  }, [serverStatus, availableTools.length, refreshTools]);
+  }, [serverStatus, availableTools.length]);
 
   // Use store values with fallbacks to initial preferences
   const isMinimized = storeSidebarMinimized ?? (initialPreferences?.isMinimized ?? false);

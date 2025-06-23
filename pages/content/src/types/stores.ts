@@ -8,7 +8,7 @@ export interface GlobalSettings {
   notifications: boolean;
 }
 
-export type ConnectionType = 'sse' | 'websocket';
+export type ConnectionType = 'sse' | 'websocket' | 'streamable-http';
 
 export interface ServerConfig {
   uri: string;

@@ -39,9 +39,10 @@ import type {
 // Default MCP server URLs
 const DEFAULT_SSE_URL = 'http://localhost:3006/sse';
 const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3006/message';
+const DEFAULT_STREAMABLE_HTTP_URL = 'http://localhost:3006';
 
 // Connection type management
-type ConnectionType = 'sse' | 'websocket';
+type ConnectionType = TransportType;
 const DEFAULT_CONNECTION_TYPE: ConnectionType = 'sse';
 
 // Remote Config Manager
@@ -64,7 +65,11 @@ async function initializeServerConfig(): Promise<void> {
     
     // Load connection type first to determine default URL
     connectionType = (result.mcpConnectionType as ConnectionType) || DEFAULT_CONNECTION_TYPE;
-    const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
+    const defaultUrl = connectionType === 'websocket' 
+      ? DEFAULT_WEBSOCKET_URL 
+      : connectionType === 'streamable-http'
+        ? DEFAULT_STREAMABLE_HTTP_URL
+        : DEFAULT_SSE_URL;
     
     serverUrl = result.mcpServerUrl || defaultUrl;
     isInitialized = true;
@@ -253,30 +258,35 @@ async function initializeExtension() {
 
   console.log('Extension initialized successfully');
 
-  // After initialization is complete, check and broadcast initial connection status
-  setTimeout(async () => {
+  // After initialization is complete, attempt connection and broadcast initial status immediately
+  const checkInitialConnectionStatus = async () => {
     const serverUrl = getServerUrl();
     
-    // Check initial connection status
-    const isConnected = await checkMcpServerConnection();
-    updateConnectionStatus(isConnected);
+    console.log(`[Background] Attempting initial connection to ${serverUrl} with transport: ${connectionType}`);
     
-    // Broadcast initial status to any already-loaded content scripts
+    // Try to connect to the server immediately
+    let isConnected = false;
+    try {
+      await tryConnectToServer(serverUrl, connectionType);
+      // After connection attempt, check if we're actually connected
+      isConnected = await checkMcpServerConnection();
+      console.log(`[Background] Initial connection attempt result: ${isConnected ? 'connected' : 'failed'}`);
+    } catch (error) {
+      console.log(`[Background] Initial connection attempt failed: ${error instanceof Error ? error.message : String(error)}`);
+      isConnected = false;
+    }
+    
+    // Update and broadcast the actual connection status
+    updateConnectionStatus(isConnected);
     broadcastConnectionStatusToContentScripts(isConnected);
     
     console.log(`[Background] Initial connection status broadcast: ${isConnected ? 'connected' : 'disconnected'}`);
     
-    // Then try connecting to the server asynchronously if not connected
-    if (!isConnected) {
-      tryConnectToServer(serverUrl, connectionType).catch(() => {
-        // Silently ignore errors - we've already logged them
-        // and the extension should continue running
-      });
-    } else {
-      // If already connected, broadcast tools as well
+    // If connected, also broadcast tools
+    if (isConnected) {
       try {
-        console.log('[Background] Server already connected, fetching and broadcasting initial tools...');
-        const primitives = await getPrimitivesWithBackwardsCompatibility(serverUrl, false);
+        console.log('[Background] Server connected, fetching and broadcasting initial tools...');
+        const primitives = await getPrimitivesWithBackwardsCompatibility(serverUrl, false, connectionType);
         console.log(`[Background] Retrieved ${primitives.length} primitives for initial broadcast`);
         
         const tools = normalizeTools(primitives);
@@ -287,7 +297,10 @@ async function initializeExtension() {
         console.warn('[Background] Error broadcasting initial tools:', error);
       }
     }
-  }, 1000);
+  };
+  
+  // Run the initial connection attempt immediately
+  checkInitialConnectionStatus();
 }
 
 /**
@@ -313,7 +326,7 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
   );
 
   try {
-    await runWithBackwardsCompatibility(uri);
+    await runWithBackwardsCompatibility(uri, type);
 
     console.log('MCP client connected successfully');
     updateConnectionStatus(true);
@@ -322,7 +335,7 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
     // Also broadcast available tools after successful connection
     try {
       console.log('[Background] Connection successful, fetching and broadcasting tools...');
-      const primitives = await getPrimitivesWithBackwardsCompatibility(uri, true);
+      const primitives = await getPrimitivesWithBackwardsCompatibility(uri, true, type);
       console.log(`[Background] Retrieved ${primitives.length} primitives after connection`);
       
       const tools = normalizeTools(primitives);
@@ -390,7 +403,7 @@ setInterval(async () => {
     if (isConnected) {
       try {
         console.log('[Background] Periodic check: Connection established, fetching and broadcasting tools...');
-        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
+        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true, connectionType);
         console.log(`[Background] Periodic check: Retrieved ${primitives.length} primitives`);
         
         const tools = normalizeTools(primitives);
@@ -677,7 +690,7 @@ async function handleMcpMessage(
         console.log(`[Background] Getting tools (forceRefresh: ${forceRefresh})`);
         
         try {
-          const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), forceRefresh);
+          const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), forceRefresh, connectionType);
           console.log(`[Background] Retrieved ${primitives.length} primitives from server`);
           
           // Use the helper function to normalize tools with proper schema handling
@@ -707,7 +720,7 @@ async function handleMcpMessage(
           resetMcpConnectionState();
           
           // Set a reasonable timeout for the reconnection process
-          const reconnectionPromise = forceReconnectToMcpServer(getServerUrl());
+          const reconnectionPromise = forceReconnectToMcpServer(getServerUrl(), connectionType);
           const timeoutPromise = new Promise<void>((_, reject) => 
             setTimeout(() => reject(new Error('Reconnection timeout after 20 seconds')), 20000)
           );
@@ -726,7 +739,7 @@ async function handleMcpMessage(
           if (isConnected) {
             try {
               console.log('[Background] Fetching tools after successful reconnection...');
-              const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
+              const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true, connectionType);
               console.log(`[Background] Retrieved ${primitives.length} primitives after reconnection`);
               
               const tools = normalizeTools(primitives);
@@ -772,7 +785,8 @@ async function handleMcpMessage(
         }
 
         // Auto-detect connection type from URI if not specified
-        let newType = config.type as ConnectionType;
+        let newType = config.connectionType as ConnectionType;
+        console.log(`[Background] Received connection type: ${config.connectionType}, parsed as: ${newType}`);
         if (!newType) {
           try {
             const url = new URL(config.uri);
@@ -797,7 +811,7 @@ async function handleMcpMessage(
         const reconnectPromise = (async () => {
           try {
             console.log('[Background] Starting async reconnection after config update...');
-            await forceReconnectToMcpServer(config.uri);
+            await forceReconnectToMcpServer(config.uri, newType);
             const isConnected = await checkMcpServerConnection();
             updateConnectionStatus(isConnected);
             broadcastConnectionStatusToContentScripts(isConnected);
@@ -806,7 +820,7 @@ async function handleMcpMessage(
             // If connected, fetch and broadcast tools
             if (isConnected) {
               try {
-                const primitives = await getPrimitivesWithBackwardsCompatibility(config.uri, true);
+                const primitives = await getPrimitivesWithBackwardsCompatibility(config.uri, true, newType);
                 const tools = normalizeTools(primitives);
                 broadcastToolsUpdateToContentScripts(tools);
                 console.log(`[Background] Broadcasted ${tools.length} normalized tools after config update`);

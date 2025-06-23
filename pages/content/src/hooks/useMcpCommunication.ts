@@ -126,7 +126,7 @@ export const useMcpCommunication = () => {
       logMessage(`[useMcpCommunication] Tool refresh failed: ${errorMessage}`);
       throw new Error(`Failed to refresh tools: ${errorMessage}`);
     }
-  }, [isInitialized, toolActions]);
+  }, [isInitialized]);
 
   /**
    * Enhanced reconnection with comprehensive state management
@@ -201,8 +201,8 @@ export const useMcpCommunication = () => {
       throw new Error('Server URI must be a string');
     }
 
-    if (cfg.connectionType && !['sse', 'websocket'].includes(cfg.connectionType)) {
-      throw new Error('Connection type must be either "sse" or "websocket"');
+    if (cfg.connectionType && !['sse', 'websocket', 'streamable-http'].includes(cfg.connectionType)) {
+      throw new Error('Connection type must be either "sse", "websocket", or "streamable-http"');
     }
 
     if (cfg.timeout && (typeof cfg.timeout !== 'number' || cfg.timeout <= 0)) {
@@ -355,6 +355,12 @@ export const useMcpCommunication = () => {
     callTool,
     refreshTools,
     forceReconnect,
+    forceConnectionStatusCheck: useCallback(async () => {
+      if (!isInitialized) {
+        throw new Error('Communication layer not initialized');
+      }
+      return await mcpClient.forceConnectionStatusCheck();
+    }, [isInitialized]),
     getServerConfig,
     updateServerConfig,
 

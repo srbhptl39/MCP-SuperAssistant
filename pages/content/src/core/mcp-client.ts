@@ -560,6 +560,30 @@ class McpClient {
   }
 
   /**
+   * Force an immediate connection status check
+   */
+  async forceConnectionStatusCheck(): Promise<void> {
+    if (!this.isInitialized) {
+      throw new Error('McpClient not initialized');
+    }
+
+    logMessage('[McpClient] Forcing immediate connection status check');
+
+    try {
+      const statusResponse = await this.getCurrentConnectionStatus();
+      if (statusResponse) {
+        logMessage(`[McpClient] Immediate connection status: ${statusResponse.status} (isConnected: ${statusResponse.isConnected})`);
+        const connectionStatus = statusResponse.status as ConnectionStatus;
+        this.handleConnectionStatusChange(connectionStatus, undefined);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logMessage(`[McpClient] Failed to get immediate connection status: ${errorMessage}`);
+      // Don't throw - this is a best-effort check
+    }
+  }
+
+  /**
    * Fetch current server configuration from background storage
    */
   async getServerConfig(): Promise<ServerConfig> {
