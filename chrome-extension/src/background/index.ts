@@ -773,7 +773,7 @@ async function handleMcpMessage(
         const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
         result = { 
           uri: stored.mcpServerUrl || defaultUrl,
-          type: stored.mcpConnectionType || connectionType
+          connectionType: stored.mcpConnectionType || connectionType
         };
         break;
       }
@@ -805,7 +805,7 @@ async function handleMcpMessage(
         updateServerConfig(config.uri, newType);
         
         // Broadcast config update immediately
-        broadcastConfigUpdateToContentScripts({ uri: config.uri, type: newType });
+        broadcastConfigUpdateToContentScripts({ uri: config.uri, connectionType: newType });
         
         // Start async reconnection but don't block the response
         const reconnectPromise = (async () => {
@@ -985,7 +985,7 @@ function broadcastToolsUpdateToContentScripts(tools: any[]) {
  * 
  * @param config - The updated server configuration
  */
-function broadcastConfigUpdateToContentScripts(config: { uri: string; type?: string }) {
+function broadcastConfigUpdateToContentScripts(config: { uri: string; connectionType?: string }) {
   console.log(`[Background] Broadcasting config update to content scripts: ${config.uri}`);
   
   const broadcastMessage: BaseMessage & { payload: ServerConfigUpdatedBroadcast } = {

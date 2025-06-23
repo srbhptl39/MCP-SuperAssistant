@@ -12,7 +12,7 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
 export class OpenRouterAdapter extends BaseAdapterPlugin {
   readonly name = 'OpenRouterAdapter';
   readonly version = '2.0.0';
-  readonly hostnames = ['openrouter.ai/chat'];
+  readonly hostnames = ['openrouter.ai'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',

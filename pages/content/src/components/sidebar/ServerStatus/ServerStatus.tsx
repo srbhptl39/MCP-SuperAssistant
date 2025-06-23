@@ -34,7 +34,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
   const [isEditingUri, setIsEditingUri] = useState<boolean>(false);
+  const [isEditingConnectionType, setIsEditingConnectionType] = useState<boolean>(false);
   const [lastErrorMessage, setLastErrorMessage] = useState<string>('');
+  const [configFetched, setConfigFetched] = useState<boolean>(false);
 
   // Animation states
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
@@ -123,11 +125,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   useEffect(() => {
     if (serverConfig.uri && !isEditingUri) {
       setServerUri(serverConfig.uri);
+      logMessage(`[ServerStatus] Updated server URI from config: ${serverConfig.uri}`);
     }
-    if (serverConfig.connectionType) {
+    // Only update connection type from store if user is not actively editing it
+    if (serverConfig.connectionType && !isEditingConnectionType) {
       setConnectionType(serverConfig.connectionType);
+      logMessage(`[ServerStatus] Updated connection type from config: ${serverConfig.connectionType}`);
     }
-  }, [serverConfig.uri, serverConfig.connectionType, isEditingUri]);
+  }, [serverConfig.uri, serverConfig.connectionType, isEditingUri, isEditingConnectionType]);
 
   // Force immediate connection status check on mount
   useEffect(() => {
@@ -262,35 +267,44 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       try {
         logMessage('[ServerStatus] Fetching initial server configuration from background storage');
         const config = await getServerConfig();
-        if (config && config.uri) {
-          setServerUri(config.uri);
-          logMessage(`[ServerStatus] Initial server configuration loaded: ${config.uri}`);
+        if (config) {
+          if (config.uri) {
+            setServerUri(config.uri);
+            logMessage(`[ServerStatus] Initial server URI loaded: ${config.uri}`);
+          }
+          if (config.connectionType) {
+            setConnectionType(config.connectionType);
+            logMessage(`[ServerStatus] Initial connection type loaded: ${config.connectionType}`);
+          }
+          setConfigFetched(true);
         } else {
           logMessage('[ServerStatus] No valid server configuration received from background storage');
           setServerUri(''); // Set empty string to indicate no config loaded
+          setConfigFetched(true);
         }
       } catch (error) {
         logMessage(
           `[ServerStatus] Error fetching server config: ${error instanceof Error ? error.message : String(error)}`,
         );
         setServerUri(''); // Set empty string to indicate fetch failed
+        setConfigFetched(true);
       }
     };
 
-    // Only fetch if we have communication methods, no server URI is set yet, and user is not editing
-    // This prevents refetching while the user is actively editing the URI
+    // Fetch initial server configuration on mount only once
     if (
       communicationMethods &&
       typeof communicationMethods.getServerConfig === 'function' &&
-      !serverUri &&
-      !isEditingUri
+      !configFetched &&
+      !isEditingUri &&
+      !isEditingConnectionType
     ) {
       fetchInitialServerConfig().catch(() => {
         logMessage('[ServerStatus] Failed to fetch server configuration');
         setServerUri(''); // Set empty string as last resort
       });
     }
-  }, [communicationMethods, isEditingUri, getServerConfig]); // Add getServerConfig dependency
+  }, [communicationMethods, isEditingUri, isEditingConnectionType, configFetched, getServerConfig]); // Add configFetched dependency
 
   // Set status message based on connection state
   useEffect(() => {
@@ -443,6 +457,19 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     // Don't immediately clear editing flag - wait for save or cancel
   };
 
+  const handleConnectionTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setConnectionType(e.target.value as ConnectionType);
+    setIsEditingConnectionType(true); // Mark as editing when user changes
+  };
+
+  const handleConnectionTypeFocus = () => {
+    setIsEditingConnectionType(true); // Mark as editing when user focuses the select
+  };
+
+  const handleConnectionTypeBlur = () => {
+    // Don't immediately clear editing flag - wait for save or cancel
+  };
+
   const handleSaveServerConfig = async () => {
     if (!communicationMethods.updateServerConfig || hasBackgroundError) {
       logMessage('[ServerStatus] Background communication not available');
@@ -474,8 +501,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       await updateServerConfig({ uri: serverUri, connectionType });
       logMessage('[ServerStatus] Server config updated successfully');
 
-      // Clear the editing flag since we successfully saved
+      // Clear the editing flags since we successfully saved
       setIsEditingUri(false);
+      setIsEditingConnectionType(false);
 
       // Trigger reconnect
       const success = await forceReconnect();
@@ -746,7 +774,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                 <select
                   id="connection-type"
                   value={connectionType}
-                  onChange={(e) => setConnectionType(e.target.value as ConnectionType)}
+                  onChange={handleConnectionTypeChange}
+                  onFocus={handleConnectionTypeFocus}
+                  onBlur={handleConnectionTypeBlur}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
                 >
                   <option value="sse">Server-Sent Events (SSE)</option>
@@ -774,18 +804,62 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onFocus={handleServerUriFocus}
                   onBlur={handleServerUriBlur}
                   placeholder={connectionType === 'sse' 
-                    ? "Enter SSE URI (e.g., http://localhost:3000/sse)" 
+                    ? "http://localhost:3006/sse" 
                     : connectionType === 'websocket'
-                      ? "Enter WebSocket URI (e.g., ws://localhost:3000)"
-                      : "Enter HTTP URI (e.g., http://localhost:3000)"}
+                      ? "ws://localhost:3006/message"
+                      : "http://localhost:3006/mcp"}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
                 />
+                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="mb-2">
+                    <strong>To start MCP SuperAssistant Proxy:</strong>
+                  </div>
+                  <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded font-mono text-xs border">
+                    npx @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json --outputTransport {connectionType === 'sse' ? 'sse' : connectionType === 'websocket' ? 'ws' : 'streamableHttp'}
+                  </div>
+                  <div className="mt-2 text-xs">
+                    <div className="mb-1">
+                      Available transports: <code>streamableHttp</code>, <code>sse</code>, <code>ws</code>
+                    </div>
+                    <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                      <div className="font-medium text-blue-800 dark:text-blue-200 mb-1">📡 Public Endpoints Supported:</div>
+                      <div className="text-blue-700 dark:text-blue-300 space-y-1">
+                        <div>• <strong>Zapier:</strong> Public MCP endpoints with CORS enabled</div>
+                        <div>• <strong>Composio:</strong> SSE and Streamable HTTP endpoints</div>
+                        <div>• <strong>Custom servers:</strong> Any MCP server with CORS headers</div>
+                      </div>
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                        <strong>Note:</strong> WebSocket connections require local servers or proxy due to browser security restrictions.
+                      </div>
+                    </div>
+                    {/* <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
+                      <div className="font-medium text-green-800 dark:text-green-200 mb-2">🌍 Example Public Endpoints:</div>
+                      <div className="text-green-700 dark:text-green-300 space-y-1 text-xs">
+                        <div><strong>SSE:</strong></div>
+                        <div className="ml-2">• <code>https://api.zapier.com/v1/mcp/sse</code></div>
+                        <div className="ml-2">• <code>https://composio.dev/api/mcp/sse</code></div>
+                        <div className="mt-2"><strong>Streamable HTTP:</strong></div>
+                        <div className="ml-2">• <code>https://api.zapier.com/v1/mcp</code></div>
+                        <div className="ml-2">• <code>https://composio.dev/api/mcp</code></div>
+                        <div className="ml-2">• <code>https://your-server.com/mcp</code></div>
+                      </div>
+                    </div> */}
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button
                   onClick={() => {
                     setShowSettings(false);
                     setIsEditingUri(false);
+                    setIsEditingConnectionType(false);
+                    // Reset to stored config when canceling
+                    if (serverConfig.uri) {
+                      setServerUri(serverConfig.uri);
+                    }
+                    if (serverConfig.connectionType) {
+                      setConnectionType(serverConfig.connectionType);
+                    }
                   }}
                   variant="outline"
                   size="sm"
