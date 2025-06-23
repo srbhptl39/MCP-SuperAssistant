@@ -57,6 +57,13 @@ export class RemoteConfigManager {
       
       console.log('[RemoteConfigManager] Remote config fetched successfully');
       
+      // Debug log: Show summary of what was fetched
+      const allConfigs = firebaseRemoteConfigAPI.getAll();
+      const remoteConfigCount = Object.values(allConfigs).filter(config => config.source === 'remote').length;
+      const defaultConfigCount = Object.values(allConfigs).filter(config => config.source === 'default').length;
+      
+      console.debug(`[RemoteConfigManager] Config summary: ${remoteConfigCount} remote values, ${defaultConfigCount} default values`);
+      
     } catch (error) {
       this.retryCount++;
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -77,11 +84,32 @@ export class RemoteConfigManager {
     try {
       const allConfigs = firebaseRemoteConfigAPI.getAll();
       
+      // Debug log: Show all available configuration
+      console.debug('[RemoteConfigManager] Processing configuration. Available configs:');
+      Object.entries(allConfigs).forEach(([key, configValue]) => {
+        const value = configValue.value;
+        const source = configValue.source;
+        
+        // Try to parse JSON values for better display
+        let displayValue = value;
+        try {
+          const parsed = JSON.parse(value);
+          displayValue = JSON.stringify(parsed, null, 2);
+        } catch {
+          // Keep as string if not JSON
+        }
+        
+        console.debug(`  ${key} (${source}):`, displayValue);
+      });
+      
       // Process feature flags
       await this.processFeatureFlags(allConfigs);
       
       // Process notifications
       await this.processNotifications(allConfigs);
+      
+      // Process adapter configurations
+      await this.processAdapterConfigurations(allConfigs);
       
       // Process version configurations
       await this.processVersionConfigurations(allConfigs);
@@ -130,6 +158,87 @@ export class RemoteConfigManager {
     } catch (error) {
       console.error('[RemoteConfigManager] Failed to process notifications:', error);
     }
+  }
+
+  private async processAdapterConfigurations(allConfigs: Record<string, any>): Promise<void> {
+    try {
+      let adapterConfigs: Record<string, any> = {};
+      let foundConfigs = false;
+
+      // First, try to get unified adapter_configs parameter
+      const adapterConfigsRaw = firebaseRemoteConfigAPI.getValue('adapter_configs');
+      const adapterConfigsString = adapterConfigsRaw.value;
+      
+      if (adapterConfigsString) {
+        try {
+          const unifiedConfigs = JSON.parse(adapterConfigsString);
+          adapterConfigs = { ...unifiedConfigs };
+          foundConfigs = true;
+          console.log(`[RemoteConfigManager] Found unified adapter_configs with ${Object.keys(unifiedConfigs).length} adapters`);
+        } catch (error) {
+          console.warn('[RemoteConfigManager] Failed to parse unified adapter_configs:', error);
+        }
+      }
+
+      // Also check for individual adapter config parameters
+      const individualConfigKeys = Object.keys(allConfigs).filter(key => key.endsWith('_adapter_config'));
+      
+      if (individualConfigKeys.length > 0) {
+        console.log(`[RemoteConfigManager] Found ${individualConfigKeys.length} individual adapter config parameters:`, individualConfigKeys);
+        
+        for (const configKey of individualConfigKeys) {
+          try {
+            const configValue = firebaseRemoteConfigAPI.getValue(configKey);
+            if (configValue.value) {
+              const config = JSON.parse(configValue.value);
+              const adapterName = configKey.replace('_adapter_config', '');
+              adapterConfigs[adapterName] = config;
+              foundConfigs = true;
+              console.log(`[RemoteConfigManager] Loaded individual config for adapter: ${adapterName}`);
+            }
+          } catch (error) {
+            console.warn(`[RemoteConfigManager] Failed to parse ${configKey}:`, error);
+          }
+        }
+      }
+
+      // If we found any adapter configurations, validate and broadcast them
+      if (foundConfigs && Object.keys(adapterConfigs).length > 0) {
+        if (this.validateAdapterConfigs(adapterConfigs)) {
+          await this.broadcastAdapterConfigs(adapterConfigs);
+          console.log(`[RemoteConfigManager] Processed and broadcasted ${Object.keys(adapterConfigs).length} adapter configurations`);
+        } else {
+          console.warn('[RemoteConfigManager] Adapter configs validation failed');
+        }
+      } else {
+        console.debug('[RemoteConfigManager] No adapter configurations found');
+      }
+    } catch (error) {
+      console.error('[RemoteConfigManager] Failed to process adapter configurations:', error);
+    }
+  }
+
+  private validateAdapterConfigs(configs: any): boolean {
+    if (!configs || typeof configs !== 'object') {
+      console.warn('[RemoteConfigManager] Invalid adapter configs structure');
+      return false;
+    }
+
+    // Validate each adapter config has required structure
+    for (const [adapterName, config] of Object.entries(configs)) {
+      if (!config || typeof config !== 'object') {
+        console.warn(`[RemoteConfigManager] Invalid config for adapter: ${adapterName}`);
+        continue;
+      }
+
+      const adapterConfig = config as any;
+      if (!adapterConfig.selectors || !adapterConfig.ui) {
+        console.warn(`[RemoteConfigManager] Missing required fields for adapter: ${adapterName}`);
+        continue;
+      }
+    }
+
+    return true;
   }
 
   private async processVersionConfigurations(allConfigs: Record<string, any>): Promise<void> {
@@ -207,6 +316,36 @@ export class RemoteConfigManager {
     }
   }
 
+  private async broadcastAdapterConfigs(adapterConfigs: Record<string, any>): Promise<void> {
+    try {
+      // Get all tabs that could have content scripts (not just active ones)
+      const tabs = await chrome.tabs.query({});
+      let broadcastCount = 0;
+      
+      for (const tab of tabs) {
+        if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'remote-config:adapter-configs-updated',
+              data: {
+                adapterConfigs,
+                timestamp: Date.now()
+              }
+            });
+            broadcastCount++;
+          } catch (error) {
+            // Tab may not have content script injected, ignore
+            console.debug(`[RemoteConfigManager] Could not send adapter config message to tab ${tab.id}:`, error instanceof Error ? error.message : String(error));
+          }
+        }
+      }
+      
+      console.log(`[RemoteConfigManager] Broadcasted adapter configs to ${broadcastCount} tabs`);
+    } catch (error) {
+      console.error('[RemoteConfigManager] Failed to broadcast adapter configurations:', error);
+    }
+  }
+
   private async broadcastVersionConfig(versionConfig: any): Promise<void> {
     try {
       // Get all active content script tabs
@@ -233,6 +372,16 @@ export class RemoteConfigManager {
     }
   }
 
+
+  //development
+//   private startPeriodicFetch(): void {
+//     // Fetch every 5 sec
+//     this.fetchInterval = setInterval(() => {
+//       this.fetchConfig(true);
+//     }, 5000);
+    
+//     console.debug('[RemoteConfigManager] Started periodic config fetching');
+//   }
   private startPeriodicFetch(): void {
     // Fetch every 4 hours
     this.fetchInterval = setInterval(() => {
@@ -285,6 +434,55 @@ export class RemoteConfigManager {
     }
   }
 
+  async getSpecificConfig(key: string): Promise<any> {
+    try {
+      const allConfig = firebaseRemoteConfigAPI.getAll();
+      
+      // Handle adapter configs specially
+      if (key.includes('adapter_config')) {
+        const adapterConfigsRaw = firebaseRemoteConfigAPI.getValue('adapter_configs');
+        const adapterConfigsString = adapterConfigsRaw.value;
+        
+        if (adapterConfigsString) {
+          const adapterConfigs = JSON.parse(adapterConfigsString);
+          
+          // Extract specific adapter config
+          if (key.endsWith('_adapter_config')) {
+            const adapterName = key.replace('_adapter_config', '');
+            return { [key]: adapterConfigs[adapterName] || null };
+          }
+        }
+        
+        // Fallback to legacy individual adapter config parameters
+        const configValue = firebaseRemoteConfigAPI.getValue(key);
+        if (configValue.value) {
+          try {
+            return { [key]: JSON.parse(configValue.value) };
+          } catch {
+            return { [key]: configValue.value };
+          }
+        }
+        
+        return { [key]: null };
+      }
+      
+      // Handle regular config keys
+      if (allConfig[key]) {
+        const configValue = allConfig[key];
+        try {
+          return { [key]: JSON.parse(configValue.value) };
+        } catch {
+          return { [key]: configValue.value };
+        }
+      }
+      
+      return { [key]: null };
+    } catch (error) {
+      console.error(`[RemoteConfigManager] Failed to get specific config for key ${key}:`, error);
+      return { [key]: null };
+    }
+  }
+
   async cleanup(): Promise<void> {
     this.stopPeriodicFetch();
     this.isInitialized = false;
@@ -299,5 +497,28 @@ export class RemoteConfigManager {
 
   async getLastFetchTimePublic(): Promise<number | null> {
     return this.getLastFetchTime();
+  }
+
+  /**
+   * Clear cache and force refresh - useful for handling deleted Firebase keys
+   */
+  async clearCacheAndRefresh(): Promise<boolean> {
+    try {
+      console.log('[RemoteConfigManager] Clearing cache and forcing refresh...');
+      
+      // Clear the Firebase API cache and force refetch
+      const success = await firebaseRemoteConfigAPI.clearCacheAndRefetch();
+      
+      if (success) {
+        // Process the fresh configuration
+        await this.processConfiguration();
+        console.log('[RemoteConfigManager] Cache cleared and config refreshed successfully');
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('[RemoteConfigManager] Failed to clear cache and refresh:', error);
+      return false;
+    }
   }
 }

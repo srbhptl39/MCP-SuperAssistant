@@ -56,6 +56,7 @@ export interface EventMap {
   'remote-config:fetch-failed': { error: string; timestamp: number; retryCount?: number };
   'remote-config:updated': { changes: string[]; timestamp: number };
   'remote-config:initialized': { timestamp: number; version: string };
+  'remote-config:adapter-configs-updated': { adapterConfigs: Record<string, any>; timestamp: number };
   
   // Feature Flag events
   'feature-flags:updated': { flags: Record<string, FeatureFlag>; timestamp: number };

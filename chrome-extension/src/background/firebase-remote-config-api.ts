@@ -10,6 +10,12 @@ interface RemoteConfigValue {
   source: 'remote' | 'default' | 'static';
 }
 
+// Firebase Remote Config REST API response structure
+interface FirebaseRemoteConfigResponse {
+  entries?: Record<string, string>;
+  state?: string;
+}
+
 interface RemoteConfigResponse {
   entries: Record<string, RemoteConfigValue>;
   state: string;
@@ -70,6 +76,15 @@ constructor() {
 
     // Set fetch interval based on environment
     this.minimumFetchInterval = isDevelopment ? 300000 : 3600000; // 5 min dev, 1 hour prod
+    
+    // Debug log: Show configuration (without sensitive data)
+    console.debug('[FirebaseRemoteConfigAPI] Configuration:', {
+        environment: isDevelopment ? 'development' : 'production',
+        projectId: this.projectConfig.projectId || 'NOT_SET',
+        apiKeySet: !!this.projectConfig.apiKey,
+        appIdSet: !!this.projectConfig.appId,
+        minimumFetchInterval: this.minimumFetchInterval
+    });
 }
 
   async initialize(): Promise<void> {
@@ -94,6 +109,10 @@ constructor() {
 
       if (!this.projectConfig.apiKey || !this.projectConfig.projectId) {
         console.warn('[FirebaseRemoteConfigAPI] Firebase configuration missing, using defaults only');
+        console.debug('[FirebaseRemoteConfigAPI] Missing config:', {
+          projectId: !this.projectConfig.projectId ? 'MISSING' : 'SET',
+          apiKey: !this.projectConfig.apiKey ? 'MISSING' : 'SET'
+        });
         return false;
       }
 
@@ -127,6 +146,9 @@ constructor() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeout);
 
+      console.debug('[FirebaseRemoteConfigAPI] Making request to:', url);
+      console.debug('[FirebaseRemoteConfigAPI] Request body:', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -139,16 +161,70 @@ constructor() {
 
       clearTimeout(timeoutId);
 
+      console.debug('[FirebaseRemoteConfigAPI] Response status:', response.status, response.statusText);
+      console.debug('[FirebaseRemoteConfigAPI] Content-Type:', response.headers.get('content-type'));
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('[FirebaseRemoteConfigAPI] Error response body:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
 
-      const data: RemoteConfigResponse = await response.json();
+      const data: FirebaseRemoteConfigResponse = await response.json();
+      
+      // Debug log: Show the raw response structure
+      console.debug('[FirebaseRemoteConfigAPI] Raw Firebase response:', JSON.stringify(data, null, 2));
       
       // Update cached config with remote values
       if (data.entries) {
-        this.cachedConfig = { ...this.cachedConfig, ...data.entries };
-        console.log(`[FirebaseRemoteConfigAPI] Fetched ${Object.keys(data.entries).length} remote config values`);
+        // Convert Firebase response format to our internal format
+        const convertedEntries: Record<string, RemoteConfigValue> = {};
+        Object.entries(data.entries).forEach(([key, value]) => {
+          convertedEntries[key] = {
+            value: value,
+            source: 'remote'
+          };
+        });
+        
+        // Remove old remote values that are no longer in Firebase
+        // Keep only defaults and the new remote values
+        const updatedConfig: Record<string, RemoteConfigValue> = {};
+        
+        // First, add default values
+        for (const [key, value] of Object.entries(this.defaultConfig)) {
+          updatedConfig[key] = {
+            value,
+            source: 'default'
+          };
+        }
+        
+        // Then override with remote values (this replaces old remote values completely)
+        Object.assign(updatedConfig, convertedEntries);
+        
+        this.cachedConfig = updatedConfig;
+        console.log(`[FirebaseRemoteConfigAPI] Updated config with ${Object.keys(data.entries).length} remote values, removed deleted keys`);
+        
+        // Debug log: Show all fetched configuration keys and values
+        console.debug('[FirebaseRemoteConfigAPI] Fetched configuration details:');
+        Object.entries(convertedEntries).forEach(([key, configValue]) => {
+          const value = configValue.value;
+          const source = configValue.source;
+          
+          // Try to parse JSON values for better display
+          let displayValue = value;
+          try {
+            if (value && typeof value === 'string') {
+              const parsed = JSON.parse(value);
+              displayValue = JSON.stringify(parsed, null, 2);
+            }
+          } catch {
+            // Keep as string if not JSON
+          }
+          
+          console.debug(`  ${key} (${source}):`, displayValue);
+        });
+      } else {
+        console.warn('[FirebaseRemoteConfigAPI] No entries found in response:', data);
       }
 
       return true;
@@ -268,6 +344,31 @@ constructor() {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return result;
+  }
+
+  /**
+   * Clear cached config and force a fresh fetch
+   * Useful when dealing with deleted Firebase keys
+   */
+  async clearCacheAndRefetch(): Promise<boolean> {
+    console.log('[FirebaseRemoteConfigAPI] Clearing cache and forcing refresh...');
+    
+    // Clear in-memory cache
+    this.cachedConfig = {};
+    
+    // Clear stored cache
+    try {
+      await chrome.storage.local.remove(['firebaseRemoteConfig', 'firebaseRemoteConfigLastFetch']);
+      this.lastFetchTime = 0;
+    } catch (error) {
+      console.error('[FirebaseRemoteConfigAPI] Failed to clear stored cache:', error);
+    }
+    
+    // Reinitialize with defaults
+    this.initializeWithDefaults();
+    
+    // Force fetch fresh data
+    return await this.fetchAndActivate(true);
   }
 }
 

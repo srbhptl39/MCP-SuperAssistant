@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { adapterConfigManager, type AdapterConfig } from './defaultConfigs';
 
 /**
  * Gemini Adapter for Google Gemini (gemini.google.com)
@@ -21,25 +22,19 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     'dom-manipulation'
   ];
 
-  // CSS selectors for Gemini's UI elements
-  // Updated selectors based on current Gemini interface
-  private readonly selectors = {
-    // Primary chat input selector
+  // CSS selectors for Gemini's UI elements - loaded from configuration
+  private config: AdapterConfig | null = null;
+
+  // Legacy selectors as fallbacks (will be removed once config system is stable)
+  private readonly fallbackSelectors = {
     CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
-    // Submit button selectors (multiple fallbacks)
     SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-testid="send-button"]',
-    // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"], button[aria-label*="attach"]',
     FILE_INPUT: 'input[type="file"]',
-    // Main panel and container selectors
     MAIN_PANEL: '.chat-web, .main-content, .conversation-container',
-    // Drop zones for file attachment
     DROP_ZONE: 'div[xapfileselectordropzone], .text-input-field, .input-area, .ql-editor, .chat-input-container',
-    // File preview elements
     FILE_PREVIEW: '.file-preview, .xap-filed-upload-preview, .attachment-preview',
-    // Button insertion points (for MCP popover)
     BUTTON_INSERTION_CONTAINER: '.leading-actions-wrapper, .input-area .actions, .chat-input-actions',
-    // Alternative insertion points
     FALLBACK_INSERTION: '.input-area, .chat-input-container, .conversation-input'
   };
 
@@ -87,6 +82,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
     // Set up event listeners for the new architecture
     this.setupStoreEventListeners();
+
+    // Initialize configuration
+    await this.initializeConfig();
+
+    // Listen for remote config updates
+    this.setupConfigUpdateListener();
   }
 
   async activate(): Promise<void> {
@@ -186,7 +187,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       targetElement = options.targetElement;
     } else {
       // Try multiple selectors for better compatibility
-      const selectors = this.selectors.CHAT_INPUT.split(', ');
+      const selectors = this.getSelector('chatInput').split(', ');
       for (const selector of selectors) {
         targetElement = document.querySelector(selector.trim()) as HTMLElement;
         if (targetElement) {
@@ -248,7 +249,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     let submitButton: HTMLButtonElement | null = null;
 
     // Try multiple selectors for better compatibility
-    const selectors = this.selectors.SUBMIT_BUTTON.split(', ');
+    const selectors = this.getSelector('submitButton').split(', ');
     for (const selector of selectors) {
       submitButton = document.querySelector(selector.trim()) as HTMLButtonElement;
       if (submitButton) {
@@ -433,7 +434,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Checking file upload support for Gemini');
 
     // Check for drop zones
-    const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
+    const dropZoneSelectors = this.getSelector('dropZone').split(', ');
     for (const selector of dropZoneSelectors) {
       const dropZone = document.querySelector(selector.trim());
       if (dropZone) {
@@ -443,7 +444,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     }
 
     // Check for file upload buttons
-    const uploadButtonSelectors = this.selectors.FILE_UPLOAD_BUTTON.split(', ');
+    const uploadButtonSelectors = this.getSelector('fileUploadButton').split(', ');
     for (const selector of uploadButtonSelectors) {
       const uploadButton = document.querySelector(selector.trim());
       if (uploadButton) {
@@ -453,7 +454,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     }
 
     // Check for file input elements
-    const fileInput = document.querySelector(this.selectors.FILE_INPUT);
+    const fileInput = document.querySelector(this.getSelector('fileInput'));
     if (fileInput) {
       this.context.logger.debug('Found file input element');
       return true;
@@ -795,6 +796,10 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Wait for page to be ready, then inject MCP popover
     this.waitForPageReady().then(() => {
       this.injectMCPPopoverWithRetry();
+    }).catch((error) => {
+      this.context.logger.error('Failed to wait for page ready for MCP popover injection:', error);
+      // Don't set up periodic check if we can't find insertion point
+      return;
     });
 
     // Set up periodic check to ensure popover stays injected
@@ -802,15 +807,24 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 15;
+      
       const checkReady = () => {
+        attempts++;
+        
         // Check if the page has the necessary elements
         const insertionPoint = this.findButtonInsertionPoint();
         if (insertionPoint) {
-          this.context.logger.debug('Page ready for MCP popover injection');
+          this.context.logger.debug(`Page ready for MCP popover injection (attempt ${attempts}/${maxAttempts})`);
           resolve();
+        } else if (attempts >= maxAttempts) {
+          this.context.logger.warn(`Failed to find button insertion point after ${maxAttempts} attempts, giving up`);
+          reject(new Error(`Could not find insertion point after ${maxAttempts} attempts`));
         } else {
           // Retry after a short delay
+          this.context.logger.debug(`Button insertion point not found, retrying... (attempt ${attempts}/${maxAttempts})`);
           setTimeout(checkReady, 500);
         }
       };
@@ -900,13 +914,18 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try primary selector first
-    const wrapper = document.querySelector('.leading-actions-wrapper');
-    if (wrapper) {
-      this.context.logger.debug('Found insertion point: .leading-actions-wrapper');
-      const btns = wrapper.querySelectorAll('button');
-      const after = btns.length > 1 ? btns[1] : btns.length > 0 ? btns[0] : null;
-      return { container: wrapper, insertAfter: after };
+    // Try primary selector first using getSelector method
+    const buttonInsertionSelector = this.getSelector('buttonInsertionContainer');
+    const selectors = buttonInsertionSelector.split(', ');
+    
+    for (const selector of selectors) {
+      const wrapper = document.querySelector(selector.trim());
+      if (wrapper) {
+        this.context.logger.debug(`Found insertion point: ${selector.trim()}`);
+        const btns = wrapper.querySelectorAll('button');
+        const after = btns.length > 1 ? btns[1] : btns.length > 0 ? btns[0] : null;
+        return { container: wrapper, insertAfter: after };
+      }
     }
 
     // Try fallback selectors
@@ -1012,7 +1031,6 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
   private createToggleStateManager() {
     const context = this.context;
-    const adapterName = this.name;
 
     // Create the state manager object
     const stateManager = {
@@ -1150,6 +1168,97 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     return !!document.getElementById('mcp-popover-container');
   }
 
+  /**
+   * Get selector from configuration with fallback
+   */
+  private getSelector(selectorName: keyof AdapterConfig['selectors']): string {
+    if (this.config?.selectors[selectorName]) {
+      return this.config.selectors[selectorName];
+    }
+    
+    // Fallback to legacy selectors
+    const fallbackMap: Record<keyof AdapterConfig['selectors'], string> = {
+      chatInput: this.fallbackSelectors.CHAT_INPUT,
+      submitButton: this.fallbackSelectors.SUBMIT_BUTTON,
+      fileUploadButton: this.fallbackSelectors.FILE_UPLOAD_BUTTON,
+      fileInput: this.fallbackSelectors.FILE_INPUT,
+      mainPanel: this.fallbackSelectors.MAIN_PANEL,
+      dropZone: this.fallbackSelectors.DROP_ZONE,
+      filePreview: this.fallbackSelectors.FILE_PREVIEW,
+      buttonInsertionContainer: this.fallbackSelectors.BUTTON_INSERTION_CONTAINER,
+      fallbackInsertion: this.fallbackSelectors.FALLBACK_INSERTION,
+      // Optional selectors - return empty string if not in fallback
+      newChatButton: '',
+      conversationHistory: '',
+      conversationItem: '',
+      messageContainer: '',
+      userMessage: '',
+      aiMessage: '',
+      loadingIndicator: '',
+      typingIndicator: '',
+      toolbar: '',
+      toolbarActions: '',
+      settingsButton: '',
+      optionsMenu: '',
+      voiceInputButton: '',
+      modelSelector: '',
+      responseActions: '',
+      copyButton: '',
+      regenerateButton: '',
+      shareButton: '',
+      errorMessage: '',
+      retryButton: ''
+    };
+    
+    return fallbackMap[selectorName] || '';
+  }
+
+  /**
+   * Initialize configuration from remote config or defaults
+   */
+  private async initializeConfig(): Promise<void> {
+    try {
+      // Initialize the config manager with context
+      adapterConfigManager.initialize(this.context);
+      
+      // Load configuration
+      this.config = await adapterConfigManager.getAdapterConfig('gemini');
+      this.context?.logger.info('[GeminiAdapter] Configuration loaded successfully');
+    } catch (error) {
+      this.context?.logger.warn('[GeminiAdapter] Failed to load configuration, using defaults:', error);
+      this.config = null; // Will use fallback selectors
+    }
+  }
+
+  /**
+   * Listen for remote config updates
+   */
+  private setupConfigUpdateListener(): void {
+    // Listen for remote config updates
+    this.context?.eventBus.on('remote-config:updated', (data) => {
+      if (data.changes.includes('gemini_adapter_config')) {
+        this.context?.logger.info('[GeminiAdapter] Remote config updated, refreshing configuration');
+        this.refreshConfig();
+      }
+    });
+  }
+
+  /**
+   * Refresh configuration from remote config
+   */
+  private async refreshConfig(): Promise<void> {
+    try {
+      // Clear cache for this adapter
+      adapterConfigManager.clearCache('gemini');
+      
+      // Reload configuration
+      this.config = await adapterConfigManager.getAdapterConfig('gemini');
+      this.context?.logger.info('[GeminiAdapter] Configuration refreshed successfully');
+    } catch (error) {
+      this.context?.logger.warn('[GeminiAdapter] Failed to refresh configuration:', error);
+    }
+  }
+
   private async injectFileDropListener(): Promise<boolean> {
     try {
       const listenerUrl = this.context.chrome.runtime.getURL('dragDropListener.js');
@@ -1182,7 +1291,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   private async checkFilePreview(): Promise<boolean> {
     return new Promise(resolve => {
       setTimeout(() => {
-        const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
+        const filePreview = document.querySelector(this.getSelector('filePreview'));
         if (filePreview) {
           this.context.logger.info('File preview element found after attachment');
           resolve(true);

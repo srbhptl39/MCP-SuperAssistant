@@ -40,7 +40,8 @@
   },
   "dependencies": {
     "react": "19.1.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "firebase": "^11.9.1"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.5",

@@ -1038,8 +1038,16 @@ async function handleRemoteConfigMessage(
       }
 
       case 'remote-config:get-config': {
-        console.log('[Background] Getting all remote config');
-        result = await remoteConfigManager.getAllConfig();
+        const { key } = message.payload || {};
+        if (key) {
+          console.log(`[Background] Getting specific config for key: ${key}`);
+          result = await remoteConfigManager.getSpecificConfig(key);
+        } else {
+          console.log('[Background] Getting all remote config');
+          result = await remoteConfigManager.getAllConfig();
+        }
+        //development
+        // console.log('[Background] Remote config retrieved:', result);
         break;
       }
 
@@ -1048,6 +1056,16 @@ async function handleRemoteConfigMessage(
         result = {
           initialized: remoteConfigManager.initialized,
           lastFetchTime: await remoteConfigManager.getLastFetchTimePublic(),
+          timestamp: Date.now()
+        };
+        break;
+      }
+
+      case 'remote-config:clear-cache': {
+        console.log('[Background] Clearing remote config cache and refreshing');
+        const success = await remoteConfigManager.clearCacheAndRefresh();
+        result = {
+          success,
           timestamp: Date.now()
         };
         break;
@@ -1092,6 +1110,12 @@ async function initializeRemoteConfig(): Promise<void> {
     remoteConfigManager = new RemoteConfigManager();
     await remoteConfigManager.initialize();
     console.log('[Background] Remote Config Manager initialized successfully');
+    
+    // Make RemoteConfigManager globally accessible for testing
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).remoteConfigManager = remoteConfigManager;
+      console.log('[Background] RemoteConfigManager is now accessible globally as window.remoteConfigManager');
+    }
   } catch (error) {
     console.error('[Background] Failed to initialize Remote Config Manager:', error);
     // Don't throw - let the extension continue without remote config

@@ -499,6 +499,26 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
         break;
       }
       
+      case 'remote-config:adapter-configs-updated': {
+        const { adapterConfigs, timestamp } = message.data;
+        console.log(`[Content] Received adapter configs update: ${Object.keys(adapterConfigs).length} adapters`);
+        
+        // Emit event for adapter config updates
+        eventBus.emit('remote-config:adapter-configs-updated', { 
+          adapterConfigs, 
+          timestamp 
+        });
+        
+        // Also emit general remote config updated event for backward compatibility
+        eventBus.emit('remote-config:updated', { 
+          changes: Object.keys(adapterConfigs).map(name => `${name}_adapter_config`), 
+          timestamp 
+        });
+        
+        sendResponse({ success: true, timestamp: Date.now() });
+        break;
+      }
+      
       default:
         console.warn(`[Content] Unknown remote config message type: ${message.type}`);
         sendResponse({ success: false, error: `Unknown message type: ${message.type}` });

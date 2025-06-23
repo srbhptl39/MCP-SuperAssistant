@@ -203,6 +203,26 @@ export {
 export const fetchRemoteConfig = async (force = false): Promise<boolean> => {
   try {
     await fetchAndActivate(remoteConfig);
+    
+    // Debug log: Show all fetched configuration
+    console.debug('[Firebase] Remote config fetched successfully. Current configuration:');
+    const allConfig = getAll(remoteConfig);
+    Object.entries(allConfig).forEach(([key, configValue]) => {
+      const value = configValue.asString();
+      const source = configValue.getSource();
+      
+      // Try to parse JSON values for better display
+      let displayValue = value;
+      try {
+        const parsed = JSON.parse(value);
+        displayValue = JSON.stringify(parsed, null, 2);
+      } catch {
+        // Keep as string if not JSON
+      }
+      
+      console.debug(`  ${key} (${source}):`, displayValue);
+    });
+    
     return true;
   } catch (error) {
     console.error('[Firebase] Failed to fetch remote config:', error);
