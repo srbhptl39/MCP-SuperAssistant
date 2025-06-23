@@ -12,7 +12,7 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
 export class OpenRouterAdapter extends BaseAdapterPlugin {
   readonly name = 'OpenRouterAdapter';
   readonly version = '2.0.0';
-  readonly hostnames = ['openrouter.ai'];
+  readonly hostnames = ['openrouter.ai/chat'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
@@ -447,24 +447,24 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
     this.context.logger.debug(`Checking if OpenRouter adapter supports: ${currentUrl}`);
 
-    // Check hostname
-    const isOpenRouterHost = this.hostnames.some(hostname => {
-      if (typeof hostname === 'string') {
-        return currentHost.includes(hostname);
-      }
-      return (hostname as RegExp).test(currentHost);
-    });
+    // // Check hostname
+    // const isOpenRouterHost = this.hostnames.some(hostname => {
+    //   if (typeof hostname === 'string') {
+    //     return currentHost.includes(hostname);
+    //   }
+    //   return (hostname as RegExp).test(currentHost);
+    // });
 
-    if (!isOpenRouterHost) {
-      this.context.logger.debug(`Host ${currentHost} not supported by OpenRouter adapter`);
-      return false;
-    }
+    // if (!isOpenRouterHost) {
+    //   this.context.logger.debug(`Host ${currentHost} not supported by OpenRouter adapter`);
+    //   return false;
+    // }
 
     // Check for supported OpenRouter pages
     const supportedPatterns = [
       /^https:\/\/openrouter\.ai\/chat.*$/,
-      /^https:\/\/openrouter\.ai\/playground.*$/,
-      /^https:\/\/openrouter\.ai\/$/ // Homepage with chat interface
+      // /^https:\/\/openrouter\.ai\/playground.*$/,
+      // /^https:\/\/openrouter\.ai\/$/ // Homepage with chat interface
     ];
 
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
@@ -576,8 +576,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       });
 
       if (shouldReinject) {
-        this.context.logger.debug('MCP popover removed, attempting to re-inject');
-        this.setupUIIntegration();
+        // Only attempt re-injection if we can find an insertion point
+        const insertionPoint = this.findButtonInsertionPoint();
+        if (insertionPoint) {
+          this.context.logger.debug('MCP popover removed, attempting to re-inject');
+          this.setupUIIntegration();
+        }
       }
     });
 
@@ -601,19 +605,29 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Wait for page to be ready, then inject MCP popover
     this.waitForPageReady().then(() => {
       this.injectMCPPopoverWithRetry();
+    }).catch((error) => {
+      this.context.logger.warn('Failed to wait for page ready:', error);
+      // Don't retry if we can't find insertion point
     });
 
     // Set up periodic check to ensure popover stays injected
-    this.setupPeriodicPopoverCheck();
+    // this.setupPeriodicPopoverCheck();
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 5; // Maximum 10 seconds (20 * 500ms)
+      
       const checkReady = () => {
+        attempts++;
         const insertionPoint = this.findButtonInsertionPoint();
         if (insertionPoint) {
           this.context.logger.debug('Page ready for MCP popover injection');
           resolve();
+        } else if (attempts >= maxAttempts) {
+          this.context.logger.warn('Page ready check timed out - no insertion point found');
+          reject(new Error('No insertion point found after maximum attempts'));
         } else {
           setTimeout(checkReady, 500);
         }
@@ -651,8 +665,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     if (!this.popoverCheckInterval) {
       this.popoverCheckInterval = setInterval(() => {
         if (!document.getElementById('mcp-popover-container')) {
-          this.context.logger.debug('MCP popover missing, attempting to re-inject');
-          this.injectMCPPopoverWithRetry(3);
+          // Only attempt re-injection if we can find an insertion point
+          const insertionPoint = this.findButtonInsertionPoint();
+          if (insertionPoint) {
+            this.context.logger.debug('MCP popover missing, attempting to re-inject');
+            this.injectMCPPopoverWithRetry(3);
+          }
         }
       }, 5000);
     }
@@ -1028,7 +1046,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         return;
       }
 
-      this.ensureMCPPopoverConnection();
+      // this.ensureMCPPopoverConnection();
       
     } catch (error) {
       this.context.logger.error('Error checking sidebar state after navigation:', error);

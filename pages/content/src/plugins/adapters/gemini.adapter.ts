@@ -410,7 +410,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Check if we're on a supported Gemini page (not just the homepage)
     const supportedPatterns = [
       /^https:\/\/gemini\.google\.com\/u\/\d+\/app\/.*/,  // User-specific app pages
-      /^https:\/\/gemini\.google\.com\/app\/.*/,          // General app pages
+      /^https:\/\/gemini\.google\.com\/.*/,          // General app pages
       /^https:\/\/gemini\.google\.com\/chat\/.*/,         // Chat pages
       /^https:\/\/gemini\.google\.com\/u\/\d+\/chat\/.*/  // User-specific chat pages
     ];
@@ -769,8 +769,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       });
 
       if (shouldReinject) {
-        this.context.logger.debug('MCP popover removed, attempting to re-inject');
-        this.setupUIIntegration();
+        // Only attempt re-injection if we can find an insertion point
+        const insertionPoint = this.findButtonInsertionPoint();
+        if (insertionPoint) {
+          this.context.logger.debug('MCP popover removed, attempting to re-inject');
+          this.setupUIIntegration();
+        }
       }
     });
 
@@ -803,7 +807,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     });
 
     // Set up periodic check to ensure popover stays injected
-    this.setupPeriodicPopoverCheck();
+    // this.setupPeriodicPopoverCheck();
   }
 
   private async waitForPageReady(): Promise<void> {
@@ -865,8 +869,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     if (!this.popoverCheckInterval) {
       this.popoverCheckInterval = setInterval(() => {
         if (!document.getElementById('mcp-popover-container')) {
-          this.context.logger.debug('MCP popover missing, attempting to re-inject');
-          this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          // Only attempt re-injection if we can find an insertion point
+          const insertionPoint = this.findButtonInsertionPoint();
+          if (insertionPoint) {
+            this.context.logger.debug('MCP popover missing, attempting to re-inject');
+            this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          }
         }
       }, 5000);
     }

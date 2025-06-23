@@ -13,7 +13,7 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
 export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   readonly name = 'GitHubCopilotAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
-  readonly hostnames = ['github.com'];
+  readonly hostnames = ['github.com/copilot'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
@@ -564,8 +564,12 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
       });
 
       if (shouldReinject) {
-        this.context.logger.debug('MCP popover removed, attempting to re-inject');
-        this.setupUIIntegration();
+        // Only attempt re-injection if we can find an insertion point
+        const insertionPoint = this.findButtonInsertionPoint();
+        if (insertionPoint) {
+          this.context.logger.debug('MCP popover removed, attempting to re-inject');
+          this.setupUIIntegration();
+        }
       }
     });
 
@@ -591,27 +595,33 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     // Wait for page to be ready, then inject MCP popover
     this.waitForPageReady().then(() => {
       this.injectMCPPopoverWithRetry();
+    }).catch((error) => {
+      this.context.logger.warn('Failed to wait for page ready:', error);
+      // Don't retry if we can't find insertion point
     });
 
     // Set up periodic check to ensure popover stays injected
-    this.setupPeriodicPopoverCheck();
+    // this.setupPeriodicPopoverCheck();
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 5; // Maximum 10 seconds (20 * 500ms)
+      
       const checkReady = () => {
-        // Check if the page has the necessary elements
+        attempts++;
         const insertionPoint = this.findButtonInsertionPoint();
         if (insertionPoint) {
           this.context.logger.debug('Page ready for MCP popover injection');
           resolve();
+        } else if (attempts >= maxAttempts) {
+          this.context.logger.warn('Page ready check timed out - no insertion point found');
+          reject(new Error('No insertion point found after maximum attempts'));
         } else {
-          // Retry after a short delay
           setTimeout(checkReady, 500);
         }
       };
-
-      // Start checking immediately, but with a small initial delay
       setTimeout(checkReady, 100);
     });
   }
@@ -647,8 +657,12 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     if (!this.popoverCheckInterval) {
       this.popoverCheckInterval = setInterval(() => {
         if (!document.getElementById('mcp-popover-container')) {
-          this.context.logger.debug('MCP popover missing, attempting to re-inject');
-          this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          // Only attempt re-injection if we can find an insertion point
+          const insertionPoint = this.findButtonInsertionPoint();
+          if (insertionPoint) {
+            this.context.logger.debug('MCP popover missing, attempting to re-inject');
+            this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          }
         }
       }, 5000);
     }

@@ -864,7 +864,7 @@ const attachResultAsFile = async (
   callId: string,
   rawResultText: string,
   button: HTMLButtonElement,
-  iconSpan: HTMLElement,
+  iconSpan: HTMLElement | null,
   skipAutoInsertCheck: boolean = false,
 ): Promise<{ success: boolean; message: string | null }> => {
   // Early validation for better performance
@@ -873,12 +873,11 @@ const attachResultAsFile = async (
     
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.textContent = 'No Adapter';
+      button.innerHTML = `${ICONS.ATTACH}<span>No Adapter</span>`;
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.textContent = originalText;
-        button.prepend(iconSpan);
+        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -893,12 +892,11 @@ const attachResultAsFile = async (
     
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.textContent = 'Attach Not Supported';
+      button.innerHTML = `${ICONS.ATTACH}<span>Attach Not Supported</span>`;
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.textContent = originalText;
-        button.prepend(iconSpan);
+        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -914,8 +912,24 @@ const attachResultAsFile = async (
 
   // Optimized button state management
   const setButtonState = (text: string, className?: string, disabled: boolean = true) => {
-    button.textContent = text;
-    button.prepend(iconSpan);
+    // Clear button content and rebuild properly
+    button.innerHTML = '';
+    
+    // Create new icon element to avoid DOM reference issues
+    const iconElement = createOptimizedElement('span', {
+      innerHTML: ICONS.ATTACH,
+      styles: {
+        display: 'inline-flex',
+        marginRight: '6px',
+      },
+    });
+    
+    const textElement = createOptimizedElement('span', {
+      textContent: text,
+    });
+    
+    button.appendChild(iconElement);
+    button.appendChild(textElement);
     button.disabled = disabled;
 
     if (className) {
@@ -925,8 +939,8 @@ const attachResultAsFile = async (
 
   const resetButtonState = (delay: number = 2000) => {
     setTimeout(() => {
-      button.textContent = originalButtonText;
-      button.prepend(iconSpan);
+      // Reset to original button structure
+      button.innerHTML = `${ICONS.ATTACH}<span>Attach File</span>`;
       button.classList.remove('attach-success', 'attach-error');
       button.disabled = false;
     }, delay);
@@ -941,10 +955,58 @@ const attachResultAsFile = async (
         const success = await adapter.attachFile(file);
         
         if (success) {
-          confirmationText = `Result attached as file: ${fileName}`;
+          confirmationText = `File attached successfully: ${fileName}`;
           setButtonState('Attached!', 'attach-success', true);
 
-          // Efficient event dispatch
+          // Insert the confirmation text into the input field
+          if (typeof adapter.insertText === 'function') {
+            try {
+              await adapter.insertText(confirmationText);
+              console.debug('Confirmation text inserted successfully');
+            } catch (insertError) {
+              console.warn('Failed to insert confirmation text:', insertError);
+              // Fallback to legacy method if available
+              if (typeof adapter.insertTextIntoInput === 'function') {
+                try {
+                  // Dispatch event for legacy insertion
+                  requestAnimationFrame(() => {
+                    document.dispatchEvent(
+                      new CustomEvent('mcp:tool-execution-complete', {
+                        detail: {
+                          result: confirmationText,
+                          isFileAttachment: false,
+                          fileName: '',
+                          skipAutoInsertCheck: true,
+                        },
+                      }),
+                    );
+                  });
+                } catch (legacyError) {
+                  console.warn('Legacy insertion also failed:', legacyError);
+                }
+              }
+            }
+          } else if (typeof adapter.insertTextIntoInput === 'function') {
+            // Use legacy method directly
+            try {
+              requestAnimationFrame(() => {
+                document.dispatchEvent(
+                  new CustomEvent('mcp:tool-execution-complete', {
+                    detail: {
+                      result: confirmationText,
+                      isFileAttachment: false,
+                      fileName: '',
+                      skipAutoInsertCheck: true,
+                    },
+                  }),
+                );
+              });
+            } catch (legacyError) {
+              console.warn('Legacy insertion failed:', legacyError);
+            }
+          }
+
+          // Efficient event dispatch for file attachment
           const eventDetail = {
             file,
             result: confirmationText,
@@ -972,6 +1034,54 @@ const attachResultAsFile = async (
         confirmationText = `File attachment initiated: ${fileName}`;
         setButtonState('Attached!', 'attach-success', true);
 
+        // Insert the confirmation text into the input field
+        if (typeof adapter.insertText === 'function') {
+          try {
+            await adapter.insertText(confirmationText);
+            console.debug('Confirmation text inserted successfully');
+          } catch (insertError) {
+            console.warn('Failed to insert confirmation text:', insertError);
+            // Fallback to legacy method if available
+            if (typeof adapter.insertTextIntoInput === 'function') {
+              try {
+                // Dispatch event for legacy insertion
+                requestAnimationFrame(() => {
+                  document.dispatchEvent(
+                    new CustomEvent('mcp:tool-execution-complete', {
+                      detail: {
+                        result: confirmationText,
+                        isFileAttachment: false,
+                        fileName: '',
+                        skipAutoInsertCheck: true,
+                      },
+                    }),
+                  );
+                });
+              } catch (legacyError) {
+                console.warn('Legacy insertion also failed:', legacyError);
+              }
+            }
+          }
+        } else if (typeof adapter.insertTextIntoInput === 'function') {
+          // Use legacy method directly
+          try {
+            requestAnimationFrame(() => {
+              document.dispatchEvent(
+                new CustomEvent('mcp:tool-execution-complete', {
+                  detail: {
+                    result: confirmationText,
+                    isFileAttachment: false,
+                    fileName: '',
+                    skipAutoInsertCheck: true,
+                  },
+                }),
+              );
+            });
+          } catch (legacyError) {
+            console.warn('Legacy insertion failed:', legacyError);
+          }
+        }
+
         const eventDetail = {
           file,
           result: confirmationText,
@@ -993,8 +1103,56 @@ const attachResultAsFile = async (
       // This maintains compatibility while providing user feedback
       console.log('Adapter does not have attachFile method, using optimistic success');
       
-      confirmationText = `Result prepared as file: ${fileName}`;
+      confirmationText = `File attachment completed: ${fileName}`;
       setButtonState('Attached!', 'attach-success', true);
+
+      // Insert the confirmation text into the input field
+      if (typeof adapter.insertText === 'function') {
+        try {
+          await adapter.insertText(confirmationText);
+          console.debug('Confirmation text inserted successfully');
+        } catch (insertError) {
+          console.warn('Failed to insert confirmation text:', insertError);
+          // Fallback to legacy method if available
+          if (typeof adapter.insertTextIntoInput === 'function') {
+            try {
+              // Dispatch event for legacy insertion
+              requestAnimationFrame(() => {
+                document.dispatchEvent(
+                  new CustomEvent('mcp:tool-execution-complete', {
+                    detail: {
+                      result: confirmationText,
+                      isFileAttachment: false,
+                      fileName: '',
+                      skipAutoInsertCheck: true,
+                    },
+                  }),
+                );
+              });
+            } catch (legacyError) {
+              console.warn('Legacy insertion also failed:', legacyError);
+            }
+          }
+        }
+      } else if (typeof adapter.insertTextIntoInput === 'function') {
+        // Use legacy method directly
+        try {
+          requestAnimationFrame(() => {
+            document.dispatchEvent(
+              new CustomEvent('mcp:tool-execution-complete', {
+                detail: {
+                  result: confirmationText,
+                  isFileAttachment: false,
+                  fileName: '',
+                  skipAutoInsertCheck: true,
+                },
+              }),
+            );
+          });
+        } catch (legacyError) {
+          console.warn('Legacy insertion failed:', legacyError);
+        }
+      }
 
       const eventDetail = {
         file,
@@ -1351,7 +1509,7 @@ export const displayResult = (
         callId,
         rawResultText,
         attachButton,
-        attachButton.querySelector('span') as HTMLElement,
+        null, // No longer need iconSpan parameter
         true, // Set skipAutoInsertCheck to true to prevent AutomationService from auto-inserting the same file
       );
     };
@@ -1383,15 +1541,60 @@ export const displayResult = (
           className: 'insert-result-button',
           styles: { display: 'none' },
         }) as HTMLButtonElement,
-        icon: createOptimizedElement('span', {
-          styles: { display: 'none' },
-        }),
       };
 
-      attachResultAsFile(adapter, functionName, callId, rawResultText, fakeElements.button, fakeElements.icon, true) // Set to true to prevent double attachment
-        .then(({ success, message }) => {
-          if (success) {
+      attachResultAsFile(adapter, functionName, callId, rawResultText, fakeElements.button, null, true) // Set to true to prevent double attachment
+        .then(async ({ success, message }) => {
+          if (success && message) {
             console.debug(`Auto-attached file successfully: ${message}`);
+            
+            // Insert the auto-attachment confirmation text
+            if (typeof adapter.insertText === 'function') {
+              try {
+                await adapter.insertText(message);
+                console.debug('Auto-attachment confirmation text inserted successfully');
+              } catch (insertError) {
+                console.warn('Failed to insert auto-attachment confirmation text:', insertError);
+                // Fallback to legacy method if available
+                if (typeof adapter.insertTextIntoInput === 'function') {
+                  try {
+                    // Dispatch event for legacy insertion
+                    requestAnimationFrame(() => {
+                      document.dispatchEvent(
+                        new CustomEvent('mcp:tool-execution-complete', {
+                          detail: {
+                            result: message,
+                            isFileAttachment: false,
+                            fileName: '',
+                            skipAutoInsertCheck: true,
+                          },
+                        }),
+                      );
+                    });
+                  } catch (legacyError) {
+                    console.warn('Legacy insertion for auto-attachment also failed:', legacyError);
+                  }
+                }
+              }
+            } else if (typeof adapter.insertTextIntoInput === 'function') {
+              // Use legacy method directly
+              try {
+                requestAnimationFrame(() => {
+                  document.dispatchEvent(
+                    new CustomEvent('mcp:tool-execution-complete', {
+                      detail: {
+                        result: message,
+                        isFileAttachment: false,
+                        fileName: '',
+                        skipAutoInsertCheck: true,
+                      },
+                    }),
+                  );
+                });
+              } catch (legacyError) {
+                console.warn('Legacy insertion for auto-attachment failed:', legacyError);
+              }
+            }
           } else {
             console.error('Failed to auto-attach file.');
             // Fallback to manual attach button
@@ -1400,12 +1603,10 @@ export const displayResult = (
 
           // Cleanup fake elements
           ElementPool.release(fakeElements.button);
-          ElementPool.release(fakeElements.icon);
         })
         .catch(err => {
           console.error('Error auto-attaching file:', err);
           ElementPool.release(fakeElements.button);
-          ElementPool.release(fakeElements.icon);
         });
     } else {
       // Dispatch event for normal-sized results

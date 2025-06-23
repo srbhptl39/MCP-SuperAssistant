@@ -174,20 +174,20 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   /**
    * Insert text into the Perplexity chat input field
-   * Enhanced with better selector handling and event integration
+   * Enhanced with better selector handling, event integration, and URL-specific methods
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
     this.context.logger.info(`Attempting to insert text into Perplexity chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
-    let targetElement: HTMLTextAreaElement | null = null;
+    let targetElement: HTMLElement | null = null;
 
     if (options?.targetElement) {
-      targetElement = options.targetElement as HTMLTextAreaElement;
+      targetElement = options.targetElement;
     } else {
       // Try multiple selectors for better compatibility
       const selectors = this.selectors.CHAT_INPUT.split(', ');
       for (const selector of selectors) {
-        targetElement = document.querySelector(selector.trim()) as HTMLTextAreaElement;
+        targetElement = document.querySelector(selector.trim()) as HTMLElement;
         if (targetElement) {
           this.context.logger.debug(`Found chat input using selector: ${selector.trim()}`);
           break;
@@ -202,8 +202,16 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
 
     try {
-      // Store the original value
-      const originalValue = targetElement.value || '';
+      // Check if we're on the homepage and use the special method
+      const currentUrl = window.location.href;
+      if (currentUrl === 'https://www.perplexity.ai/' || currentUrl === 'https://perplexity.ai/') {
+        this.context.logger.info('Homepage detected, using InputEvent method for text insertion');
+        return await this.insertTextViaInputEvent(targetElement, text);
+      }
+
+      // For other pages, use the existing method
+      const isContentEditable = this.isContentEditableElement(targetElement);
+      const originalValue = this.getElementContent(targetElement);
 
       // Focus the input element
       targetElement.focus();
@@ -211,7 +219,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       // Insert the text by updating the value and dispatching appropriate events
       // Append the text to the original value on a new line if there's existing content
       const newContent = originalValue ? originalValue + '\n\n' + text : text;
-      targetElement.value = newContent;
+      
+      if (isContentEditable) {
+        (targetElement as HTMLElement).textContent = newContent;
+      } else {
+        (targetElement as HTMLInputElement | HTMLTextAreaElement).value = newContent;
+      }
 
       // Dispatch events to simulate user typing for better compatibility
       targetElement.dispatchEvent(new Event('input', { bubbles: true }));
@@ -222,7 +235,8 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         success: true,
         originalLength: originalValue.length,
         newLength: text.length,
-        totalLength: newContent.length
+        totalLength: newContent.length,
+        method: 'standard'
       });
 
       this.context.logger.info(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
@@ -232,6 +246,78 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       this.context.logger.error(`Error inserting text into Perplexity chat input: ${errorMessage}`);
       this.emitExecutionFailed('insertText', errorMessage);
       return false;
+    }
+  }
+
+  /**
+   * Special method for inserting text on the homepage using InputEvent
+   */
+  private async insertTextViaInputEvent(element: HTMLElement, text: string): Promise<boolean> {
+    try {
+      const originalValue = this.getElementContent(element);
+      
+      // Focus the element
+      element.focus();
+
+      // Select all existing content
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      // Prepare text to enter with proper line breaks
+      const textToEnter = originalValue ? originalValue + '\n\n' + text : text;
+
+      // Use InputEvent instead of execCommand
+      element.dispatchEvent(new InputEvent('input', {
+        inputType: 'insertText',
+        data: textToEnter,
+        bubbles: true,
+        cancelable: true
+      }));
+
+      // Also dispatch change event for compatibility
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Emit success event
+      this.emitExecutionCompleted('insertText', { text }, {
+        success: true,
+        originalLength: originalValue.length,
+        newLength: text.length,
+        totalLength: textToEnter.length,
+        method: 'InputEvent-homepage'
+      });
+
+      this.context.logger.info(`Text inserted successfully via InputEvent on homepage. Original: ${originalValue.length}, Added: ${text.length}, Total: ${textToEnter.length}`);
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.context.logger.error(`InputEvent method failed: ${errorMessage}`);
+      this.emitExecutionFailed('insertText', `InputEvent method failed: ${errorMessage}`);
+      return false;
+    }
+  }
+
+  /**
+   * Check if an element is contenteditable
+   */
+  private isContentEditableElement(element: HTMLElement): boolean {
+    return element.isContentEditable || 
+           element.getAttribute('contenteditable') === 'true' ||
+           element.hasAttribute('contenteditable');
+  }
+
+  /**
+   * Get content from element (handles both contenteditable and input/textarea)
+   */
+  private getElementContent(element: HTMLElement): string {
+    if (this.isContentEditableElement(element)) {
+      return element.textContent || element.innerText || '';
+    } else {
+      return (element as HTMLInputElement | HTMLTextAreaElement).value || '';
     }
   }
 
@@ -718,8 +804,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       });
 
       if (shouldReinject) {
-        this.context.logger.debug('MCP popover removed, attempting to re-inject');
-        this.setupUIIntegration();
+        // Only attempt re-injection if we can find an insertion point
+        const insertionPoint = this.findButtonInsertionPoint();
+        if (insertionPoint) {
+          this.context.logger.debug('MCP popover removed, attempting to re-inject');
+          this.setupUIIntegration();
+        }
       }
     });
 
@@ -745,27 +835,33 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     // Wait for page to be ready, then inject MCP popover
     this.waitForPageReady().then(() => {
       this.injectMCPPopoverWithRetry();
+    }).catch((error) => {
+      this.context.logger.warn('Failed to wait for page ready:', error);
+      // Don't retry if we can't find insertion point
     });
 
     // Set up periodic check to ensure popover stays injected
-    this.setupPeriodicPopoverCheck();
+    // this.setupPeriodicPopoverCheck();
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 5; // Maximum 10 seconds (20 * 500ms)
+      
       const checkReady = () => {
-        // Check if the page has the necessary elements
+        attempts++;
         const insertionPoint = this.findButtonInsertionPoint();
         if (insertionPoint) {
           this.context.logger.debug('Page ready for MCP popover injection');
           resolve();
+        } else if (attempts >= maxAttempts) {
+          this.context.logger.warn('Page ready check timed out - no insertion point found');
+          reject(new Error('No insertion point found after maximum attempts'));
         } else {
-          // Retry after a short delay
           setTimeout(checkReady, 500);
         }
       };
-
-      // Start checking immediately, but with a small initial delay
       setTimeout(checkReady, 100);
     });
   }
@@ -801,8 +897,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     if (!this.popoverCheckInterval) {
       this.popoverCheckInterval = setInterval(() => {
         if (!document.getElementById('mcp-popover-container')) {
-          this.context.logger.debug('MCP popover missing, attempting to re-inject');
-          this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          // Only attempt re-injection if we can find an insertion point
+          const insertionPoint = this.findButtonInsertionPoint();
+          if (insertionPoint) {
+            this.context.logger.debug('MCP popover missing, attempting to re-inject');
+            this.injectMCPPopoverWithRetry(3); // Fewer retries for periodic checks
+          }
         }
       }, 5000);
     }

@@ -41,6 +41,18 @@ export class SidebarPlugin implements AdapterPlugin {
       return;
     }
 
+    const hostname = window.location.hostname;
+    const pathname = window.location.pathname;
+    
+    // Handle all GitHub domains
+    if (hostname === 'github.com' || hostname.endsWith('.github.com')) {
+      // Only support GitHub Copilot pages
+      if (!pathname.startsWith('/copilot')) {
+        this.context?.logger.info(`[SidebarPlugin] Skipping activation on GitHub page: ${pathname}`);
+        return;
+      }
+    }
+
     this.context?.logger.info('[SidebarPlugin] Activating sidebar plugin...');
 
     try {
