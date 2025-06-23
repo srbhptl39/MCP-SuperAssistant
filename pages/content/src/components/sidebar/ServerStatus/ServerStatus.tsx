@@ -51,7 +51,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
   // Debug logging to track status changes
   useEffect(() => {
-    console.log(`[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
+    console.debug(`[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
   }, [connectionStatus, initialStatus, status, isConnected]);
 
   // Destructure with fallbacks in case useBackgroundCommunication fails

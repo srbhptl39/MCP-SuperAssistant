@@ -46,7 +46,7 @@ class CircuitBreaker {
     } else {
       this.eventBus = eventBus;
     }
-    console.log('[CircuitBreaker] Initialized with config:', this.config);
+    console.debug('[CircuitBreaker] Initialized with config:', this.config);
   }
 
   /**
@@ -211,7 +211,7 @@ class CircuitBreaker {
     this.successCount = 0;
     this.lastFailureTime = 0;
     this.nextAttemptTime = 0;
-    console.log('[CircuitBreaker] Cleaned up');
+    console.debug('[CircuitBreaker] Cleaned up');
   }
 }
 

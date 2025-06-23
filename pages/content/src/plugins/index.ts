@@ -20,7 +20,7 @@ export async function cleanupPluginSystem(): Promise<void> {
   try {
     const { pluginRegistry } = await import('./plugin-registry');
     await pluginRegistry.cleanup();
-    console.log('[Plugin System] Cleaned up successfully');
+    console.debug('[Plugin System] Cleaned up successfully');
   } catch (error) {
     console.error('[Plugin System] Failed to cleanup:', error);
   }

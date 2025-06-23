@@ -113,7 +113,7 @@ export class AutomationService {
       return;
     }
 
-    console.log('[AutomationService] Initializing automation service');
+    console.debug('[AutomationService] Initializing automation service');
 
     // Initialize store access functions
     await initializeStoreAccess();
@@ -128,7 +128,7 @@ export class AutomationService {
     await this.exposeAutomationStateToWindow();
 
     this.isInitialized = true;
-    console.log('[AutomationService] Automation service initialized successfully');
+    console.debug('[AutomationService] Automation service initialized successfully');
   }
 
   /**
@@ -140,7 +140,7 @@ export class AutomationService {
       return;
     }
 
-    console.log('[AutomationService] Cleaning up automation service');
+    console.debug('[AutomationService] Cleaning up automation service');
 
     // Remove DOM event listener
     if (this.eventListener) {
@@ -149,7 +149,7 @@ export class AutomationService {
     }
 
     this.isInitialized = false;
-    console.log('[AutomationService] Automation service cleaned up');
+    console.debug('[AutomationService] Automation service cleaned up');
   }
 
   /**
@@ -264,7 +264,7 @@ export class AutomationService {
    * Currently just logs the execution, but extensible for future features
    */
   private handleAutoExecute(detail: ToolExecutionCompleteDetail): void {
-    console.log('[AutomationService] Auto Execute: Tool execution completed', {
+    console.debug('[AutomationService] Auto Execute: Tool execution completed', {
       functionName: detail.functionName,
       callId: detail.callId,
       hasResult: !!detail.result,
@@ -316,7 +316,7 @@ export class AutomationService {
           const success = await attachFile(detail.file);
           
           if (success) {
-            console.log('[AutomationService] File attached successfully via auto insert');
+            console.debug('[AutomationService] File attached successfully via auto insert');
             
             // Optionally insert confirmation text if provided
             if (detail.confirmationText && insertText) {
@@ -356,7 +356,7 @@ export class AutomationService {
           const success = await insertText(detail.result);
           
           if (success) {
-            console.log('[AutomationService] Text inserted successfully via auto insert');
+            console.debug('[AutomationService] Text inserted successfully via auto insert');
             return true;
           } else {
             console.warn('[AutomationService] Text insertion failed');
@@ -421,7 +421,7 @@ export class AutomationService {
         const success = await submitForm();
         
         if (success) {
-          console.log('[AutomationService] Form submitted successfully via auto submit');
+          console.debug('[AutomationService] Form submitted successfully via auto submit');
           return true;
         } else {
           console.warn('[AutomationService] Form submission failed');
@@ -461,7 +461,7 @@ export class AutomationService {
    * Force trigger automation for testing/debugging purposes
    */
   public async triggerTestAutomation(detail: ToolExecutionCompleteDetail): Promise<void> {
-    console.log('[AutomationService] Triggering test automation');
+    console.debug('[AutomationService] Triggering test automation');
     await this.handleToolExecutionComplete(new CustomEvent('mcp:tool-execution-complete', { detail }));
   }
 

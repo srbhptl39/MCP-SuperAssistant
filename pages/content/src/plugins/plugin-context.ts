@@ -6,7 +6,7 @@ import { getUniqueId, createElement, waitForElement, injectCSS, observeChanges, 
 // Basic logger implementation
 const consoleLogger = {
   debug: (...args: any[]) => console.debug('[PluginContext]', ...args),
-  info: (...args: any[]) => console.info('[PluginContext]', ...args),
+  info: (...args: any[]) => console.debug('[PluginContext]', ...args),
   warn: (...args: any[]) => console.warn('[PluginContext]', ...args),
   error: (...args: any[]) => console.error('[PluginContext]', ...args),
 };

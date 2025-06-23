@@ -52,7 +52,7 @@ class GlobalErrorHandler {
     this.setupEventBusIntegration();
 
     this.initialized = true;
-    console.log('[GlobalErrorHandler] Initialized successfully');
+    console.debug('[GlobalErrorHandler] Initialized successfully');
   }
 
   /**
@@ -219,7 +219,7 @@ class GlobalErrorHandler {
   clearErrorReports(): void {
     this.errorReports = [];
     this.errorCounts.clear();
-    console.log('[GlobalErrorHandler] Error reports cleared');
+    console.debug('[GlobalErrorHandler] Error reports cleared');
   }
 
   /**
@@ -316,7 +316,7 @@ class GlobalErrorHandler {
     this.errorReports = [];
     this.errorCounts.clear();
     this.initialized = false;
-    console.log('[GlobalErrorHandler] Cleaned up');
+    console.debug('[GlobalErrorHandler] Cleaned up');
   }
 }
 

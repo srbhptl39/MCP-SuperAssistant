@@ -65,7 +65,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     super();
     DeepSeekAdapter.instanceCount++;
     this.instanceId = DeepSeekAdapter.instanceCount;
-    console.log(`[DeepSeekAdapter] Instance #${this.instanceId} created. Total instances: ${DeepSeekAdapter.instanceCount}`);
+    console.debug(`[DeepSeekAdapter] Instance #${this.instanceId} created. Total instances: ${DeepSeekAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -76,7 +76,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing DeepSeek adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing DeepSeek adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -94,7 +94,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating DeepSeek adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating DeepSeek adapter instance #${this.instanceId}...`);
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -115,7 +115,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating DeepSeek adapter...');
+    this.context.logger.debug('Deactivating DeepSeek adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -135,7 +135,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up DeepSeek adapter...');
+    this.context.logger.debug('Cleaning up DeepSeek adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -164,7 +164,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into DeepSeek chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into DeepSeek chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
 
@@ -208,7 +208,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
-        this.context.logger.info(`Text inserted into textarea successfully. Original: ${currentText.length}, Added: ${text.length}, Total: ${newContent.length}`);
+        this.context.logger.debug(`Text inserted into textarea successfully. Original: ${currentText.length}, Added: ${text.length}, Total: ${newContent.length}`);
       } else if (targetElement.getAttribute('contenteditable') === 'true') {
         // Handle contenteditable div
         const currentText = targetElement.textContent || '';
@@ -231,7 +231,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
         targetElement.dispatchEvent(new Event('change', { bubbles: true }));
 
-        this.context.logger.info(`Text inserted into contenteditable successfully`);
+        this.context.logger.debug(`Text inserted into contenteditable successfully`);
       } else {
         // Fallback for other element types
         const originalValue = (targetElement as any).value || targetElement.textContent || '';
@@ -247,7 +247,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
         targetElement.dispatchEvent(new Event('change', { bubbles: true }));
 
-        this.context.logger.info(`Text inserted using fallback method`);
+        this.context.logger.debug(`Text inserted using fallback method`);
       }
 
       // Emit success event to the new event system
@@ -271,7 +271,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit DeepSeek chat input');
+    this.context.logger.debug('Attempting to submit DeepSeek chat input');
 
     let submitButton: HTMLButtonElement | null = null;
 
@@ -318,7 +318,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
       });
 
-      this.context.logger.info('DeepSeek chat input submitted successfully');
+      this.context.logger.debug('DeepSeek chat input submitted successfully');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -362,7 +362,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         fallback: true
       });
 
-      this.context.logger.info('DeepSeek chat input submitted using Enter key');
+      this.context.logger.debug('DeepSeek chat input submitted using Enter key');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -377,7 +377,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -456,7 +456,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       // Trigger change event
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-      this.context.logger.info(`File attached directly to input: ${file.name}`);
+      this.context.logger.debug(`File attached directly to input: ${file.name}`);
       return true;
     } catch (error) {
       this.context.logger.error('Error attaching file to input:', error);
@@ -507,7 +507,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       dropZone.dispatchEvent(dragOverEvent);
       dropZone.dispatchEvent(dropEvent);
 
-      this.context.logger.info(`File drop simulated for: ${file.name}`);
+      this.context.logger.debug(`File drop simulated for: ${file.name}`);
       return true;
     } catch (error) {
       this.context.logger.error('Error simulating file drop:', error);
@@ -548,7 +548,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`DeepSeek adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`DeepSeek adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -601,7 +601,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -853,7 +853,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       }
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -889,7 +889,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -914,7 +914,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with new architecture');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -1000,7 +1000,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1058,7 +1058,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover (for debugging or external calls)
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -1098,7 +1098,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Check if the sidebar is properly available after navigation
    */
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       // Check if there's an active sidebar manager
@@ -1121,15 +1121,15 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Ensure MCP popover is properly connected to the sidebar after navigation
    */
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);
@@ -1138,7 +1138,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`DeepSeek page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`DeepSeek page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1167,7 +1167,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`DeepSeek host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`DeepSeek host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
@@ -1185,7 +1185,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in DeepSeek adapter:`, tools);
+    this.context.logger.debug(`Tools detected in DeepSeek adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {

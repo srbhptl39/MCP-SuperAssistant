@@ -67,7 +67,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     super();
     MistralAdapter.instanceCount++;
     this.instanceId = MistralAdapter.instanceCount;
-    console.log(`[MistralAdapter] Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`);
+    console.debug(`[MistralAdapter] Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -78,7 +78,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing Mistral adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing Mistral adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -96,7 +96,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating Mistral adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating Mistral adapter instance #${this.instanceId}...`);
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -117,7 +117,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating Mistral adapter...');
+    this.context.logger.debug('Deactivating Mistral adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -137,7 +137,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up Mistral adapter...');
+    this.context.logger.debug('Cleaning up Mistral adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -166,7 +166,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and ProseMirror editor support
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
 
@@ -313,7 +313,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         editorType: targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'
       });
 
-      this.context.logger.info(`Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`);
+      this.context.logger.debug(`Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -328,7 +328,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit Mistral chat input');
+    this.context.logger.debug('Attempting to submit Mistral chat input');
 
     let submitButton: HTMLButtonElement | null = null;
 
@@ -376,7 +376,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
       });
 
-      this.context.logger.info('Mistral chat input submitted successfully');
+      this.context.logger.debug('Mistral chat input submitted successfully');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -391,7 +391,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -428,7 +428,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
           previewFound,
           method: 'direct-input'
         });
-        this.context.logger.info(`File attached successfully: ${file.name}`);
+        this.context.logger.debug(`File attached successfully: ${file.name}`);
         return true;
       } else {
         this.emitExecutionFailed('attachFile', 'All attachment methods failed');
@@ -444,7 +444,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async attachFileDirectly(file: File): Promise<boolean> {
     try {
-      console.log('[system] Attempting direct file attachment via drag simulation on ProseMirror editor');
+      console.debug('[system] Attempting direct file attachment via drag simulation on ProseMirror editor');
       
       // Find the ProseMirror editor (drop zone) instead of textarea
       const proseMirrorEditor = document.querySelector('div.Editor-indented.ProseMirror[contenteditable="true"]') as HTMLElement;
@@ -481,7 +481,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       });
       proseMirrorEditor.dispatchEvent(dropEvent);
 
-      console.log('[system] Direct drag simulation completed on ProseMirror editor');
+      console.debug('[system] Direct drag simulation completed on ProseMirror editor');
       return true;
     } catch (error) {
       console.error('[system] Direct drag simulation failed:', error);
@@ -491,7 +491,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async attachFileViaDragDrop(file: File): Promise<boolean> {
     try {
-      console.log('[system] Attempting file attachment via drag-drop simulation');
+      console.debug('[system] Attempting file attachment via drag-drop simulation');
       
       // Load drop listener script into page context
       const success = await this.injectFileDropListener();
@@ -516,7 +516,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         '*'
       );
 
-      console.log('[system] Drag-drop simulation message sent');
+      console.debug('[system] Drag-drop simulation message sent');
       return true;
     } catch (error) {
       console.error('[system] Drag-drop simulation failed:', error);
@@ -557,7 +557,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`Mistral adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`Mistral adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -610,7 +610,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -859,7 +859,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       }
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -895,7 +895,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -920,7 +920,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with new architecture');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -1006,7 +1006,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1064,7 +1064,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover (for debugging or external calls)
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -1095,7 +1095,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       });
       
       scriptEl.remove();
-      console.log('[system] File drop listener injected successfully for Mistral');
+      console.debug('[system] File drop listener injected successfully for Mistral');
       return true;
     } catch (error) {
       this.context.logger.error('Failed to inject file drop listener:', error);
@@ -1129,8 +1129,8 @@ export class MistralAdapter extends BaseAdapterPlugin {
                                 filePreview.querySelector('.text-sm.leading-6.font-medium');
           
           if (hasFileContent) {
-            console.log(`[system] File preview found after ${checkAttempts[attemptCount]}ms:`, filePreview.textContent?.trim());
-            this.context.logger.info('File preview element found after attachment');
+            console.debug(`[system] File preview found after ${checkAttempts[attemptCount]}ms:`, filePreview.textContent?.trim());
+            this.context.logger.debug('File preview element found after attachment');
             resolve(true);
             return;
           }
@@ -1180,7 +1180,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Check if the sidebar is properly available after navigation
    */
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       // Check if there's an active sidebar manager
@@ -1203,15 +1203,15 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Ensure MCP popover is properly connected to the sidebar after navigation
    */
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);
@@ -1220,7 +1220,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`Mistral page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`Mistral page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1249,7 +1249,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`Mistral host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`Mistral host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
@@ -1267,7 +1267,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in Mistral adapter:`, tools);
+    this.context.logger.debug(`Tools detected in Mistral adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {
@@ -1277,7 +1277,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async validateDropZone(): Promise<boolean> {
     try {
-      console.log('[system] Validating drop zone availability before injection');
+      console.debug('[system] Validating drop zone availability before injection');
       
       // Split the DROP_ZONE selectors and try each one
       const dropSelectors = this.selectors.DROP_ZONE.split(', ').map(s => s.trim());
@@ -1285,7 +1285,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       for (const selector of dropSelectors) {
         const element = document.querySelector(selector);
         if (element) {
-          console.log(`[system] Drop zone validated with selector: ${selector}`);
+          console.debug(`[system] Drop zone validated with selector: ${selector}`);
           
           // Store the working selector in window for dragDropListener.js to use
           (window as any).mistralDropZoneSelector = selector;

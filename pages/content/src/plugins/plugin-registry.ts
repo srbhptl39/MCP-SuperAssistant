@@ -73,7 +73,7 @@ class PluginRegistry {
 
       eventBus.emit('plugin:registry-initialized', { registeredPlugins: this.plugins.size, timestamp: Date.now() });
 
-      console.log('[PluginRegistry] Initialized with', this.plugins.size, 'plugins');
+      console.debug('[PluginRegistry] Initialized with', this.plugins.size, 'plugins');
 
     } catch (error) {
       // Reset initialization flag on error
@@ -99,15 +99,15 @@ class PluginRegistry {
 
     // Listen for site changes to auto-activate plugins
     const unsubscribeSiteChange = eventBus.on('app:site-changed', async ({ hostname }: EventMap['app:site-changed']) => {
-      console.log(`[PluginRegistry] Site change event received for ${hostname}, initial activation flag: ${this.isPerformingInitialActivation}`);
+      console.debug(`[PluginRegistry] Site change event received for ${hostname}, initial activation flag: ${this.isPerformingInitialActivation}`);
       
       // Skip if we're in the middle of initial activation to prevent race conditions
       if (this.isPerformingInitialActivation) {
-        console.log(`[PluginRegistry] Skipping site-change activation for ${hostname} (initial activation in progress)`);
+        console.debug(`[PluginRegistry] Skipping site-change activation for ${hostname} (initial activation in progress)`);
         return;
       }
       
-      console.log(`[PluginRegistry] Site changed to ${hostname}, attempting plugin activation`);
+      console.debug(`[PluginRegistry] Site changed to ${hostname}, attempting plugin activation`);
       await this.activatePluginForHostname(hostname);
     });
 
@@ -171,7 +171,7 @@ class PluginRegistry {
           priority: registration.config.priority || 0,
           settings: registration.config.settings || {}
         });
-        console.log(`[PluginRegistry] Also registered ${pluginName} in AdapterStore for React integration`);
+        console.debug(`[PluginRegistry] Also registered ${pluginName} in AdapterStore for React integration`);
       } catch (adapterStoreError) {
         console.warn(`[PluginRegistry] Failed to register ${pluginName} in AdapterStore:`, adapterStoreError);
         // Don't fail the entire registration if AdapterStore registration fails
@@ -179,7 +179,7 @@ class PluginRegistry {
 
       eventBus.emit('plugin:registered', { name: pluginName, version: plugin.version });
 
-      console.log(`[PluginRegistry] Registered plugin: ${pluginName} v${plugin.version}`);
+      console.debug(`[PluginRegistry] Registered plugin: ${pluginName} v${plugin.version}`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
@@ -228,7 +228,7 @@ class PluginRegistry {
       };
 
       this.adapterFactories.set(factoryName, registration);
-      console.log(`[PluginRegistry] Registered adapter factory: ${factoryName} v${factory.version}`);
+      console.debug(`[PluginRegistry] Registered adapter factory: ${factoryName} v${factory.version}`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown factory registration error';
@@ -247,7 +247,7 @@ class PluginRegistry {
     }
 
     try {
-      console.log(`[PluginRegistry] Lazily initializing adapter: ${factoryName}`);
+      console.debug(`[PluginRegistry] Lazily initializing adapter: ${factoryName}`);
       
       const adapter = factoryRegistration.factory.create();
       
@@ -257,7 +257,7 @@ class PluginRegistry {
       // Remove from factory registry since it's now initialized
       this.adapterFactories.delete(factoryName);
       
-      console.log(`[PluginRegistry] Successfully initialized adapter: ${factoryName}`);
+      console.debug(`[PluginRegistry] Successfully initialized adapter: ${factoryName}`);
       return adapter;
       
     } catch (error) {
@@ -297,7 +297,7 @@ class PluginRegistry {
 
       eventBus.emit('plugin:unregistered', { name: pluginName });
 
-      console.log(`[PluginRegistry] Unregistered plugin: ${pluginName}`);
+      console.debug(`[PluginRegistry] Unregistered plugin: ${pluginName}`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown unregistration error';
@@ -320,12 +320,12 @@ class PluginRegistry {
     }
     
     try {
-      console.log(`[PluginRegistry] activatePluginForHostname called for: ${hostname}${isInitialActivation ? ' (initial)' : ''}`);
+      console.debug(`[PluginRegistry] activatePluginForHostname called for: ${hostname}${isInitialActivation ? ' (initial)' : ''}`);
       
       const plugin = await this.findOrInitializePluginForHostname(hostname);
       
       if (!plugin) {
-        console.log(`[PluginRegistry] No plugin found for hostname: ${hostname}`);
+        console.debug(`[PluginRegistry] No plugin found for hostname: ${hostname}`);
         if (this.activePlugin) {
           await this.deactivateCurrentPlugin();
         }
@@ -334,11 +334,11 @@ class PluginRegistry {
 
       // Don't reactivate if already active
       if (this.activePlugin?.name === plugin.name) {
-        console.log(`[PluginRegistry] Plugin ${plugin.name} already active for ${hostname}, skipping activation`);
+        console.debug(`[PluginRegistry] Plugin ${plugin.name} already active for ${hostname}, skipping activation`);
         return;
       }
 
-      console.log(`[PluginRegistry] Activating plugin ${plugin.name} for hostname: ${hostname}`);
+      console.debug(`[PluginRegistry] Activating plugin ${plugin.name} for hostname: ${hostname}`);
       await this.activatePlugin(plugin.name);
     } finally {
       if (isInitialActivation) {
@@ -355,7 +355,7 @@ class PluginRegistry {
 
     // Guard against activating an already active plugin
     if (this.activePlugin && this.activePlugin.name === pluginName && registration.status === 'active') {
-      console.log(`[PluginRegistry] Plugin ${pluginName} is already active, skipping activation`);
+      console.debug(`[PluginRegistry] Plugin ${pluginName} is already active, skipping activation`);
       return;
     }
 
@@ -381,7 +381,7 @@ class PluginRegistry {
       try {
         const adapterStore = useAdapterStore.getState();
         await adapterStore.activateAdapter(pluginName);
-        console.log(`[PluginRegistry] Also activated ${pluginName} in AdapterStore for React integration`);
+        console.debug(`[PluginRegistry] Also activated ${pluginName} in AdapterStore for React integration`);
       } catch (adapterStoreError) {
         console.warn(`[PluginRegistry] Failed to activate ${pluginName} in AdapterStore:`, adapterStoreError);
         // Don't fail the entire activation if AdapterStore activation fails
@@ -392,7 +392,7 @@ class PluginRegistry {
         timestamp: Date.now(),
       });
 
-      console.log(`[PluginRegistry] Activated plugin: ${pluginName}`);
+      console.debug(`[PluginRegistry] Activated plugin: ${pluginName}`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown activation error';
@@ -427,7 +427,7 @@ class PluginRegistry {
       try {
         const adapterStore = useAdapterStore.getState();
         await adapterStore.deactivateAdapter(pluginName, 'manual-deactivation');
-        console.log(`[PluginRegistry] Also deactivated ${pluginName} in AdapterStore`);
+        console.debug(`[PluginRegistry] Also deactivated ${pluginName} in AdapterStore`);
       } catch (adapterStoreError) {
         console.warn(`[PluginRegistry] Failed to deactivate ${pluginName} in AdapterStore:`, adapterStoreError);
       }
@@ -439,7 +439,7 @@ class PluginRegistry {
       });
 
       this.activePlugin = null;
-      console.log(`[PluginRegistry] Deactivated plugin: ${pluginName}`);
+      console.debug(`[PluginRegistry] Deactivated plugin: ${pluginName}`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown deactivation error';
@@ -458,7 +458,7 @@ class PluginRegistry {
   }
 
   private findPluginForHostname(hostname: string): AdapterPlugin | null {
-    console.log(`[PluginRegistry] findPluginForHostname called with hostname: ${hostname}`);
+    console.debug(`[PluginRegistry] findPluginForHostname called with hostname: ${hostname}`);
     let bestMatch: AdapterPlugin | null = null;
     let bestMatchScore = 0;
 
@@ -467,21 +467,21 @@ class PluginRegistry {
       const { plugin, config } = registration;
       
       if (!config.enabled) {
-        console.log(`[PluginRegistry] Skipping disabled plugin: ${plugin.name}`);
+        console.debug(`[PluginRegistry] Skipping disabled plugin: ${plugin.name}`);
         continue;
       }
       
       // Special handling for SidebarPlugin - exclude it from hostname matching
       if (plugin.name === 'sidebar-plugin') {
-        console.log(`[PluginRegistry] Skipping sidebar plugin: ${plugin.name}`);
+        console.debug(`[PluginRegistry] Skipping sidebar plugin: ${plugin.name}`);
         continue;
       }
       
       // Default to 'website-adapter' if type is not specified, filter out 'sidebar' and 'core-ui'
       const pluginType = plugin.type || 'website-adapter';
-      console.log(`[PluginRegistry] Checking plugin: ${plugin.name} (type: ${pluginType})`);
+      console.debug(`[PluginRegistry] Checking plugin: ${plugin.name} (type: ${pluginType})`);
       if (pluginType !== 'website-adapter') {
-        console.log(`[PluginRegistry] Skipping non-website-adapter plugin: ${plugin.name} (type: ${pluginType})`);
+        console.debug(`[PluginRegistry] Skipping non-website-adapter plugin: ${plugin.name} (type: ${pluginType})`);
         continue; // Filter by plugin type
       }
 
@@ -489,48 +489,48 @@ class PluginRegistry {
         let match = false;
         let matchLength = 0;
         if (typeof ph === 'string') {
-          console.log(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
+          console.debug(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
           if (hostname.includes(ph)) {
             match = true;
             matchLength = ph.length;
-            console.log(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
+            console.debug(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
           }
         } else { // ph is RegExp
-          console.log(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
+          console.debug(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
           if (ph.test(hostname)) {
             match = true;
             matchLength = ph.source.length; // Use source.length for RegExp scoring
-            console.log(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
+            console.debug(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
           }
         }
         if (match) {
           const score = matchLength + (config.priority || 0); // Ensure priority is a number
-          console.log(`[PluginRegistry] Match found for ${plugin.name}: score ${score} (length: ${matchLength}, priority: ${config.priority || 0})`);
+          console.debug(`[PluginRegistry] Match found for ${plugin.name}: score ${score} (length: ${matchLength}, priority: ${config.priority || 0})`);
           if (score > bestMatchScore) {
             bestMatch = plugin;
             bestMatchScore = score;
-            console.log(`[PluginRegistry] New best match: ${plugin.name} with score ${score}`);
+            console.debug(`[PluginRegistry] New best match: ${plugin.name} with score ${score}`);
           }
         }
       }
     }
 
-    console.log(`[PluginRegistry] Best plugin match for ${hostname}:`, bestMatch?.name || 'none');
+    console.debug(`[PluginRegistry] Best plugin match for ${hostname}:`, bestMatch?.name || 'none');
     return bestMatch;
   }
 
   private findFactoryForHostname(hostname: string): AdapterFactory | null {
-    console.log(`[PluginRegistry] findFactoryForHostname called with hostname: ${hostname}`);
+    console.debug(`[PluginRegistry] findFactoryForHostname called with hostname: ${hostname}`);
     let bestMatchFactory: AdapterFactory | null = null;
     let bestMatchScore = 0;
 
     // Only look for website-adapter type factories
     for (const [, factoryRegistration] of this.adapterFactories) {
       const { factory } = factoryRegistration;
-      console.log(`[PluginRegistry] Checking factory: ${factory.name} (type: ${factory.type}) with hostnames:`, factory.hostnames);
+      console.debug(`[PluginRegistry] Checking factory: ${factory.name} (type: ${factory.type}) with hostnames:`, factory.hostnames);
       
       if (factory.type !== 'website-adapter') {
-        console.log(`[PluginRegistry] Skipping factory ${factory.name} - not a website-adapter (type: ${factory.type})`);
+        console.debug(`[PluginRegistry] Skipping factory ${factory.name} - not a website-adapter (type: ${factory.type})`);
         continue; // Filter by plugin type
       }
 
@@ -538,59 +538,59 @@ class PluginRegistry {
         let match = false;
         let matchLength = 0;
         if (typeof ph === 'string') {
-          console.log(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
+          console.debug(`[PluginRegistry] Checking string hostname: ${ph} against ${hostname}`);
           if (hostname.includes(ph)) {
             match = true;
             matchLength = ph.length;
-            console.log(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
+            console.debug(`[PluginRegistry] String match found: ${ph} matches ${hostname}`);
           }
         } else { // ph is RegExp
-          console.log(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
+          console.debug(`[PluginRegistry] Checking RegExp hostname: ${ph.source} against ${hostname}`);
           if (ph.test(hostname)) {
             match = true;
             matchLength = ph.source.length;
-            console.log(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
+            console.debug(`[PluginRegistry] RegExp match found: ${ph.source} matches ${hostname}`);
           }
         }
         if (match) {
           const priority = factory.config.priority || 0;
           const score = matchLength + priority;
-          console.log(`[PluginRegistry] Match found for ${factory.name}: score ${score} (length: ${matchLength}, priority: ${priority})`);
+          console.debug(`[PluginRegistry] Match found for ${factory.name}: score ${score} (length: ${matchLength}, priority: ${priority})`);
           if (score > bestMatchScore) {
             bestMatchFactory = factory;
             bestMatchScore = score;
-            console.log(`[PluginRegistry] New best match: ${factory.name} with score ${score}`);
+            console.debug(`[PluginRegistry] New best match: ${factory.name} with score ${score}`);
           }
         }
       }
     }
 
-    console.log(`[PluginRegistry] Best factory match for ${hostname}:`, bestMatchFactory?.name || 'none');
+    console.debug(`[PluginRegistry] Best factory match for ${hostname}:`, bestMatchFactory?.name || 'none');
     return bestMatchFactory;
   }
 
   private async findOrInitializePluginForHostname(hostname: string): Promise<AdapterPlugin | null> {
-    console.log(`[PluginRegistry] findOrInitializePluginForHostname called with: ${hostname}`);
+    console.debug(`[PluginRegistry] findOrInitializePluginForHostname called with: ${hostname}`);
     
     // First check for already initialized plugins
     let plugin = this.findPluginForHostname(hostname);
     if (plugin) {
-      console.log(`[PluginRegistry] Found initialized plugin for ${hostname}: ${plugin.name}`);
+      console.debug(`[PluginRegistry] Found initialized plugin for ${hostname}: ${plugin.name}`);
       return plugin;
     }
 
     // Then check for factories that can be lazily initialized
     const factory = this.findFactoryForHostname(hostname);
     if (factory) {
-      console.log(`[PluginRegistry] Found factory for ${hostname}: ${factory.name}, initializing lazily`);
+      console.debug(`[PluginRegistry] Found factory for ${hostname}: ${factory.name}, initializing lazily`);
       plugin = await this.initializeAdapterFromFactory(factory.name);
       if (plugin) {
-        console.log(`[PluginRegistry] Successfully initialized ${plugin.name} for ${hostname}`);
+        console.debug(`[PluginRegistry] Successfully initialized ${plugin.name} for ${hostname}`);
         return plugin;
       }
     }
 
-    console.log(`[PluginRegistry] No plugin or factory found for hostname: ${hostname}`);
+    console.debug(`[PluginRegistry] No plugin or factory found for hostname: ${hostname}`);
     return null;
   }
 
@@ -924,7 +924,7 @@ class PluginRegistry {
         },
       });
       
-      console.log(`[PluginRegistry] Successfully registered SidebarPlugin (initialized) and ${this.adapterFactories.size} adapter factories (lazy)`);
+      console.debug(`[PluginRegistry] Successfully registered SidebarPlugin (initialized) and ${this.adapterFactories.size} adapter factories (lazy)`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';
       console.error('[PluginRegistry] Failed to register built-in adapters:', errorMessage);
@@ -978,9 +978,9 @@ class PluginRegistry {
   }
 
   setInitialActivationFlag(flag: boolean): void {
-    console.log(`[PluginRegistry] setInitialActivationFlag called with: ${flag}, current flag: ${this.isPerformingInitialActivation}`);
+    console.debug(`[PluginRegistry] setInitialActivationFlag called with: ${flag}, current flag: ${this.isPerformingInitialActivation}`);
     this.isPerformingInitialActivation = flag;
-    console.log(`[PluginRegistry] Initial activation flag set to: ${flag}`);
+    console.debug(`[PluginRegistry] Initial activation flag set to: ${flag}`);
   }
 
   // Debug information
@@ -1005,7 +1005,7 @@ class PluginRegistry {
       for (const [name, registration] of this.plugins.entries()) {
         try {
           await registration.plugin.cleanup();
-          console.log(`[PluginRegistry] Cleaned up plugin: ${name}`);
+          console.debug(`[PluginRegistry] Cleaned up plugin: ${name}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown cleanup error';
           console.error(`[PluginRegistry] Failed to cleanup plugin ${name}:`, errorMessage);
@@ -1033,7 +1033,7 @@ class PluginRegistry {
       this.context = null;
       this.initializationPromise = null;
       
-      console.log('[PluginRegistry] Cleanup completed');
+      console.debug('[PluginRegistry] Cleanup completed');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown cleanup error';
       console.error('[PluginRegistry] Cleanup failed:', errorMessage);
@@ -1137,7 +1137,7 @@ export async function initializePluginRegistry(): Promise<void> {
     },
     logger: {
       debug: (...args: any[]) => console.debug('[Plugin]', ...args),
-      info: (...args: any[]) => console.info('[Plugin]', ...args),
+      info: (...args: any[]) => console.debug('[Plugin]', ...args),
       warn: (...args: any[]) => console.warn('[Plugin]', ...args),
       error: (...args: any[]) => console.error('[Plugin]', ...args),
     },

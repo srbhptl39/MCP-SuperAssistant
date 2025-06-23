@@ -65,7 +65,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     super();
     T3ChatAdapter.instanceCount++;
     this.instanceId = T3ChatAdapter.instanceCount;
-    console.log(`[T3ChatAdapter] Instance #${this.instanceId} created. Total instances: ${T3ChatAdapter.instanceCount}`);
+    console.debug(`[T3ChatAdapter] Instance #${this.instanceId} created. Total instances: ${T3ChatAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -76,7 +76,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing T3Chat adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing T3Chat adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -94,7 +94,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating T3Chat adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating T3Chat adapter instance #${this.instanceId}...`);
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -115,7 +115,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating T3Chat adapter...');
+    this.context.logger.debug('Deactivating T3Chat adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -135,7 +135,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up T3Chat adapter...');
+    this.context.logger.debug('Cleaning up T3Chat adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -164,7 +164,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into T3Chat chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into T3Chat chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
 
@@ -253,7 +253,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
                 targetElement.getAttribute('contenteditable') === 'true' ? 'execCommand' : 'textContent'
       });
 
-      this.context.logger.info(`Text inserted successfully into T3Chat`);
+      this.context.logger.debug(`Text inserted successfully into T3Chat`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -268,7 +268,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit T3Chat chat input');
+    this.context.logger.debug('Attempting to submit T3Chat chat input');
 
     let submitButton: HTMLButtonElement | null = null;
 
@@ -316,7 +316,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
         buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
       });
 
-      this.context.logger.info('T3Chat chat input submitted successfully');
+      this.context.logger.debug('T3Chat chat input submitted successfully');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -365,7 +365,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
         method: 'enterKeySimulation'
       });
 
-      this.context.logger.info('T3Chat form submitted via Enter key simulation');
+      this.context.logger.debug('T3Chat form submitted via Enter key simulation');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -380,7 +380,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -427,7 +427,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
         method: 'fileInput.files'
       });
 
-      this.context.logger.info(`File attached successfully: ${file.name}`);
+      this.context.logger.debug(`File attached successfully: ${file.name}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -470,7 +470,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`T3Chat adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`T3Chat adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -523,7 +523,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -770,7 +770,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
       }
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -806,7 +806,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -831,7 +831,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with new architecture');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -917,7 +917,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -975,7 +975,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover (for debugging or external calls)
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -991,7 +991,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
       setTimeout(() => {
         const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
         if (filePreview) {
-          this.context.logger.info('File preview element found after attachment');
+          this.context.logger.debug('File preview element found after attachment');
           resolve(true);
         } else {
           this.context.logger.warn('File preview element not found after attachment');
@@ -1030,7 +1030,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Check if the sidebar is properly available after navigation
    */
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       // Check if there's an active sidebar manager
@@ -1053,15 +1053,15 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Ensure MCP popover is properly connected to the sidebar after navigation
    */
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);
@@ -1070,7 +1070,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`T3Chat page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`T3Chat page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1099,7 +1099,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`T3Chat host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`T3Chat host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
@@ -1117,7 +1117,7 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in T3Chat adapter:`, tools);
+    this.context.logger.debug(`Tools detected in T3Chat adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {

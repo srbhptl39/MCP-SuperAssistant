@@ -19,7 +19,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
 
   // Override or implement methods specific to ExampleForum
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into ${options?.targetElement ? 'specified element' : 'active element'}`);
+    this.context.logger.debug(`Attempting to insert text into ${options?.targetElement ? 'specified element' : 'active element'}`);
     let targetElement: HTMLElement | null = null;
 
     if (options?.targetElement) {
@@ -31,7 +31,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
     if (targetElement && (targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA')) {
       (targetElement as HTMLInputElement | HTMLTextAreaElement).value = text;
       targetElement.dispatchEvent(new Event('input', { bubbles: true })); // Ensure reactivity
-      this.context.logger.info('Text inserted successfully.');
+      this.context.logger.debug('Text inserted successfully.');
       
       // Emit event for tracking
       this.context.eventBus.emit('tool:execution-completed', {
@@ -57,7 +57,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
       return false;
     }
     const threadUrl = `https://${this.hostnames[0]}/threads/${threadId}`;
-    this.context.logger.info(`Navigating to thread: ${threadUrl}`);
+    this.context.logger.debug(`Navigating to thread: ${threadUrl}`);
     try {
       // Assuming a utility or direct window.location change
       // For extensions, this might involve sending a message to the background script
@@ -80,7 +80,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
   }
 
   async postReply(threadId: string, content: string): Promise<boolean> {
-    this.context.logger.info(`Attempting to post reply to thread ${threadId}`);
+    this.context.logger.debug(`Attempting to post reply to thread ${threadId}`);
     // 1. Navigate to the thread (or ensure we are on the correct page)
     // await this.navigateToThread(threadId); // Potentially
 
@@ -102,7 +102,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
       return false;
     }
     submitButton.click();
-    this.context.logger.info('Reply submitted successfully.');
+    this.context.logger.debug('Reply submitted successfully.');
     
     // Emit event for tracking
     this.context.eventBus.emit('tool:execution-completed', {
@@ -146,7 +146,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
   }
 
   protected async initializePlugin(): Promise<void> {
-    this.context.logger.info('Initializing ExampleForumAdapter...');
+    this.context.logger.debug('Initializing ExampleForumAdapter...');
     // Specific initialization, e.g., check for forum-specific global JS objects or DOM elements
     
     // Check if we're on a forum page
@@ -159,14 +159,14 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
     
     const isForumPage = forumIndicators.some(selector => document.querySelector(selector));
     if (isForumPage) {
-      this.context.logger.info('Forum page detected, adapter ready for forum-specific operations');
+      this.context.logger.debug('Forum page detected, adapter ready for forum-specific operations');
     } else {
       this.context.logger.warn('Forum indicators not found, adapter may have limited functionality');
     }
   }
 
   protected async activatePlugin(): Promise<void> {
-    this.context.logger.info('Activating ExampleForumAdapter...');
+    this.context.logger.debug('Activating ExampleForumAdapter...');
     // Add event listeners specific to forum interactions, if needed
     
     // Listen for thread navigation
@@ -177,7 +177,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
   }
 
   protected async deactivatePlugin(): Promise<void> {
-    this.context.logger.info('Deactivating ExampleForumAdapter...');
+    this.context.logger.debug('Deactivating ExampleForumAdapter...');
     // Remove event listeners added during activation
     
     document.removeEventListener('click', this.handleThreadClick.bind(this));
@@ -185,7 +185,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
   }
 
   protected async cleanupPlugin(): Promise<void> {
-    this.context.logger.info('Cleaning up ExampleForumAdapter...');
+    this.context.logger.debug('Cleaning up ExampleForumAdapter...');
     // Final cleanup - already handled in deactivatePlugin for this adapter
   }
 
@@ -194,7 +194,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
     if (target.matches('a[href*="/threads/"]')) {
       const href = target.getAttribute('href');
       if (href) {
-        this.context.logger.info(`Thread link clicked: ${href}`);
+        this.context.logger.debug(`Thread link clicked: ${href}`);
         // Could emit an event here for tracking
         this.context.eventBus.emit('app:site-changed', {
           site: href,
@@ -207,7 +207,7 @@ export class ExampleForumAdapter extends BaseAdapterPlugin {
   private handleFormSubmit(event: Event): void {
     const form = event.target as HTMLFormElement;
     if (form.matches('.reply-form, .post-form')) {
-      this.context.logger.info('Forum form submission detected');
+      this.context.logger.debug('Forum form submission detected');
       // Could emit an event here for tracking
       this.context.eventBus.emit('tool:execution-completed', {
         execution: {

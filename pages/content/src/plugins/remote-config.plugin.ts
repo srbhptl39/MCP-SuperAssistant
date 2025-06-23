@@ -25,13 +25,13 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     // Set up event listeners
     this.setupEventListeners();
     
-    context.logger.info('[RemoteConfigPlugin] Remote Config plugin initialized successfully');
+    context.logger.debug('[RemoteConfigPlugin] Remote Config plugin initialized successfully');
   }
 
   async activate(): Promise<void> {
     if (this.isActive) return;
     
-    this.context?.logger.info('[RemoteConfigPlugin] Activating Remote Config plugin');
+    this.context?.logger.debug('[RemoteConfigPlugin] Activating Remote Config plugin');
     
     try {
       // Initial fetch
@@ -48,7 +48,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
         version: this.version
       });
       
-      this.context?.logger.info('[RemoteConfigPlugin] Remote Config plugin activated successfully');
+      this.context?.logger.debug('[RemoteConfigPlugin] Remote Config plugin activated successfully');
     } catch (error) {
       this.context?.logger.error('[RemoteConfigPlugin] Failed to activate:', error);
       throw error;
@@ -58,12 +58,12 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   async deactivate(): Promise<void> {
     if (!this.isActive) return;
     
-    this.context?.logger.info('[RemoteConfigPlugin] Deactivating Remote Config plugin');
+    this.context?.logger.debug('[RemoteConfigPlugin] Deactivating Remote Config plugin');
     
     this.stopPeriodicFetch();
     this.isActive = false;
     
-    this.context?.logger.info('[RemoteConfigPlugin] Remote Config plugin deactivated');
+    this.context?.logger.debug('[RemoteConfigPlugin] Remote Config plugin deactivated');
   }
 
   async cleanup(): Promise<void> {
@@ -96,7 +96,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
         return;
       }
 
-      this.context.logger.info('[RemoteConfigPlugin] Fetching remote config...');
+      this.context.logger.debug('[RemoteConfigPlugin] Fetching remote config...');
       
       // Set loading state
       const configStore = this.context.stores.config?.();
@@ -123,7 +123,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
         configCount: Object.keys(getAll(remoteConfig)).length
       });
       
-      this.context.logger.info('[RemoteConfigPlugin] Remote config fetched successfully');
+      this.context.logger.debug('[RemoteConfigPlugin] Remote config fetched successfully');
       
     } catch (error) {
       this.retryCount++;
@@ -206,7 +206,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
             timestamp: Date.now()
           });
           
-          this.context?.logger.info(`[RemoteConfigPlugin] Updated ${Object.keys(features).length} feature flags`);
+          this.context?.logger.debug(`[RemoteConfigPlugin] Updated ${Object.keys(features).length} feature flags`);
         }
       }
     } catch (error) {
@@ -254,7 +254,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
           }
           
           changes.push('notifications');
-          this.context?.logger.info(`[RemoteConfigPlugin] Processed ${notifications.length} notifications`);
+          this.context?.logger.debug(`[RemoteConfigPlugin] Processed ${notifications.length} notifications`);
         }
       }
     } catch (error) {
@@ -325,13 +325,13 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     
     // Listen for extension updates
     this.context.eventBus.on('app:version-updated', async (data) => {
-      this.context?.logger.info('[RemoteConfigPlugin] Extension version updated, fetching config');
+      this.context?.logger.debug('[RemoteConfigPlugin] Extension version updated, fetching config');
       await this.handleVersionUpdate(data);
     });
     
     // Listen for user segment changes
     this.context.eventBus.on('user:segment-changed', (data) => {
-      this.context?.logger.info('[RemoteConfigPlugin] User segment changed:', data);
+      this.context?.logger.debug('[RemoteConfigPlugin] User segment changed:', data);
       // Re-evaluate feature flags and notifications
       this.fetchConfig(true);
     });

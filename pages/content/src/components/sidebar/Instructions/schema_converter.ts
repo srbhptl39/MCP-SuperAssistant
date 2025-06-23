@@ -505,15 +505,15 @@ export type { JsonSchema };
     }
 
     let csn = jsonSchemaToCsn(jsonschematest1);
-    console.log(csn);
+    console.debug(csn);
 
     let jsonschema = csnToJsonSchema(csn);
-    console.log(jsonschema);
+    console.debug(jsonschema);
 
     let csn2 = 'o {p {path:s r; edits:l[o {p {oldText:s r "Text to search for - must match exactly"; newText:s r "Text to replace with"} ap f}] r; dryRun:b d=false "Preview changes using git-style diff format"} ap f}';
     let jsonschema2 = csnToJsonSchema(csn2);
-    console.log(jsonschema2);
+    console.debug(jsonschema2);
 
     let csn3 = jsonSchemaToCsn(jsonschema2);
-    console.log(csn3);
+    console.debug(csn3);
   */

@@ -1101,7 +1101,7 @@ const attachResultAsFile = async (
     } else {
       // Fallback: Optimistic success for adapters without explicit attachFile method
       // This maintains compatibility while providing user feedback
-      console.log('Adapter does not have attachFile method, using optimistic success');
+      console.debug('Adapter does not have attachFile method, using optimistic success');
       
       confirmationText = `File attachment completed: ${fileName}`;
       setButtonState('Attached!', 'attach-success', true);
@@ -1356,7 +1356,7 @@ export const displayResult = (
 
       // Check result length and handle accordingly
       if (rawResultText.length > MAX_INSERT_LENGTH && WEBSITE_NAME_FOR_MAX_INSERT_LENGTH_CHECK.includes(websiteName)) {
-        console.log(`Result length (${wrapperText.length}) exceeds ${MAX_INSERT_LENGTH}. Attaching as file.`);
+        console.debug(`Result length (${wrapperText.length}) exceeds ${MAX_INSERT_LENGTH}. Attaching as file.`);
         await attachResultAsFile(
           adapter,
           functionName,
@@ -1405,7 +1405,7 @@ export const displayResult = (
             
             // Fallback to legacy method if available
             if (typeof adapter.insertTextIntoInput === 'function') {
-              console.log('Falling back to legacy insertTextIntoInput method');
+              console.debug('Falling back to legacy insertTextIntoInput method');
               
               // Efficient event dispatch with requestAnimationFrame
               requestAnimationFrame(() => {
@@ -1445,7 +1445,7 @@ export const displayResult = (
           }
         } else if (typeof adapter.insertTextIntoInput === 'function') {
           // Legacy method fallback
-          console.log('Using legacy insertTextIntoInput method');
+          console.debug('Using legacy insertTextIntoInput method');
           
           // Efficient event dispatch with requestAnimationFrame
           requestAnimationFrame(() => {

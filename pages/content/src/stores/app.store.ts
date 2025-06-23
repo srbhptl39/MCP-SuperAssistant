@@ -3,7 +3,7 @@ import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { eventBus, initializeEventBus } from '../events'; // Assuming initializeEventBus might be called here or in a main initializer
 import type { GlobalSettings } from '../types/stores';
 // Placeholder for initializePluginRegistry - will be properly imported when plugin system is built
-const initializePluginRegistry = async () => console.log('Plugin registry initialized (placeholder)');
+const initializePluginRegistry = async () => console.debug('Plugin registry initialized (placeholder)');
 
 export interface AppState {
   isInitialized: boolean;
@@ -43,11 +43,11 @@ export const useAppStore = create<AppState>()(
         
         initialize: async () => {
           if (get().isInitialized) {
-            console.log('[AppStore] Already initialized.');
+            console.debug('[AppStore] Already initialized.');
             return;
           }
           
-          console.log('[AppStore] Initializing...');
+          console.debug('[AppStore] Initializing...');
           try {
             set({ initializationError: null });
             
@@ -57,7 +57,7 @@ export const useAppStore = create<AppState>()(
             await initializePluginRegistry(); // Placeholder for actual plugin system init
             
             set({ isInitialized: true, initializationError: null });
-            console.log('[AppStore] Initialization complete.');
+            console.debug('[AppStore] Initialization complete.');
             eventBus.emit('app:initialized', { version: '0.1.0', timestamp: Date.now() }); // Example version
             
           } catch (error: unknown) {
@@ -73,7 +73,7 @@ export const useAppStore = create<AppState>()(
             currentSite: siteInfo.site,
             currentHost: siteInfo.host,
           });
-          console.log(`[AppStore] Site changed to: ${siteInfo.site}`);
+          console.debug(`[AppStore] Site changed to: ${siteInfo.site}`);
           eventBus.emit('app:site-changed', { site: siteInfo.site, hostname: siteInfo.host });
         },
         
@@ -81,12 +81,12 @@ export const useAppStore = create<AppState>()(
           set(state => ({
             globalSettings: { ...state.globalSettings, ...settings }
           }));
-          console.log('[AppStore] Settings updated:', settings);
+          console.debug('[AppStore] Settings updated:', settings);
           eventBus.emit('app:settings-updated', { settings });
         },
         
         resetState: () => {
-          console.log('[AppStore] Resetting state.');
+          console.debug('[AppStore] Resetting state.');
           set(initialState); 
         },
       }),

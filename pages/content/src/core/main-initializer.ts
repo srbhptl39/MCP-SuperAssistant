@@ -27,7 +27,7 @@ class Logger {
   log(message: string, ...args: any[]): void {
     logMessage(`${this.prefix} ${message}`);
     if (args.length > 0) {
-      console.log(...args);
+      console.debug(...args);
     }
   }
 

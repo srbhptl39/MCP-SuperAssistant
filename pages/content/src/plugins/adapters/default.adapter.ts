@@ -29,7 +29,7 @@ export class DefaultAdapter extends BaseAdapterPlugin {
         }
       });
       
-      this.context.logger.info('Text inserted successfully into', activeElement.tagName);
+      this.context.logger.debug('Text inserted successfully into', activeElement.tagName);
       return true;
     }
 
@@ -52,7 +52,7 @@ export class DefaultAdapter extends BaseAdapterPlugin {
         }
       });
       
-      this.context.logger.info('Text inserted successfully into contenteditable element');
+      this.context.logger.debug('Text inserted successfully into contenteditable element');
       return true;
     }
 
@@ -87,7 +87,7 @@ export class DefaultAdapter extends BaseAdapterPlugin {
             }
           });
           
-          this.context.logger.info('Form submitted successfully via active element');
+          this.context.logger.debug('Form submitted successfully via active element');
           return true;
         }
       } catch (error) {
@@ -112,7 +112,7 @@ export class DefaultAdapter extends BaseAdapterPlugin {
           }
         });
         
-        this.context.logger.info('Form submitted successfully via submit button');
+        this.context.logger.debug('Form submitted successfully via submit button');
         return true;
       } catch (error) {
         this.context.logger.error('Failed to submit form via submit button:', error);
@@ -136,7 +136,7 @@ export class DefaultAdapter extends BaseAdapterPlugin {
           }
         });
         
-        this.context.logger.info('Form submitted successfully via form element');
+        this.context.logger.debug('Form submitted successfully via form element');
         return true;
       } catch (error) {
         this.context.logger.error('Failed to submit form via form element:', error);
@@ -154,22 +154,22 @@ export class DefaultAdapter extends BaseAdapterPlugin {
   }
 
   protected async initializePlugin(): Promise<void> {
-    this.context.logger.info('Initializing DefaultAdapter...');
+    this.context.logger.debug('Initializing DefaultAdapter...');
     // Basic initialization for default adapter
   }
 
   protected async activatePlugin(): Promise<void> {
-    this.context.logger.info('Activating DefaultAdapter...');
+    this.context.logger.debug('Activating DefaultAdapter...');
     // Set up any listeners or UI elements
   }
 
   protected async deactivatePlugin(): Promise<void> {
-    this.context.logger.info('Deactivating DefaultAdapter...');
+    this.context.logger.debug('Deactivating DefaultAdapter...');
     // Clean up listeners or UI elements
   }
 
   protected async cleanupPlugin(): Promise<void> {
-    this.context.logger.info('Cleaning up DefaultAdapter...');
+    this.context.logger.debug('Cleaning up DefaultAdapter...');
     // Final cleanup
   }
 

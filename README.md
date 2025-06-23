@@ -44,8 +44,9 @@ MCP SuperAssistant is a Chrome extension that integrates the Model Context Proto
 - [Google AI Studio](https://aistudio.google.com/)
 - [OpenRouter Chat](https://openrouter.ai/chat)
 - [DeepSeek](https://chat.deepseek.com/)
-- [Kagi](https://kagi.com/assistant)
 - [T3 Chat](https://t3.chat/)
+- [GitHub Copilot](https://github.com/copilot)
+- [Mistral AI](https://chat.mistral.ai/)
 
 
 ## Demo Video
@@ -63,6 +64,7 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 ## Key Features
 
 - **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat!
+- **Plugin Architecture**: Modular plugin system with site-specific adapters for tailored platform integration
 - **Sidebar UI**: Clean, unobtrusive interface that integrates with the AI platform
 - **Tool Detection**: Automatically detects MCP tool calls in AI responses
 - **Tool Execution**: Execute MCP tools with a single click
@@ -73,8 +75,29 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 - **Push Content Mode**: Option to push page content instead of overlaying
 - **Preferences Persistence**: Remembers sidebar position, size, and settings
 - **Dark/Light Mode Support**: Adapts to the AI platform's theme
+- **React Hooks Integration**: Modern React patterns for state management and plugin interactions
 
-## How It Works
+## Architecture
+
+MCP SuperAssistant uses a modern, modular architecture with the following key components:
+
+### Plugin System
+- **Plugin Registry**: Centralized management of all plugins and adapters
+- **Site-Specific Adapters**: Tailored integration for each AI platform
+- **Default Adapter**: Fallback implementation for universal functionality
+- **Plugin Hooks**: React hooks for managing plugin state and operations
+
+### State Management
+- **Zustand Stores**: Lightweight state management for different application domains
+- **Event Bus**: Typed event system for decoupled communication
+- **React Hooks**: Modern patterns for component state and side effects
+
+### Modular Structure
+- **Event System**: Centralized event handling with type safety
+- **Utilities**: Shared helper functions and DOM manipulation tools
+- **Types**: Comprehensive TypeScript definitions for type safety
+
+For detailed architecture documentation, see the [Architecture Guide](./docs/ARCHITECTURE.md).
 
 ```mermaid
 flowchart TD
@@ -211,6 +234,43 @@ pnpm build
 # Create zip package for distribution
 pnpm zip
 ```
+
+## Architecture
+
+### Plugin System
+
+MCP SuperAssistant features a robust plugin system that allows for site-specific adapters and functionality:
+
+#### Core Components
+- **Plugin Registry**: Central hub for plugin management and lifecycle
+- **Base Adapter**: Foundation class providing common functionality  
+- **Site Adapters**: Specialized implementations for different websites
+- **Event System**: Real-time communication between system components
+- **React Hooks**: Integration with React components
+
+#### Current Adapters
+- **DefaultAdapter**: Universal fallback adapter for any website
+- **ExampleForumAdapter**: Demonstration adapter for forum-specific functionality
+
+#### Plugin Capabilities
+- **Text Insertion**: Insert tool results into page elements
+- **Form Submission**: Submit forms with multiple fallback strategies
+- **URL Navigation**: Navigate to specific URLs within the site
+- **DOM Manipulation**: Interact with site-specific DOM elements
+- **Event Tracking**: Monitor and respond to page interactions
+
+### Development Sessions
+
+The plugin system was developed through structured sessions:
+
+- **Session 7**: Core plugin system implementation with DefaultAdapter
+- **Session 8**: Site-specific adapter implementation (ExampleForumAdapter)
+- **Session 9+**: Planned expansion with additional site adapters
+
+For detailed documentation, see:
+- [`/pages/content/src/plugins/README.md`](pages/content/src/plugins/README.md) - Core plugin system
+- [`/pages/content/src/plugins/adapters/README.md`](pages/content/src/plugins/adapters/README.md) - Adapter implementations
+- [`/docs/sessions/`](docs/sessions/) - Development session logs
 
 ## Contributing
 

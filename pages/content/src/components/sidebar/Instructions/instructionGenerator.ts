@@ -354,5 +354,5 @@ const testTools = [
   }
 ];
 
-console.log(generateInstructions(testTools));
+console.debug(generateInstructions(testTools));
 */

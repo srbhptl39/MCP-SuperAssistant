@@ -30,7 +30,7 @@ if (process.env.NODE_ENV === 'production' && process.env.RECAPTCHA_SITE_KEY) {
       provider: new ReCaptchaV3Provider(process.env.RECAPTCHA_SITE_KEY),
       isTokenAutoRefreshEnabled: true
     });
-    console.log('[Firebase] App Check initialized in content script');
+    console.debug('[Firebase] App Check initialized in content script');
   } catch (error) {
     console.warn('[Firebase] App Check initialization failed:', error);
   }
@@ -46,9 +46,9 @@ const initializeAnalytics = async () => {
     const supported = await isSupported();
     if (supported) {
       analytics = getAnalytics(app);
-      console.log('[Firebase] Analytics initialized in content script');
+      console.debug('[Firebase] Analytics initialized in content script');
     } else {
-      console.warn('[Firebase] Analytics not supported in this environment');
+      console.debug('[Firebase] Analytics not supported in this environment');
     }
   } catch (error) {
     console.warn('[Firebase] Analytics initialization failed:', error);
@@ -155,13 +155,13 @@ export const fetchRemoteConfig = async (force = false): Promise<boolean> => {
       return false;
     }
 
-    console.log('[Firebase] Fetching remote config from content script...');
+    console.debug('[Firebase] Fetching remote config from content script...');
     await fetchAndActivate(remoteConfig);
     
     // Store last fetch time
     await chrome.storage.local.set({ remoteConfigLastFetch: now });
     
-    console.log('[Firebase] Remote config fetched and activated successfully');
+    console.debug('[Firebase] Remote config fetched and activated successfully');
     return true;
   } catch (error) {
     console.error('[Firebase] Failed to fetch remote config:', error);

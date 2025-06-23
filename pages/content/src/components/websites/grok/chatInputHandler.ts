@@ -280,7 +280,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
       const button = document.querySelector(selector);
       if (button && button instanceof HTMLElement) {
         submitButton = button;
-        // console.log(submitButton)
+        // console.debug(submitButton)
         break;
       }
     }

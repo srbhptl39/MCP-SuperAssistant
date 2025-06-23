@@ -46,7 +46,7 @@ export const useAdapterStore = create<AdapterState>()(
         set(state => ({
           registeredPlugins: { ...state.registeredPlugins, [plugin.name]: registration },
         }));
-        console.log(`[AdapterStore] Plugin "${plugin.name}" registered.`);
+        console.debug(`[AdapterStore] Plugin "${plugin.name}" registered.`);
         eventBus.emit('plugin:registered', { name: plugin.name, version: plugin.version });
         return true;
       },
@@ -71,7 +71,7 @@ export const useAdapterStore = create<AdapterState>()(
           activeAdapterName: get().activeAdapterName === name ? null : get().activeAdapterName,
           currentCapabilities: get().activeAdapterName === name ? [] : get().currentCapabilities,
         });
-        console.log(`[AdapterStore] Plugin "${name}" unregistered.`);
+        console.debug(`[AdapterStore] Plugin "${name}" unregistered.`);
         eventBus.emit('plugin:unregistered', { name });
       },
 
@@ -91,7 +91,7 @@ export const useAdapterStore = create<AdapterState>()(
         const currentActiveAdapter = get().getActiveAdapter();
         if (currentActiveAdapter && currentActiveAdapter.plugin.name !== name) {
           try {
-            console.log(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
+            console.debug(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
             await currentActiveAdapter.instance?.deactivate();
             eventBus.emit('adapter:deactivated', { pluginName: currentActiveAdapter.plugin.name, reason: 'switching adapter', timestamp: Date.now() });
           } catch (e) {
@@ -111,7 +111,7 @@ export const useAdapterStore = create<AdapterState>()(
             eventBus.emit('plugin:initialization-complete', { name });
           }
 
-          console.log(`[AdapterStore] Activating adapter "${name}".`);
+          console.debug(`[AdapterStore] Activating adapter "${name}".`);
           await pluginReg.instance!.activate(); // Non-null assertion: instance is set above
           pluginReg.status = 'active';
           pluginReg.lastUsedAt = Date.now();
@@ -122,7 +122,7 @@ export const useAdapterStore = create<AdapterState>()(
             lastAdapterError: null, // Clear previous errors on successful activation
             registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg } // Update registration with instance and status
           });
-          console.log(`[AdapterStore] Adapter "${name}" activated with capabilities:`, pluginReg.plugin.capabilities);
+          console.debug(`[AdapterStore] Adapter "${name}" activated with capabilities:`, pluginReg.plugin.capabilities);
           eventBus.emit('adapter:activated', { pluginName: name, timestamp: Date.now() });
           eventBus.emit('adapter:capability-changed', { name, capabilities: pluginReg.plugin.capabilities });
           return true;
@@ -155,7 +155,7 @@ export const useAdapterStore = create<AdapterState>()(
             currentCapabilities: [],
             registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }
           });
-          console.log(`[AdapterStore] Adapter "${name}" deactivated. Reason: ${reason || 'user action'}`);
+          console.debug(`[AdapterStore] Adapter "${name}" deactivated. Reason: ${reason || 'user action'}`);
           eventBus.emit('adapter:deactivated', { pluginName: name, reason: reason || 'user action', timestamp: Date.now() });
         } catch (error: any) {
           const errorMsg = error instanceof Error ? error.message : String(error);
@@ -186,7 +186,7 @@ export const useAdapterStore = create<AdapterState>()(
           set(state => ({ 
             registeredPlugins: { ...state.registeredPlugins, [name]: pluginReg }
           }));
-          console.log(`[AdapterStore] Config updated for plugin "${name}":`, pluginReg.config);
+          console.debug(`[AdapterStore] Config updated for plugin "${name}":`, pluginReg.config);
           // Potentially re-evaluate active adapter if config change affects it (e.g., enabled status)
           if (name === get().activeAdapterName && pluginReg.config.enabled === false) {
             get().deactivateAdapter(name, 'disabled by config update');

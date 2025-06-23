@@ -61,7 +61,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     super();
     AIStudioAdapter.instanceCount++;
     this.instanceId = AIStudioAdapter.instanceCount;
-    console.log(`[AIStudioAdapter] Instance #${this.instanceId} created. Total instances: ${AIStudioAdapter.instanceCount}`);
+    console.debug(`[AIStudioAdapter] Instance #${this.instanceId} created. Total instances: ${AIStudioAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -72,7 +72,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing AI Studio adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing AI Studio adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -90,7 +90,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating AI Studio adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating AI Studio adapter instance #${this.instanceId}...`);
 
     // Inject adapter-specific button styles
     this.injectAIStudioButtonStyles();
@@ -114,7 +114,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating AI Studio adapter...');
+    this.context.logger.debug('Deactivating AI Studio adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -141,7 +141,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up AI Studio adapter...');
+    this.context.logger.debug('Cleaning up AI Studio adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -336,7 +336,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       document.head.appendChild(styleElement);
       
       this.adapterStylesInjected = true;
-      this.context.logger.info('AI Studio button styles injected successfully');
+      this.context.logger.debug('AI Studio button styles injected successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject AI Studio button styles:', error);
     }
@@ -347,7 +347,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into AI Studio chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into AI Studio chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     try {
       // Use the proven chatInputHandler method
@@ -361,7 +361,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
           textLength: text.length
         });
 
-        this.context.logger.info(`Text inserted successfully using chatInputHandler. Length: ${text.length}`);
+        this.context.logger.debug(`Text inserted successfully using chatInputHandler. Length: ${text.length}`);
         return true;
       } else {
         this.context.logger.error('Failed to insert text using chatInputHandler');
@@ -381,7 +381,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit AI Studio chat input');
+    this.context.logger.debug('Attempting to submit AI Studio chat input');
 
     try {
       // Use the proven chatInputHandler method
@@ -396,7 +396,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
           method: 'chatInputHandler'
         });
 
-        this.context.logger.info('AI Studio chat input submitted successfully via chatInputHandler');
+        this.context.logger.debug('AI Studio chat input submitted successfully via chatInputHandler');
         return true;
       } else {
         this.context.logger.error('Failed to submit using chatInputHandler');
@@ -450,7 +450,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
         method: 'enterKey+formSubmit'
       });
 
-      this.context.logger.info('AI Studio chat input submitted successfully via Enter key');
+      this.context.logger.debug('AI Studio chat input submitted successfully via Enter key');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -465,7 +465,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -492,7 +492,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
           success: true,
           method: 'chatInputHandler'
         });
-        this.context.logger.info(`File attached successfully via chatInputHandler: ${file.name}`);
+        this.context.logger.debug(`File attached successfully via chatInputHandler: ${file.name}`);
         return true;
       } else {
         this.context.logger.warn(`File attachment failed via chatInputHandler for: ${file.name}`);
@@ -607,7 +607,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`AI Studio adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`AI Studio adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -640,7 +640,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -890,7 +890,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       return { container: actionsContainer, insertAfter: null };
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -933,7 +933,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -969,7 +969,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with AI Studio styling');
+            this.context.logger.debug('MCP popover rendered successfully with AI Studio styling');
           }).catch(error => {
             this.context.logger.error('Failed to load MCPPopover component:', error);
           });
@@ -1055,7 +1055,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1113,7 +1113,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover (for debugging or external calls)
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -1153,7 +1153,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Check if the sidebar is properly available after navigation
    */
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       // Check if there's an active sidebar manager
@@ -1176,15 +1176,15 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Ensure MCP popover is properly connected to the sidebar after navigation
    */
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);
@@ -1193,7 +1193,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`AI Studio page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`AI Studio page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1225,7 +1225,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`AI Studio host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`AI Studio host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
@@ -1243,7 +1243,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in AI Studio adapter:`, tools);
+    this.context.logger.debug(`Tools detected in AI Studio adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {

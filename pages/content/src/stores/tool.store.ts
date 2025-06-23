@@ -48,7 +48,7 @@ export const useToolStore = create<ToolState>()(
 
       setAvailableTools: (tools: Tool[]) => {
         set({ availableTools: tools });
-        console.log('[ToolStore] Available tools updated:', tools);
+        console.debug('[ToolStore] Available tools updated:', tools);
         eventBus.emit('tool:list-updated', { tools });
         
         // Load tool enablement state from storage
@@ -57,13 +57,13 @@ export const useToolStore = create<ToolState>()(
 
       addDetectedTool: (tool: DetectedTool) => {
         set(state => ({ detectedTools: [...state.detectedTools, tool] }));
-        console.log('[ToolStore] Tool detected:', tool);
+        console.debug('[ToolStore] Tool detected:', tool);
         eventBus.emit('tool:detected', { tools: [tool], source: tool.source || 'unknown' });
       },
 
       clearDetectedTools: () => {
         set({ detectedTools: [] });
-        console.log('[ToolStore] Detected tools cleared.');
+        console.debug('[ToolStore] Detected tools cleared.');
       },
 
       startToolExecution: (toolName: string, parameters: Record<string, any>): string => {
@@ -81,7 +81,7 @@ export const useToolStore = create<ToolState>()(
           isExecuting: true,
           lastExecutionId: executionId,
         }));
-        console.log(`[ToolStore] Starting execution for ${toolName} (ID: ${executionId})`, parameters);
+        console.debug(`[ToolStore] Starting execution for ${toolName} (ID: ${executionId})`, parameters);
         eventBus.emit('tool:execution-started', { toolName, callId: executionId });
         return executionId;
       },
@@ -95,7 +95,7 @@ export const useToolStore = create<ToolState>()(
             toolExecutions: { ...state.toolExecutions, [id]: updatedExecution },
             isExecuting: updatedExecution.status === 'pending',
           }));
-          console.log(`[ToolStore] Execution updated (ID: ${id}):`, updatedExecution);
+          console.debug(`[ToolStore] Execution updated (ID: ${id}):`, updatedExecution);
           if (updatedExecution.status === 'success' || updatedExecution.status === 'error') {
              eventBus.emit('tool:execution-completed', { execution: updatedExecution });
           }
@@ -118,7 +118,7 @@ export const useToolStore = create<ToolState>()(
             toolExecutions: { ...state.toolExecutions, [id]: completedExecution },
             isExecuting: Object.values(state.toolExecutions).some(ex => ex.id !== id && ex.status === 'pending'),
           }));
-          console.log(`[ToolStore] Execution ${status} (ID: ${id}):`, completedExecution);
+          console.debug(`[ToolStore] Execution ${status} (ID: ${id}):`, completedExecution);
           eventBus.emit('tool:execution-completed', { execution: completedExecution });
           if (status === 'error') {
             eventBus.emit('tool:execution-failed', { toolName: execution.toolName, error: error || 'Unknown execution error', callId: id });
@@ -142,7 +142,7 @@ export const useToolStore = create<ToolState>()(
           );
           return { enabledTools: newEnabledTools };
         });
-        console.log(`[ToolStore] Tool enabled: ${toolName}`);
+        console.debug(`[ToolStore] Tool enabled: ${toolName}`);
       },
 
       disableTool: (toolName: string) => {
@@ -155,7 +155,7 @@ export const useToolStore = create<ToolState>()(
           );
           return { enabledTools: newEnabledTools };
         });
-        console.log(`[ToolStore] Tool disabled: ${toolName}`);
+        console.debug(`[ToolStore] Tool disabled: ${toolName}`);
       },
 
       enableAllTools: () => {
@@ -167,7 +167,7 @@ export const useToolStore = create<ToolState>()(
           );
           return { enabledTools: newEnabledTools };
         });
-        console.log('[ToolStore] All tools enabled');
+        console.debug('[ToolStore] All tools enabled');
       },
 
       disableAllTools: () => {
@@ -177,7 +177,7 @@ export const useToolStore = create<ToolState>()(
         saveToolEnablementState(newEnabledTools).catch(error => 
           console.error('[ToolStore] Failed to save tool enablement state:', error)
         );
-        console.log('[ToolStore] All tools disabled');
+        console.debug('[ToolStore] All tools disabled');
       },
 
       isToolEnabled: (toolName: string): boolean => {
@@ -196,10 +196,10 @@ export const useToolStore = create<ToolState>()(
             set({ enabledTools: allToolsEnabled, isLoadingEnablement: false });
             // Save the default state
             await saveToolEnablementState(allToolsEnabled);
-            console.log('[ToolStore] No stored state found, enabled all tools by default');
+            console.debug('[ToolStore] No stored state found, enabled all tools by default');
           } else {
             set({ enabledTools: storedEnabledTools, isLoadingEnablement: false });
-            console.log(`[ToolStore] Tool enablement state loaded: ${storedEnabledTools.size} tools enabled`);
+            console.debug(`[ToolStore] Tool enablement state loaded: ${storedEnabledTools.size} tools enabled`);
           }
         } catch (error) {
           console.error('[ToolStore] Failed to load tool enablement state:', error);

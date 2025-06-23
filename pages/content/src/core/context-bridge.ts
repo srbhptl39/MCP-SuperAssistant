@@ -82,7 +82,7 @@ class ContextBridge {
       this.startHealthCheck();
 
       this.initialized = true;
-      console.log('[ContextBridge] Initialized successfully');
+      console.debug('[ContextBridge] Initialized successfully');
 
       // Emit initialization event
       eventBus.emit('context:bridge-initialized', { timestamp: Date.now() });
@@ -162,7 +162,7 @@ class ContextBridge {
         // If we were previously invalid, mark as valid again
         if (!this.isExtensionContextValid) {
           this.isExtensionContextValid = true;
-          console.log('[ContextBridge] Extension context restored');
+          console.debug('[ContextBridge] Extension context restored');
           eventBus.emit('context:bridge-restored', { timestamp: now });
         }
       } catch (error) {
@@ -194,7 +194,7 @@ class ContextBridge {
   ): boolean {
     try {
       if (this.config.enableLogging) {
-        console.log('[ContextBridge] Received Chrome message:', message, 'from:', sender);
+        console.debug('[ContextBridge] Received Chrome message:', message, 'from:', sender);
       }
 
       // Validate message structure
@@ -220,7 +220,7 @@ class ContextBridge {
         this.pendingRequests.delete(message.id);
 
         if (this.config.enableLogging) {
-          console.log(`[ContextBridge] Resolving pending request ${message.id}`);
+          console.debug(`[ContextBridge] Resolving pending request ${message.id}`);
         }
 
         if (message.error) {
@@ -234,7 +234,7 @@ class ContextBridge {
 
       // Log the processed message for debugging
       if (this.config.enableLogging) {
-        console.log('[ContextBridge] Processed ContextMessage:', contextMessage);
+        console.debug('[ContextBridge] Processed ContextMessage:', contextMessage);
       }
 
       // Emit to local event bus
@@ -353,7 +353,7 @@ class ContextBridge {
         if (attempt < maxRetries) {
           const delay = this.config.retryDelay! * Math.pow(2, attempt); // Exponential backoff
           if (this.config.enableLogging) {
-            console.log(`[ContextBridge] Retry ${attempt + 1}/${maxRetries} for ${type} in ${delay}ms`);
+            console.debug(`[ContextBridge] Retry ${attempt + 1}/${maxRetries} for ${type} in ${delay}ms`);
           }
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -383,7 +383,7 @@ class ContextBridge {
     };
 
     if (this.config.enableLogging) {
-      console.log('[ContextBridge] Sending message:', message, 'to:', target);
+      console.debug('[ContextBridge] Sending message:', message, 'to:', target);
     }
 
     return new Promise((resolve, reject) => {
@@ -511,7 +511,7 @@ class ContextBridge {
     };
 
     if (this.config.enableLogging) {
-      console.log('[ContextBridge] Broadcasting message:', message);
+      console.debug('[ContextBridge] Broadcasting message:', message);
     }
 
     try {
@@ -617,7 +617,7 @@ class ContextBridge {
     this.messageListeners.clear();
 
     this.initialized = false;
-    console.log('[ContextBridge] Cleaned up');
+    console.debug('[ContextBridge] Cleaned up');
   }
 }
 

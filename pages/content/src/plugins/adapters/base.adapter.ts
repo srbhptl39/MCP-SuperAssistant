@@ -26,28 +26,28 @@ export abstract class BaseAdapterPlugin implements AdapterPlugin {
   async initialize(context: PluginContext): Promise<void> {
     this.context = context;
     this.currentStatus = 'initializing';
-    this.context.logger.info(`Initializing (Base)`);
+    this.context.logger.debug(`Initializing (Base)`);
     // Basic initialization logic common to all plugins
     // Specific plugins should override this and call super.initialize(context) if needed.
     this.currentStatus = 'inactive'; // Default to inactive after base initialization
   }
 
   async activate(): Promise<void> {
-    this.context.logger.info(`Activating (Base)`);
+    this.context.logger.debug(`Activating (Base)`);
     // Basic activation logic
     // Specific plugins should override this and call super.activate() if needed.
     this.currentStatus = 'active';
   }
 
   async deactivate(): Promise<void> {
-    this.context.logger.info(`Deactivating (Base)`);
+    this.context.logger.debug(`Deactivating (Base)`);
     // Basic deactivation logic
     // Specific plugins should override this and call super.deactivate() if needed.
     this.currentStatus = 'inactive';
   }
 
   async cleanup(): Promise<void> {
-    this.context.logger.info(`Cleaning up (Base)`);
+    this.context.logger.debug(`Cleaning up (Base)`);
     // Basic cleanup logic
     // Specific plugins should override this and call super.cleanup() if needed.
     this.currentStatus = 'disabled'; // Or 'pending' if it can be reinitialized
@@ -111,15 +111,15 @@ export abstract class BaseAdapterPlugin implements AdapterPlugin {
 
   // Event handlers - can be overridden by specific adapters
   onToolDetected?(tools: DetectedTool[]): void {
-    this.context.logger.info('onToolDetected (Base):', tools);
+    this.context.logger.debug('onToolDetected (Base):', tools);
   }
 
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`onPageChanged (Base): from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`onPageChanged (Base): from ${oldUrl || 'N/A'} to ${url}`);
   }
   
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`onHostChanged (Base): from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`onHostChanged (Base): from ${oldHost || 'N/A'} to ${newHost}`);
     // Base implementation could re-check isSupported or trigger adapter re-evaluation
     // For example, if an adapter is only for a specific path on a host.
   }

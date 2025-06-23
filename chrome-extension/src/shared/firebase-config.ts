@@ -58,7 +58,7 @@ const initializeAnalytics = async () => {
         analytics = getAnalytics(app);
         console.log('[Firebase] Analytics initialized');
       } else {
-        console.warn('[Firebase] Analytics not supported in this environment');
+        console.debug('[Firebase] Analytics not supported in this environment');
       }
     } catch (error) {
       console.warn('[Firebase] Analytics initialization failed:', error);

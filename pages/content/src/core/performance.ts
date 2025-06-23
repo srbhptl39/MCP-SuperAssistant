@@ -57,7 +57,7 @@ class PerformanceMonitor {
     this.setupEventBusIntegration();
 
     this.initialized = true;
-    console.log('[PerformanceMonitor] Initialized successfully');
+    console.debug('[PerformanceMonitor] Initialized successfully');
   }
 
   /**
@@ -285,7 +285,7 @@ class PerformanceMonitor {
 
     // Check if this is a slow operation
     if (measurement.duration > this.slowThreshold) {
-      console.warn(`[PerformanceMonitor] Slow operation detected: ${measurement.name} took ${measurement.duration}ms`);
+      // console.warn(`[PerformanceMonitor] Slow operation detected: ${measurement.name} took ${measurement.duration}ms`);
       eventBus.emit('performance:slow-operation', measurement);
     }
   }
@@ -324,7 +324,7 @@ class PerformanceMonitor {
   clear(): void {
     this.measurements = [];
     this.memorySnapshots = [];
-    console.log('[PerformanceMonitor] Performance data cleared');
+    console.debug('[PerformanceMonitor] Performance data cleared');
   }
 
   /**
@@ -369,7 +369,7 @@ class PerformanceMonitor {
     this.measurements = [];
     this.memorySnapshots = [];
     this.initialized = false;
-    console.log('[PerformanceMonitor] Cleaned up');
+    console.debug('[PerformanceMonitor] Cleaned up');
   }
 }
 

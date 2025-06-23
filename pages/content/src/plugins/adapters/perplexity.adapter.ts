@@ -68,7 +68,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     super();
     PerplexityAdapter.instanceCount++;
     this.instanceId = PerplexityAdapter.instanceCount;
-    console.log(`[PerplexityAdapter] Instance #${this.instanceId} created. Total instances: ${PerplexityAdapter.instanceCount}`);
+    console.debug(`[PerplexityAdapter] Instance #${this.instanceId} created. Total instances: ${PerplexityAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -79,7 +79,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing Perplexity adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing Perplexity adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -97,7 +97,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating Perplexity adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating Perplexity adapter instance #${this.instanceId}...`);
 
     // Inject Perplexity-specific button styles
     this.injectPerplexityButtonStyles();
@@ -121,7 +121,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating Perplexity adapter...');
+    this.context.logger.debug('Deactivating Perplexity adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -141,7 +141,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up Perplexity adapter...');
+    this.context.logger.debug('Cleaning up Perplexity adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -177,7 +177,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling, event integration, and URL-specific methods
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into Perplexity chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into Perplexity chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
 
@@ -205,7 +205,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       // Check if we're on the homepage and use the special method
       const currentUrl = window.location.href;
       if (currentUrl === 'https://www.perplexity.ai/' || currentUrl === 'https://perplexity.ai/') {
-        this.context.logger.info('Homepage detected, using InputEvent method for text insertion');
+        this.context.logger.debug('Homepage detected, using InputEvent method for text insertion');
         return await this.insertTextViaInputEvent(targetElement, text);
       }
 
@@ -239,7 +239,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         method: 'standard'
       });
 
-      this.context.logger.info(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      this.context.logger.debug(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -291,7 +291,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         method: 'InputEvent-homepage'
       });
 
-      this.context.logger.info(`Text inserted successfully via InputEvent on homepage. Original: ${originalValue.length}, Added: ${text.length}, Total: ${textToEnter.length}`);
+      this.context.logger.debug(`Text inserted successfully via InputEvent on homepage. Original: ${originalValue.length}, Added: ${text.length}, Total: ${textToEnter.length}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -326,7 +326,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit Perplexity chat input');
+    this.context.logger.debug('Attempting to submit Perplexity chat input');
 
     // First try to find submit button
     let submitButton: HTMLButtonElement | null = null;
@@ -411,7 +411,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
           buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
         });
 
-        this.context.logger.info('Perplexity chat input submitted successfully via button click');
+        this.context.logger.debug('Perplexity chat input submitted successfully via button click');
         return true;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -463,7 +463,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         method: 'enterKey+formSubmit'
       });
 
-      this.context.logger.info('Perplexity chat input submitted successfully via Enter key');
+      this.context.logger.debug('Perplexity chat input submitted successfully via Enter key');
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -478,7 +478,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -504,7 +504,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
           success: true,
           method: 'file-input'
         });
-        this.context.logger.info(`File attached successfully via input: ${file.name}`);
+        this.context.logger.debug(`File attached successfully via input: ${file.name}`);
         return true;
       }
 
@@ -519,7 +519,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
           success: true,
           method: 'drag-drop'
         });
-        this.context.logger.info(`File attached successfully via drag-drop: ${file.name}`);
+        this.context.logger.debug(`File attached successfully via drag-drop: ${file.name}`);
         return true;
       }
 
@@ -535,7 +535,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       });
 
       if (success3) {
-        this.context.logger.info(`File copied to clipboard for manual paste: ${file.name}`);
+        this.context.logger.debug(`File copied to clipboard for manual paste: ${file.name}`);
       } else {
         this.context.logger.warn(`All file attachment methods failed for: ${file.name}`);
       }
@@ -688,7 +688,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`Perplexity adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`Perplexity adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -744,7 +744,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -984,7 +984,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       }
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -1020,7 +1020,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -1055,7 +1055,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with new architecture');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -1141,7 +1141,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1199,7 +1199,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover (for debugging or external calls)
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -1239,7 +1239,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Check if the sidebar is properly available after navigation
    */
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       // Check if there's an active sidebar manager
@@ -1262,15 +1262,15 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Ensure MCP popover is properly connected to the sidebar after navigation
    */
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);
@@ -1279,7 +1279,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`Perplexity page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`Perplexity page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     // Update URL tracking
     this.lastUrl = url;
@@ -1312,7 +1312,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`Perplexity host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`Perplexity host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     // Re-check if the adapter is still supported
     const stillSupported = this.isSupported();
@@ -1330,7 +1330,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in Perplexity adapter:`, tools);
+    this.context.logger.debug(`Tools detected in Perplexity adapter:`, tools);
 
     // Forward to tool store
     tools.forEach(tool => {
@@ -1541,7 +1541,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       document.head.appendChild(styleElement);
       
       this.adapterStylesInjected = true;
-      this.context.logger.info('Perplexity button styles injected successfully');
+      this.context.logger.debug('Perplexity button styles injected successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject Perplexity button styles:', error);
     }

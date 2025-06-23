@@ -238,7 +238,7 @@ export function useAutoAdapterSwitching(enabled = true) {
 
     const suitableAdapter = getAdapterForHostname(hostname);
     if (suitableAdapter && suitableAdapter.name !== activeAdapterName) {
-      console.log(`[useAutoAdapterSwitching] Switching to ${suitableAdapter.name} for ${hostname}`);
+      console.debug(`[useAutoAdapterSwitching] Switching to ${suitableAdapter.name} for ${hostname}`);
       await activateAdapter(suitableAdapter.name);
     }
   });

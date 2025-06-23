@@ -48,7 +48,7 @@ export const useConnectionStore = create<ConnectionState>()(
       setStatus: (status: ConnectionStatus) => {
         const oldStatus = get().status;
         set({ status });
-        console.log(`[ConnectionStore] Status changed from ${oldStatus} to: ${status}`);
+        console.debug(`[ConnectionStore] Status changed from ${oldStatus} to: ${status}`);
         eventBus.emit('connection:status-changed', { status, error: get().error || undefined });
       },
 
@@ -56,7 +56,7 @@ export const useConnectionStore = create<ConnectionState>()(
         set(state => ({ 
           serverConfig: { ...state.serverConfig, ...config }
         }));
-        console.log('[ConnectionStore] Server config updated:', get().serverConfig);
+        console.debug('[ConnectionStore] Server config updated:', get().serverConfig);
       },
 
       setLastError: (error: string | null) => {
@@ -70,13 +70,13 @@ export const useConnectionStore = create<ConnectionState>()(
       incrementAttempts: () => {
         const newAttempts = get().connectionAttempts + 1;
         set({ connectionAttempts: newAttempts });
-        console.log(`[ConnectionStore] Connection attempts: ${newAttempts}`);
+        console.debug(`[ConnectionStore] Connection attempts: ${newAttempts}`);
         eventBus.emit('connection:attempt', { attempt: newAttempts, maxAttempts: get().serverConfig.retryAttempts });
       },
 
       resetAttempts: () => {
         set({ connectionAttempts: 0 });
-        console.log('[ConnectionStore] Connection attempts reset.');
+        console.debug('[ConnectionStore] Connection attempts reset.');
       },
       
       setConnected: (timestamp: number) => {
@@ -87,7 +87,7 @@ export const useConnectionStore = create<ConnectionState>()(
           error: null,
           isReconnecting: false,
         });
-        console.log(`[ConnectionStore] Connected at: ${new Date(timestamp).toISOString()}`);
+        console.debug(`[ConnectionStore] Connected at: ${new Date(timestamp).toISOString()}`);
         eventBus.emit('connection:status-changed', { status: 'connected' });
       },
 
@@ -97,14 +97,14 @@ export const useConnectionStore = create<ConnectionState>()(
           error: error || state.error, // Keep existing error if no new one provided
           isReconnecting: false, // Ensure reconnecting is false when explicitly disconnected
         }));
-        console.log(`[ConnectionStore] Disconnected. ${error ? 'Error: ' + error : ''}`);
+        console.debug(`[ConnectionStore] Disconnected. ${error ? 'Error: ' + error : ''}`);
         eventBus.emit('connection:status-changed', { status: get().status, error: error || get().error || undefined });
       },
 
       startReconnecting: () => {
         if (get().status === 'connected') return; // Don't try to reconnect if already connected
         set({ isReconnecting: true, status: 'reconnecting' });
-        console.log('[ConnectionStore] Reconnecting started...');
+        console.debug('[ConnectionStore] Reconnecting started...');
         eventBus.emit('connection:status-changed', { status: 'reconnecting' });
       },
 
@@ -113,7 +113,7 @@ export const useConnectionStore = create<ConnectionState>()(
         if (get().isReconnecting) {
           const previousStatus = get().error ? 'error' : 'disconnected';
           set({ isReconnecting: false, status: previousStatus });
-          console.log('[ConnectionStore] Reconnecting stopped.');
+          console.debug('[ConnectionStore] Reconnecting stopped.');
         }
       },
     }),

@@ -63,7 +63,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     super();
     OpenRouterAdapter.instanceCount++;
     this.instanceId = OpenRouterAdapter.instanceCount;
-    console.log(`[OpenRouterAdapter] Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`);
+    console.debug(`[OpenRouterAdapter] Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -74,7 +74,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     }
 
     await super.initialize(context);
-    this.context.logger.info(`Initializing OpenRouter adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Initializing OpenRouter adapter instance #${this.instanceId}...`);
 
     // Initialize URL tracking
     this.lastUrl = window.location.href;
@@ -92,7 +92,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     }
 
     await super.activate();
-    this.context.logger.info(`Activating OpenRouter adapter instance #${this.instanceId}...`);
+    this.context.logger.debug(`Activating OpenRouter adapter instance #${this.instanceId}...`);
 
     // Set up DOM observers and UI integration
     this.setupDOMObservers();
@@ -113,7 +113,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     }
 
     await super.deactivate();
-    this.context.logger.info('Deactivating OpenRouter adapter...');
+    this.context.logger.debug('Deactivating OpenRouter adapter...');
 
     // Clean up UI integration
     this.cleanupUIIntegration();
@@ -133,7 +133,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
   async cleanup(): Promise<void> {
     await super.cleanup();
-    this.context.logger.info('Cleaning up OpenRouter adapter...');
+    this.context.logger.debug('Cleaning up OpenRouter adapter...');
 
     // Clear URL tracking interval
     if (this.urlCheckInterval) {
@@ -162,7 +162,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into OpenRouter chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(`Attempting to insert text into OpenRouter chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
 
@@ -246,7 +246,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         elementType: targetElement.tagName
       });
 
-      this.context.logger.info(`Text inserted successfully into OpenRouter chat input`);
+      this.context.logger.debug(`Text inserted successfully into OpenRouter chat input`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -261,7 +261,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    this.context.logger.info('Attempting to submit OpenRouter chat input');
+    this.context.logger.debug('Attempting to submit OpenRouter chat input');
 
     try {
       // First try to find submit button
@@ -300,7 +300,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             method: 'submitButton.click'
           });
           
-          this.context.logger.info('OpenRouter chat input submitted successfully via button click');
+          this.context.logger.debug('OpenRouter chat input submitted successfully via button click');
           return true;
         }
       }
@@ -318,7 +318,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             method: 'form.submit'
           });
           
-          this.context.logger.info('OpenRouter chat input submitted successfully via form submission');
+          this.context.logger.debug('OpenRouter chat input submitted successfully via form submission');
           return true;
         }
       }
@@ -349,7 +349,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
           method: 'enter-key-simulation'
         });
         
-        this.context.logger.info('OpenRouter chat input submitted successfully via Enter key simulation');
+        this.context.logger.debug('OpenRouter chat input submitted successfully via Enter key simulation');
         return true;
       }
 
@@ -368,7 +368,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
+    this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
       // Validate file before attempting attachment
@@ -428,7 +428,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         method: 'drag-drop-simulation'
       });
 
-      this.context.logger.info(`File attached successfully: ${file.name}`);
+      this.context.logger.debug(`File attached successfully: ${file.name}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -470,7 +470,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
 
     if (isSupported) {
-      this.context.logger.info(`OpenRouter adapter supports current page: ${currentUrl}`);
+      this.context.logger.debug(`OpenRouter adapter supports current page: ${currentUrl}`);
     } else {
       this.context.logger.debug(`URL pattern not supported: ${currentUrl}`);
     }
@@ -519,7 +519,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       this.urlCheckInterval = setInterval(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== this.lastUrl) {
-          this.context.logger.info(`URL changed from ${this.lastUrl} to ${currentUrl}`);
+          this.context.logger.debug(`URL changed from ${this.lastUrl} to ${currentUrl}`);
 
           // Emit page changed event
           if (this.onPageChanged) {
@@ -740,7 +740,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       }
     }
 
-    this.context.logger.warn('Could not find suitable insertion point for MCP popover');
+    this.context.logger.debug('Could not find suitable insertion point for MCP popover');
     return null;
   }
 
@@ -776,7 +776,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       // Render the React MCP Popover using the new architecture
       this.renderMCPPopover(reactContainer);
 
-      this.context.logger.info('MCP popover injected and rendered successfully');
+      this.context.logger.debug('MCP popover injected and rendered successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject MCP popover:', error);
     }
@@ -801,7 +801,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
               })
             );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with new architecture');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
@@ -882,7 +882,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -937,7 +937,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       setTimeout(() => {
         const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
         if (filePreview) {
-          this.context.logger.info('File preview element found after attachment');
+          this.context.logger.debug('File preview element found after attachment');
           resolve(true);
         } else {
           this.context.logger.warn('File preview element not found after attachment');
@@ -976,7 +976,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Public method to manually inject MCP popover
    */
   public injectMCPPopoverManually(): void {
-    this.context.logger.info('Manual MCP popover injection requested');
+    this.context.logger.debug('Manual MCP popover injection requested');
     this.injectMCPPopoverWithRetry();
   }
 
@@ -989,7 +989,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
   // Event handlers
   onPageChanged?(url: string, oldUrl?: string): void {
-    this.context.logger.info(`OpenRouter page changed: from ${oldUrl || 'N/A'} to ${url}`);
+    this.context.logger.debug(`OpenRouter page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
     this.lastUrl = url;
 
@@ -1013,7 +1013,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   onHostChanged?(newHost: string, oldHost?: string): void {
-    this.context.logger.info(`OpenRouter host changed: from ${oldHost || 'N/A'} to ${newHost}`);
+    this.context.logger.debug(`OpenRouter host changed: from ${oldHost || 'N/A'} to ${newHost}`);
 
     const stillSupported = this.isSupported();
     if (!stillSupported) {
@@ -1028,7 +1028,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   onToolDetected?(tools: any[]): void {
-    this.context.logger.info(`Tools detected in OpenRouter adapter:`, tools);
+    this.context.logger.debug(`Tools detected in OpenRouter adapter:`, tools);
 
     tools.forEach(tool => {
       this.context.stores.tool?.addDetectedTool?.(tool);
@@ -1036,7 +1036,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   private checkAndRestoreSidebar(): void {
-    this.context.logger.info('Checking sidebar state after page navigation');
+    this.context.logger.debug('Checking sidebar state after page navigation');
 
     try {
       const activeSidebarManager = (window as any).activeSidebarManager;
@@ -1054,14 +1054,14 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   private ensureMCPPopoverConnection(): void {
-    this.context.logger.info('Ensuring MCP popover connection after navigation');
+    this.context.logger.debug('Ensuring MCP popover connection after navigation');
     
     try {
       if (!this.isMCPPopoverInjected()) {
-        this.context.logger.info('MCP popover missing after navigation, re-injecting');
+        this.context.logger.debug('MCP popover missing after navigation, re-injecting');
         this.injectMCPPopoverWithRetry(3);
       } else {
-        this.context.logger.info('MCP popover is still present after navigation');
+        this.context.logger.debug('MCP popover is still present after navigation');
       }
     } catch (error) {
       this.context.logger.error('Error ensuring MCP popover connection:', error);

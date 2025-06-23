@@ -45,14 +45,14 @@ class GlobalEventHandlers {
   private _logEvent<K extends keyof EventMap>(eventName: K) {
     return (data: EventMap[K]) => {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[GlobalEventHandlers] Event "${String(eventName)}":`, data);
+        console.debug(`[GlobalEventHandlers] Event "${String(eventName)}":`, data);
       }
     };
   }
 
   init(): void {
     this.destroy(); // Clear any existing listeners before re-initializing
-    console.info('[GlobalEventHandlers] Initializing global event handlers...');
+    console.debug('[GlobalEventHandlers] Initializing global event handlers...');
 
   
 
@@ -100,14 +100,14 @@ class GlobalEventHandlers {
     // Performance events
     this.unsubscribeFunctions.push(eventBus.on('performance:measurement', this._logEvent('performance:measurement')));
 
-    console.info('[GlobalEventHandlers] Global event handlers initialized.');
+    console.debug('[GlobalEventHandlers] Global event handlers initialized.');
   }
 
   destroy(): void {
-    console.info('[GlobalEventHandlers] Destroying global event handlers...');
+    console.debug('[GlobalEventHandlers] Destroying global event handlers...');
     this.unsubscribeFunctions.forEach(unsub => unsub());
     this.unsubscribeFunctions = [];
-    console.info('[GlobalEventHandlers] Global event handlers destroyed.');
+    console.debug('[GlobalEventHandlers] Global event handlers destroyed.');
   }
 }
 

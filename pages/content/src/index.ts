@@ -421,13 +421,13 @@ if (document.readyState === 'loading') {
 
 // Remote Config message handler
 function handleRemoteConfigMessage(message: any, sendResponse: (response: any) => void): void {
-  console.log(`[Content] Processing Remote Config message: ${message.type}`);
+  console.debug(`[Content] Processing Remote Config message: ${message.type}`);
   
   try {
     switch (message.type) {
       case 'remote-config:feature-flags-updated': {
         const { flags, timestamp } = message.data;
-        console.log(`[Content] Received feature flags update: ${Object.keys(flags).length} flags`);
+        console.debug(`[Content] Received feature flags update: ${Object.keys(flags).length} flags`);
         
         // Update config store
         const configStore = useConfigStore.getState();
@@ -442,7 +442,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:notifications-received': {
         const { notifications, timestamp } = message.data;
-        console.log(`[Content] Received notifications: ${notifications.length} notifications`);
+        console.debug(`[Content] Received notifications: ${notifications.length} notifications`);
         
         // Process notifications through the UI store
         const uiStore = useUIStore.getState();
@@ -460,7 +460,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:version-config-updated': {
         const { config, timestamp } = message.data;
-        console.log('[Content] Received version-specific config update');
+        console.debug('[Content] Received version-specific config update');
         
         // Emit event for version config update
         eventBus.emit('remote-config:updated', { 
@@ -474,7 +474,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:adapter-configs-updated': {
         const { adapterConfigs, timestamp } = message.data;
-        console.log(`[Content] Received adapter configs update: ${Object.keys(adapterConfigs).length} adapters`);
+        console.debug(`[Content] Received adapter configs update: ${Object.keys(adapterConfigs).length} adapters`);
         
         // Emit event for adapter config updates
         eventBus.emit('remote-config:adapter-configs-updated', { 
@@ -507,7 +507,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
 function handleVersionUpdate(message: any, sendResponse: (response: any) => void): void {
   try {
     const { oldVersion, newVersion, timestamp } = message.data;
-    console.log(`[Content] Extension updated from ${oldVersion} to ${newVersion}`);
+    console.debug(`[Content] Extension updated from ${oldVersion} to ${newVersion}`);
     
     // Update config store with new version
     const configStore = useConfigStore.getState();

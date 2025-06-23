@@ -103,7 +103,7 @@ class TypedEventBus {
 
     // Development logging
     if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
-      console.log(`[EventBus] Emitted "${String(event)}":`, data);
+      console.debug(`[EventBus] Emitted "${String(event)}":`, data);
     }
   }
 
@@ -220,12 +220,12 @@ class TypedEventBus {
 
   enable(): void {
     this.isEnabled = true;
-    console.log('[EventBus] Enabled.');
+    console.debug('[EventBus] Enabled.');
   }
 
   disable(): void {
     this.isEnabled = false;
-    console.log('[EventBus] Disabled.');
+    console.debug('[EventBus] Disabled.');
   }
 
   debugInfo(): object {
@@ -266,7 +266,7 @@ if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'd
 
 // Optional: Global initialization function (can be called from app initializer)
 export async function initializeEventBus(): Promise<void> {
-  console.info('[MCPSuperAssistant] Event bus initialized.');
+  console.debug('[MCPSuperAssistant] Event bus initialized.');
   // Example: eventBus.setMaxListeners(100);
   // Add any other global setup for the event bus here if needed.
 }

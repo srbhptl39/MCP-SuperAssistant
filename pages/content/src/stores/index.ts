@@ -47,7 +47,7 @@ export const useRootStoreState = () => {
 // Function to initialize all stores or trigger their internal initializers if needed.
 // This could be part of a larger application initialization sequence.
 export async function initializeAllStores(): Promise<void> {
-  console.info('[Stores] Initializing all stores...');
+  console.debug('[Stores] Initializing all stores...');
   // Some stores might have internal async initialize methods or rely on being called.
   // Example: useAppStore.getState().initialize(); // If app.store has an initialize action
   
@@ -76,5 +76,5 @@ export async function initializeAllStores(): Promise<void> {
     await useAppStore.getState().initialize();
   }
   
-  console.info('[Stores] All stores accessed/initialized.');
+  console.debug('[Stores] All stores accessed/initialized.');
 }
