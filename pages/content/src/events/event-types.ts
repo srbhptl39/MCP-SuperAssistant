@@ -36,8 +36,14 @@ export interface EventMap {
   // Adapter events
   'adapter:activated': { pluginName: string; timestamp: number };
   'adapter:deactivated': { pluginName: string; reason?: string; timestamp: number };
+  'adapter:connection-status-changed': { isConnected: boolean; adapterId: string | null };
   'adapter:error': { name: string; error: string | Error };
   'adapter:capability-changed': { name: string; capabilities: string[] };
+
+  // Sidebar events
+  'sidebar:toggle-requested': {};
+  'sidebar:show-with-outputs': {};
+  'sidebar:refresh-content': {};
 
   // Plugin events
   'plugin:registry-initialized': { timestamp: number; registeredPlugins: number };

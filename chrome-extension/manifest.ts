@@ -40,12 +40,10 @@ const manifest = {
     '*://*.openrouter.ai/*',
     '*://*.google-analytics.com/*',
     '*://*.chat.deepseek.com/*',
-    '*://*.kagi.com/*',
     '*://*.t3.chat/*',
     '*://*.chat.mistral.ai/*',
     '*://*.github.com/*',
     '*://*.copilot.github.com/*',
-    '*://*.scira.ai/*',
   ],
 
   permissions: ['storage', 'clipboardWrite'],

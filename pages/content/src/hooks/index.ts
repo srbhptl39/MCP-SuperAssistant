@@ -51,10 +51,10 @@ export {
 } from './useAdapter';
 
 // Adapter bridge hooks for compatibility
-export {
-  useSiteAdapterBridge,
-  useCompatibleSiteAdapter
-} from './useAdapterBridge';
+// export {
+//   useSiteAdapterBridge,
+//   useCompatibleSiteAdapter
+// } from './useAdapterBridge';
 
 // Utility hooks (re-export existing ones)
 export { useShadowDomStyles } from './useShadowDomStyles';

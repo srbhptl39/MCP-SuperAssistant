@@ -13,6 +13,7 @@ import type { ConnectionStatus } from './types/stores';
 import { useConnectionStore } from './stores/connection.store';
 import { useUIStore } from './stores/ui.store';
 import { useConfigStore } from './stores/config.store';
+import { useAdapterStore } from './stores/adapter.store';
 
 // Import the new initialization system
 import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
@@ -27,8 +28,7 @@ import {
   configureFunctionCallRenderer,
 } from '@src/render_prescript/src/index';
 
-// Import the adapter registry (legacy)
-import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
+// Legacy adapter registry has been removed - functionality moved to new architecture
 
 // Import the automation service
 import { initializeAllServices, cleanupAllServices } from './services';
@@ -90,9 +90,6 @@ function setupSidebarRecovery(): void {
 
   logMessage('[SidebarRecovery] Sidebar recovery mechanism set up');
 }
-
-// Track which adapters have been initialized to prevent redundant initialization
-const initializedAdapters = new Set<string>();
 
 /**
  * Content Script Entry Point - Session 10 Implementation
@@ -292,37 +289,8 @@ function collectDemographicData(): { [key: string]: any } {
   }
 })();
 
-// Initialize the current site adapter regardless of MCP connection status
-(function initializeCurrentAdapter() {
-  try {
-    const currentHostname = window.location.hostname;
-    const adapter = adapterRegistry.getAdapter(currentHostname);
-
-    if (adapter) {
-      const adapterId = adapter.name;
-
-      if (!initializedAdapters.has(adapterId)) {
-        logMessage(`Initializing site adapter for ${adapter.name} (regardless of MCP connection)`);
-
-        // Always initialize the adapter to ensure UI is visible
-        adapter.initialize();
-
-        // Mark this adapter as initialized
-        initializedAdapters.add(adapterId);
-
-        // Set the adapter globally
-        window.mcpAdapter = adapter;
-        logMessage(`Exposed adapter ${adapter.name} to global window.mcpAdapter`);
-      } else {
-        logMessage(`Adapter ${adapter.name} already initialized, skipping initialization`);
-      }
-    } else {
-      logMessage('No adapter found for current hostname, cannot initialize');
-    }
-  } catch (error) {
-    console.error('Error initializing current adapter:', error);
-  }
-})();
+// Legacy adapter initialization has been moved to the new plugin system in Session 10
+// Adapter initialization is now handled automatically by the plugin registry during applicationInit()
 
 // Initialize the new application architecture (Session 10)
 (async function initializeNewArchitecture() {
@@ -388,11 +356,16 @@ eventBus.on('connection:status-changed', ({ status }: { status: ConnectionStatus
   const isConnected = status === 'connected';
   logMessage(`[Content Script] MCP connection status changed: ${isConnected ? 'Connected' : 'Disconnected'}`);
 
-  const currentHostname = window.location.hostname;
-  const adapter = adapterRegistry.getAdapter(currentHostname);
-  if (adapter) {
-    adapter.updateConnectionStatus(isConnected);
-    (window as any).mcpAdapter = adapter;
+  // Update the current adapter via the new plugin system
+  const adapterStore = useAdapterStore.getState();
+  const currentAdapterReg = adapterStore.getActiveAdapter();
+  if (currentAdapterReg && currentAdapterReg.instance) {
+    // Emit adapter connection status update event
+    eventBus.emit('adapter:connection-status-changed', { 
+      isConnected, 
+      adapterId: adapterStore.activeAdapterName 
+    });
+    (window as any).mcpAdapter = currentAdapterReg.instance;
   }
 });
 
@@ -557,8 +530,11 @@ function handleVersionUpdate(message: any, sendResponse: (response: any) => void
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   logMessage(`Message received in content script: ${JSON.stringify(message)}`); // Log all incoming messages
-  const currentHostname = window.location.hostname;
-  const adapter = adapterRegistry.getAdapter(currentHostname);
+  
+  // Use the new plugin system to get current adapter
+  const adapterStore = useAdapterStore.getState();
+  const currentAdapterReg = adapterStore.getActiveAdapter();
+  const adapter = currentAdapterReg?.instance;
 
   if (message.command === 'getStats') {
     sendResponse({
@@ -569,21 +545,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       },
     });
   } else if (message.command === 'toggleSidebar') {
-    // Use the site adapter to toggle sidebar
-    if (adapter) {
-      adapter.toggleSidebar();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
+    // Use the sidebar plugin events since adapters may not have direct sidebar methods
+    eventBus.emit('sidebar:toggle-requested', {});
+    sendResponse({ success: true });
   } else if (message.command === 'showSidebarWithToolOutputs') {
-    // Show the sidebar with tool outputs
-    if (adapter) {
-      adapter.showSidebarWithToolOutputs();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
+    // Use the sidebar plugin events since adapters may not have direct sidebar methods
+    eventBus.emit('sidebar:show-with-outputs', {});
+    sendResponse({ success: true });
   } else if (message.command === 'callMcpTool') {
     // Handle MCP tool call requests from popup
     const { toolName, args } = message;
@@ -602,13 +570,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'Invalid tool call request' });
     }
   } else if (message.command === 'refreshSidebarContent') {
-    // Refresh the sidebar content
-    if (adapter) {
-      adapter.refreshSidebarContent();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
+    // Use the sidebar plugin events since adapters may not have direct sidebar methods
+    eventBus.emit('sidebar:refresh-content', {});
+    sendResponse({ success: true });
   } else if (message.command === 'setFunctionCallRendering') {
     // Handle toggling function call rendering
     const { enabled } = message;
@@ -676,15 +640,8 @@ window.addEventListener('beforeunload', async () => {
     // Use the comprehensive cleanup from Session 10
     await applicationCleanup();
     
-    // Legacy adapter cleanup for compatibility
-    const currentHostname = window.location.hostname;
-    const adapter = adapterRegistry.getAdapter(currentHostname);
-    if (adapter) {
-      adapter.cleanup();
-    }
-
-    // Clear the initialized adapters set
-    initializedAdapters.clear();
+    // Legacy adapter cleanup is now handled by the plugin system cleanup
+    // The applicationCleanup() already handles all plugin cleanup
     
     logMessage('Comprehensive cleanup completed');
   } catch (error) {
@@ -696,9 +653,12 @@ window.addEventListener('beforeunload', async () => {
 (window as any).mcpClient = mcpClient;
 console.debug('[Content Script] mcpClient exposed to window object for renderer use.');
 
-// Set the current adapter to global window object
-const currentAdapter = getCurrentAdapter();
-if (currentAdapter) {
-  window.mcpAdapter = currentAdapter;
-  console.debug(`[Content Script] Current adapter (${currentAdapter.name}) exposed to window object as mcpAdapter.`);
+// Set the current adapter to global window object using the new plugin system
+const adapterStore = useAdapterStore.getState();
+const currentAdapterReg = adapterStore.getActiveAdapter();
+if (currentAdapterReg && currentAdapterReg.instance) {
+  (window as any).mcpAdapter = currentAdapterReg.instance;
+  console.debug(`[Content Script] Current adapter (${currentAdapterReg.plugin.name}) exposed to window object as mcpAdapter.`);
+} else {
+  console.debug('[Content Script] No active adapter found to expose to window object.');
 }

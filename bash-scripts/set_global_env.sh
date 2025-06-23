@@ -53,15 +53,25 @@ parse_arguments() {
 
 # Validate keys in .env file
 validate_env_keys() {
-  editable_section_starts=false
+  if [ ! -f .env ]; then
+    return 0
+  fi
 
   while IFS= read -r line; do
+    # Skip empty lines and comments
+    if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+    
     key="${line%%=*}"
+    
+    # Only validate CLI_CEB_ and CEB_ keys, allow other keys to exist
     if [[ "$key" =~ ^CLI_CEB_ ]]; then
-      editable_section_starts=true
-    elif $editable_section_starts; then
+      validate_key "$key" false
+    elif [[ "$key" =~ ^CEB_ ]]; then
       validate_key "$key" true
     fi
+    # Allow other keys (like FIREBASE_*) without validation
   done < .env
 }
 
@@ -78,8 +88,37 @@ create_new_file() {
     echo ""
     echo "# THOSE VALUES ARE EDITABLE"
 
-    # Copy existing env values, without CLI section
-    grep -E '^CEB_' .env
+    # Copy existing env values, excluding CLI section
+    if [ -f .env ]; then
+      # Skip CLI-managed section and preserve everything else
+      skip_cli_section=false
+      while IFS= read -r line; do
+        # Check if we're entering the CLI section
+        if [[ "$line" == "# THOSE VALUES ARE EDITABLE ONLY VIA CLI" ]]; then
+          skip_cli_section=true
+          continue
+        fi
+        
+        # Check if we're exiting the CLI section
+        if [[ "$line" == "# THOSE VALUES ARE EDITABLE" ]]; then
+          skip_cli_section=false
+          continue
+        fi
+        
+        # Skip lines in the CLI section
+        if [[ "$skip_cli_section" == true ]]; then
+          continue
+        fi
+        
+        # Skip CLI_CEB_ variables (in case they appear outside the CLI section)
+        if [[ "$line" =~ ^CLI_CEB_ ]]; then
+          continue
+        fi
+        
+        # Preserve all other lines (including FIREBASE_, CEB_, comments, empty lines)
+        echo "$line"
+      done < .env
+    fi
   } > "$temp_file"
 
   mv "$temp_file" .env
