@@ -1611,10 +1611,15 @@ export const displayResult = (
     } else {
       // Dispatch event for normal-sized results
       const wrappedResult = `<function_result call_id="${callId}">\n${rawResultText}\n</function_result>`;
+      
+      // Dispatch event - delays are handled by automation service
       requestAnimationFrame(() => {
         document.dispatchEvent(
           new CustomEvent('mcp:tool-execution-complete', {
-            detail: { result: wrappedResult, skipAutoInsertCheck: false },
+            detail: { 
+              result: wrappedResult, 
+              skipAutoInsertCheck: false
+            },
           }),
         );
       });

@@ -79,6 +79,9 @@ export interface AutomationState {
   autoInsert: boolean;
   autoSubmit: boolean;
   autoExecute: boolean;
+  autoInsertDelay: number;
+  autoSubmitDelay: number;
+  autoExecuteDelay: number;
 }
 
 /**
@@ -252,6 +255,9 @@ export class AutomationService {
         autoInsert: preferences.autoInsert || false,
         autoSubmit: preferences.autoSubmit || false,
         autoExecute: preferences.autoExecute || false,
+        autoInsertDelay: preferences.autoInsertDelay || 0,
+        autoSubmitDelay: preferences.autoSubmitDelay || 0,
+        autoExecuteDelay: preferences.autoExecuteDelay || 0,
       };
     } catch (error) {
       console.error('[AutomationService] Error getting automation state:', error);
@@ -263,13 +269,22 @@ export class AutomationService {
    * Handle Auto Execute functionality
    * Currently just logs the execution, but extensible for future features
    */
-  private handleAutoExecute(detail: ToolExecutionCompleteDetail): void {
+  private async handleAutoExecute(detail: ToolExecutionCompleteDetail): Promise<void> {
+    const preferences = await storeRefs.getUserPreferences?.();
+    const delay = preferences?.autoExecuteDelay || 0;
+
+    if (delay > 0) {
+      console.debug(`[AutomationService] Auto Execute: Waiting ${delay} seconds before execution`);
+      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+    }
+
     console.debug('[AutomationService] Auto Execute: Tool execution completed', {
       functionName: detail.functionName,
       callId: detail.callId,
       hasResult: !!detail.result,
       isFileAttachment: detail.isFileAttachment,
-      fileName: detail.fileName
+      fileName: detail.fileName,
+      appliedDelay: delay
     });
 
     // Emit event for potential future integrations
@@ -284,7 +299,15 @@ export class AutomationService {
    * Inserts text or attaches files based on the execution result
    */
   private async handleAutoInsert(detail: ToolExecutionCompleteDetail): Promise<boolean> {
-    console.debug('[AutomationService] Handling auto insert');
+    const preferences = await storeRefs.getUserPreferences?.();
+    const delay = preferences?.autoInsertDelay || 0;
+
+    if (delay > 0) {
+      console.debug(`[AutomationService] Auto Insert: Waiting ${delay} seconds before insertion`);
+      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+    }
+
+    console.debug('[AutomationService] Handling auto insert', { appliedDelay: delay });
 
     // Additional safety check: Don't auto-insert if skipAutoInsertCheck is true
     if (detail.skipAutoInsertCheck) {
@@ -396,7 +419,15 @@ export class AutomationService {
    * Submits the current form after auto insertion
    */
   private async handleAutoSubmit(detail: ToolExecutionCompleteDetail): Promise<boolean> {
-    console.debug('[AutomationService] Handling auto submit');
+    const preferences = await storeRefs.getUserPreferences?.();
+    const delay = preferences?.autoSubmitDelay || 0;
+
+    if (delay > 0) {
+      console.debug(`[AutomationService] Auto Submit: Waiting ${delay} seconds before submission`);
+      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+    }
+
+    console.debug('[AutomationService] Handling auto submit', { appliedDelay: delay });
 
     try {
       // Get current adapter from the adapter hook

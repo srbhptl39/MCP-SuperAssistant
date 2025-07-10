@@ -57,6 +57,9 @@ export interface UserPreferences {
   autoSubmit: boolean;
   autoInsert: boolean;  // New automation field
   autoExecute: boolean; // New automation field
+  autoInsertDelay: number;  // Delay in seconds for auto insert
+  autoSubmitDelay: number;  // Delay in seconds for auto submit
+  autoExecuteDelay: number; // Delay in seconds for auto execute
   notifications: boolean;
   theme: 'light' | 'dark' | 'system';
   language: string;

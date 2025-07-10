@@ -870,7 +870,7 @@ const ParamElementUtils = {
 // Auto-execution utilities
 const AutoExecutionUtils = {
   setupOptimizedAutoExecution: (blockId: string, functionDetails: any): void => {
-    const setupAutoExecution = () => {
+  const setupAutoExecution = () => {
       const attempts = executionTracker.incrementAttempts(blockId);
 
       if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
@@ -880,6 +880,12 @@ const AutoExecutionUtils = {
       }
 
       console.debug(`Auto-execute attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS} for block ${blockId}`);
+
+      // Get auto execute delay from window state
+      const automationState = (window as any).__mcpAutomationState;
+      const autoExecuteDelay = (automationState?.autoExecuteDelay || 0) * 1000; // Convert to milliseconds
+
+      console.debug(`[AutoExecution] Using delay of ${autoExecuteDelay}ms for block ${blockId}`);
 
       PerformanceUtils.setManagedTimeout(
         `auto-exec-${blockId}-${attempts}`,
@@ -930,7 +936,7 @@ const AutoExecutionUtils = {
             }
           }
         },
-        500,
+        autoExecuteDelay + 500, // Add base delay to the configured delay
       );
     };
 

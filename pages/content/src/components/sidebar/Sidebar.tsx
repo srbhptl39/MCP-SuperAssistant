@@ -6,6 +6,7 @@ import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
 import InputArea from './InputArea/InputArea';
+import Settings from './Settings/Settings';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { logMessage } from '@src/utils/helpers';
 import { eventBus } from '@src/events/event-bus';
@@ -266,7 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   }, [sidebarVisible, isMinimized, isPushMode, sidebarWidth]);
 
   // Local UI state that doesn't need to be in the store
-  const [activeTab, setActiveTab] = useState<'availableTools' | 'instructions'>('availableTools');
+  const [activeTab, setActiveTab] = useState<'availableTools' | 'instructions' | 'settings'>('availableTools');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isInputMinimized, setIsInputMinimized] = useState(false);
@@ -858,6 +859,16 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     onClick={() => setActiveTab('instructions')}>
                     Instructions
                   </button>
+                  <button
+                    className={cn(
+                      'py-2 px-4 font-medium text-sm transition-all duration-200',
+                      activeTab === 'settings'
+                        ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                    )}
+                    onClick={() => setActiveTab('settings')}>
+                    Settings
+                  </button>
                 </div>
               </div>
             </div>
@@ -893,6 +904,15 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     <InstructionManager adapter={adapter} tools={formattedTools} />
                   </CardContent>
                 </Card>
+              </div>
+
+              {/* Settings */}
+              <div
+                className={cn(
+                  'h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
+                  { hidden: activeTab !== 'settings' },
+                )}>
+                <Settings />
               </div>
             </div>
 
