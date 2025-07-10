@@ -65,7 +65,7 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['.pre'],
-      function_result_selector: ['div.chat-turn-container'],
+      function_result_selector: ['div.user-prompt-container'],
     },
   },
   {

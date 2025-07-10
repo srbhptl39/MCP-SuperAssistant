@@ -5,6 +5,13 @@ import { Typography } from '../ui';
 import { AutomationService } from '@src/services/automation.service';
 import { cn } from '@src/lib/utils';
 
+// Default delay values in seconds
+const DEFAULT_DELAYS = {
+  autoInsertDelay: 2,
+  autoSubmitDelay: 2,
+  autoExecuteDelay: 2
+} as const;
+
 const Settings: React.FC = () => {
   const { preferences, updatePreferences } = useUserPreferences();
 
@@ -31,15 +38,23 @@ const Settings: React.FC = () => {
     AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
 
-  // Load stored delays on component mount
+  // Load stored delays on component mount, set default to 2 seconds if not set
   React.useEffect(() => {
     try {
       const storedDelays = JSON.parse(localStorage.getItem('mcpDelaySettings') || '{}');
-      if (Object.keys(storedDelays).length > 0) {
+      // If no stored delays, use defaults
+      if (Object.keys(storedDelays).length === 0) {
+        updatePreferences(DEFAULT_DELAYS);
+        localStorage.setItem('mcpDelaySettings', JSON.stringify(DEFAULT_DELAYS));
+      } else {
+        // Use stored delays
         updatePreferences(storedDelays);
       }
     } catch (error) {
       console.error('[Settings] Error loading stored delay settings:', error);
+      // Set defaults on error
+      updatePreferences(DEFAULT_DELAYS);
+      localStorage.setItem('mcpDelaySettings', JSON.stringify(DEFAULT_DELAYS));
     }
   }, [updatePreferences]);
 
