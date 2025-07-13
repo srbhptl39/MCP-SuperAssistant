@@ -220,51 +220,157 @@ export class KimiAdapter extends BaseAdapterPlugin {
         
         // Method 1: Try clipboard simulation first (often works best with Lexical)
         try {
+          // Firefox has stricter clipboard security, check for proper permissions
+          const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+          
           if (navigator.clipboard && window.ClipboardEvent) {
-            // Save current clipboard content
-            let originalClipboard = '';
-            try {
-              originalClipboard = await navigator.clipboard.readText();
-            } catch (e) {
-              // Ignore clipboard read errors
-            }
-
-            // Set our text to clipboard
-            await navigator.clipboard.writeText(text);
-
-            // Create paste event
-            const pasteEvent = new ClipboardEvent('paste', {
-              bubbles: true,
-              cancelable: true,
-              clipboardData: new DataTransfer()
-            });
-
-            // Add text to clipboard data
-            if (pasteEvent.clipboardData) {
-              pasteEvent.clipboardData.setData('text/plain', text);
-            }
-
-            // Trigger paste event
-            targetElement.dispatchEvent(pasteEvent);
-
-            // Restore original clipboard after a delay
-            setTimeout(async () => {
+            // Check if we have clipboard permissions (Firefox requirement)
+            let hasClipboardAccess = true;
+            
+            if (isFirefox) {
               try {
-                if (originalClipboard) {
-                  await navigator.clipboard.writeText(originalClipboard);
+                // Test clipboard access in Firefox
+                await navigator.clipboard.readText().catch(() => {
+                  // If read fails, we might not have permission, but write might still work
+                });
+              } catch (e) {
+                this.context.logger.warn('Firefox clipboard read test failed, trying write anyway:', e);
+              }
+            }
+
+            if (hasClipboardAccess) {
+              // Save current clipboard content (skip in Firefox if it fails)
+              let originalClipboard = '';
+              try {
+                if (!isFirefox) {
+                  originalClipboard = await navigator.clipboard.readText();
                 }
               } catch (e) {
-                // Ignore clipboard restore errors
+                this.context.logger.warn('Could not read clipboard, continuing without backup:', e);
               }
-            }, 100);
 
-            insertionSuccess = true;
-            this.context.logger.debug(`Text inserted using clipboard simulation method`);
+              // Set our text to clipboard
+              await navigator.clipboard.writeText(text);
+
+              // Create a more compatible paste event for Firefox
+              const clipboardData = new DataTransfer();
+              clipboardData.setData('text/plain', text);
+              clipboardData.setData('text/html', text.replace(/\n/g, '<br>'));
+
+              const pasteEvent = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                clipboardData: clipboardData
+              });
+
+              // For Firefox, also try input event with data
+              const inputEvent = new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertFromPaste',
+                data: text
+              });
+
+              // Trigger both events
+              targetElement.dispatchEvent(pasteEvent);
+              targetElement.dispatchEvent(inputEvent);
+
+              // Additional Firefox-specific events
+              if (isFirefox) {
+                targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+                targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+
+              // Restore original clipboard after a delay (skip for Firefox)
+              if (!isFirefox && originalClipboard) {
+                setTimeout(async () => {
+                  try {
+                    await navigator.clipboard.writeText(originalClipboard);
+                  } catch (e) {
+                    this.context.logger.warn('Could not restore clipboard:', e);
+                  }
+                }, 100);
+              }
+
+              insertionSuccess = true;
+              this.context.logger.debug(`Text inserted using clipboard simulation method (${isFirefox ? 'Firefox' : 'Chrome'} mode)`);
+            } else {
+              throw new Error('Clipboard access denied');
+            }
           } else {
             throw new Error('Clipboard API not available');
           }
         } catch (clipboardError) {
-          this.context.logger.warn('Clipboard method failed, trying execCommand:', clipboardError);
+          this.context.logger.warn('Clipboard method failed, trying Firefox-specific method:', clipboardError);
+          
+          // Method 1.5: Firefox-specific clipboard workaround using hidden textarea
+          const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+          if (isFirefox) {
+            try {
+              // Create a hidden textarea to simulate clipboard operation
+              const hiddenTextarea = document.createElement('textarea');
+              hiddenTextarea.value = text;
+              hiddenTextarea.style.position = 'fixed';
+              hiddenTextarea.style.left = '-9999px';
+              hiddenTextarea.style.top = '-9999px';
+              hiddenTextarea.style.opacity = '0';
+              hiddenTextarea.style.pointerEvents = 'none';
+              
+              document.body.appendChild(hiddenTextarea);
+              hiddenTextarea.select();
+              hiddenTextarea.setSelectionRange(0, text.length);
+              
+              // Try to copy to clipboard using execCommand
+              const copySuccess = document.execCommand('copy');
+              
+              if (copySuccess) {
+                // Now try to paste into the target element
+                targetElement.focus();
+                const pasteSuccess = document.execCommand('paste');
+                
+                if (pasteSuccess) {
+                  insertionSuccess = true;
+                  this.context.logger.debug('Text inserted using Firefox hidden textarea method');
+                } else {
+                  // If paste fails, manually insert the text using the selection method
+                  const selection = window.getSelection();
+                  selection?.removeAllRanges();
+                  const range = document.createRange();
+                  range.selectNodeContents(targetElement);
+                  range.collapse(false);
+                  selection?.addRange(range);
+                  
+                  // If there's existing content, add spacing
+                  if (currentText && currentText.trim() !== '') {
+                    document.execCommand('insertText', false, '\n\n');
+                  }
+                  document.execCommand('insertText', false, text);
+                  
+                  insertionSuccess = true;
+                  this.context.logger.debug('Text inserted using Firefox execCommand fallback');
+                }
+              }
+              
+              // Clean up
+              document.body.removeChild(hiddenTextarea);
+              
+              if (insertionSuccess) {
+                // Firefox needs these additional events
+                targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+                targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+                targetElement.dispatchEvent(new InputEvent('input', { 
+                  bubbles: true, 
+                  inputType: 'insertFromPaste',
+                  data: text 
+                }));
+              }
+              
+            } catch (firefoxError) {
+              this.context.logger.warn('Firefox-specific method failed:', firefoxError);
+            }
+          }
+          
+          if (!insertionSuccess) {
           
           // Method 2: Try using Selection API with execCommand for better Lexical compatibility
           try {
@@ -347,6 +453,7 @@ export class KimiAdapter extends BaseAdapterPlugin {
               this.context.logger.error('DOM manipulation method also failed:', domError);
             }
           }
+        }
         }
 
         if (insertionSuccess) {
