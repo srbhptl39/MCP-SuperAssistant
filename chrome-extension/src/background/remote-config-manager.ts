@@ -383,10 +383,10 @@ export class RemoteConfigManager {
 //     console.debug('[RemoteConfigManager] Started periodic config fetching');
 //   }
   private startPeriodicFetch(): void {
-    // Fetch every 4 hours
+    // Fetch every 12 hours
     this.fetchInterval = setInterval(() => {
       this.fetchConfig(false);
-    }, 4 * 60 * 60 * 1000);
+    }, 12 * 60 * 60 * 1000);
     
     console.debug('[RemoteConfigManager] Started periodic config fetching');
   }

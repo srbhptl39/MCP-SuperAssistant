@@ -44,6 +44,7 @@ const manifest = {
     '*://*.chat.mistral.ai/*',
     '*://*.github.com/*',
     '*://*.copilot.github.com/*',
+    '*://*.kimi.com/*',
   ],
 
   permissions: ['storage', 'clipboardWrite'],
@@ -139,6 +140,12 @@ const manifest = {
     // Specific content script for GitHub Copilot tool call parsing
     {
       matches: ['*://*.github.com/*', '*://*.copilot.github.com/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+    // Specific content script for Kimi
+    {
+      matches: ['*://*.kimi.com/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

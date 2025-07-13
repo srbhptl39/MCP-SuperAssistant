@@ -338,10 +338,10 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   }
 
   private startPeriodicFetch(): void {
-    // Fetch every 4 hours
+    // Fetch every 12 hours
     this.fetchInterval = setInterval(() => {
       this.fetchConfig(false);
-    }, 4 * 60 * 60 * 1000);
+    }, 12 * 60 * 60 * 1000);
     
     this.context?.logger.debug('[RemoteConfigPlugin] Started periodic config fetching');
   }

@@ -23,6 +23,7 @@ import { T3ChatAdapter } from './adapters/t3chat.adapter';
 import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
+import { KimiAdapter } from './adapters/kimi.adapter';
 import { RemoteConfigPlugin } from './remote-config.plugin';
 
 // Types for lazy initialization
@@ -914,6 +915,29 @@ class PluginRegistry {
           id: 'mistralchat-adapter',
           name: 'Mistral Adapter',
           description: 'Specialized adapter for Mistral chat with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
+        },
+      });
+
+
+      // Register KimiAdapter factory for Kimi AI
+      this.registerAdapterFactory({
+        name: 'kimi-adapter',
+        version: '2.0.0',
+        type: 'website-adapter',
+        hostnames: ['kimi.com'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new KimiAdapter(),
+        config: {
+          id: 'kimi-adapter',
+          name: 'Kimi Adapter',
+          description: 'Specialized adapter for Kimi AI with chat input, form submission, and file attachment support',
           version: '2.0.0',
           enabled: true,
           priority: 5,
