@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter and more...
+Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, Kimi, Github Copilot, Mistral and more...
 </p>
 
 <!-- ![MCP SuperAssistant](chrome-extension/public/Cover3.jpg) -->
@@ -47,6 +47,7 @@ MCP SuperAssistant is a Chrome extension that integrates the Model Context Proto
 - [T3 Chat](https://t3.chat/)
 - [GitHub Copilot](https://github.com/copilot)
 - [Mistral AI](https://chat.mistral.ai/)
+- [Kimi](https://kimi.com/)
 
 
 ## Demo Video
@@ -96,8 +97,6 @@ MCP SuperAssistant uses a modern, modular architecture with the following key co
 - **Event System**: Centralized event handling with type safety
 - **Utilities**: Shared helper functions and DOM manipulation tools
 - **Types**: Comprehensive TypeScript definitions for type safety
-
-For detailed architecture documentation, see the [Architecture Guide](./docs/ARCHITECTURE.md).
 
 ```mermaid
 flowchart TD
@@ -234,43 +233,6 @@ pnpm build
 # Create zip package for distribution
 pnpm zip
 ```
-
-## Architecture
-
-### Plugin System
-
-MCP SuperAssistant features a robust plugin system that allows for site-specific adapters and functionality:
-
-#### Core Components
-- **Plugin Registry**: Central hub for plugin management and lifecycle
-- **Base Adapter**: Foundation class providing common functionality  
-- **Site Adapters**: Specialized implementations for different websites
-- **Event System**: Real-time communication between system components
-- **React Hooks**: Integration with React components
-
-#### Current Adapters
-- **DefaultAdapter**: Universal fallback adapter for any website
-- **ExampleForumAdapter**: Demonstration adapter for forum-specific functionality
-
-#### Plugin Capabilities
-- **Text Insertion**: Insert tool results into page elements
-- **Form Submission**: Submit forms with multiple fallback strategies
-- **URL Navigation**: Navigate to specific URLs within the site
-- **DOM Manipulation**: Interact with site-specific DOM elements
-- **Event Tracking**: Monitor and respond to page interactions
-
-### Development Sessions
-
-The plugin system was developed through structured sessions:
-
-- **Session 7**: Core plugin system implementation with DefaultAdapter
-- **Session 8**: Site-specific adapter implementation (ExampleForumAdapter)
-- **Session 9+**: Planned expansion with additional site adapters
-
-For detailed documentation, see:
-- [`/pages/content/src/plugins/README.md`](pages/content/src/plugins/README.md) - Core plugin system
-- [`/pages/content/src/plugins/adapters/README.md`](pages/content/src/plugins/adapters/README.md) - Adapter implementations
-- [`/docs/sessions/`](docs/sessions/) - Development session logs
 
 ## Contributing
 
