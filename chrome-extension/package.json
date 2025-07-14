@@ -32,7 +32,7 @@
     "@extension/hmr": "workspace:*",
     "@extension/tsconfig": "workspace:*",
     "@extension/vite-config": "workspace:*",
-    "@laynezh/vite-plugin-lib-assets": "^0.6.1",
+    "@laynezh/vite-plugin-lib-assets": "^2.1.0",
     "@types/chrome": "0.0.304",
     "@types/node": "^22.5.5",
     "magic-string": "^0.30.10",
