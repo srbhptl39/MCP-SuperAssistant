@@ -39,9 +39,9 @@
     "module-manager": "pnpm -F module-manager start"
   },
   "dependencies": {
+    "firebase": "^11.9.1",
     "react": "19.1.0",
-    "react-dom": "19.0.0",
-    "firebase": "^11.9.1"
+    "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.5",
@@ -57,7 +57,7 @@
     "autoprefixer": "^10.4.20",
     "cross-env": "^7.0.3",
     "deepmerge": "^4.3.1",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.25.8",
     "eslint": "^9.20.1",
     "eslint-config-airbnb-typescript": "18.0.0",
     "eslint-config-prettier": "^10.0.1",
