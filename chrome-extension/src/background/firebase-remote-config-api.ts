@@ -5,6 +5,9 @@
  * since the Firebase Web SDK doesn't work in service workers.
  */
 
+// REMOTE CONFIG FEATURE TOGGLE - Set to false to disable all remote config functionality
+const REMOTE_CONFIG_ENABLED = false;
+
 interface RemoteConfigValue {
   value: string;
   source: 'remote' | 'default' | 'static';
@@ -59,6 +62,14 @@ export class FirebaseRemoteConfigAPI {
   };
 
 constructor() {
+    // Check if remote config is enabled
+    if (!REMOTE_CONFIG_ENABLED) {
+      console.log('[FirebaseRemoteConfigAPI] Remote Config is DISABLED - using defaults only');
+      this.projectConfig = { projectId: '', apiKey: '', appId: '' };
+      this.minimumFetchInterval = 0; // No fetching
+      return;
+    }
+
     // Get configuration from environment/build time
     const isDevelopment = !chrome.runtime.getManifest().update_url;
     
@@ -90,6 +101,13 @@ constructor() {
   async initialize(): Promise<void> {
     console.log('[FirebaseRemoteConfigAPI] Initializing Remote Config API...');
     
+    if (!REMOTE_CONFIG_ENABLED) {
+      console.log('[FirebaseRemoteConfigAPI] Remote Config DISABLED - initializing with defaults only');
+      this.initializeWithDefaults();
+      console.log('[FirebaseRemoteConfigAPI] Remote Config API initialized with defaults only');
+      return;
+    }
+    
     // Load cached config and default values
     await this.loadCachedConfig();
     this.initializeWithDefaults();
@@ -98,6 +116,11 @@ constructor() {
   }
 
   async fetchAndActivate(force = false): Promise<boolean> {
+    if (!REMOTE_CONFIG_ENABLED) {
+      console.debug('[FirebaseRemoteConfigAPI] Remote Config DISABLED - skipping fetch, using defaults only');
+      return false; // No remote config fetched, but using defaults
+    }
+
     try {
       const now = Date.now();
       
@@ -351,6 +374,11 @@ constructor() {
    * Useful when dealing with deleted Firebase keys
    */
   async clearCacheAndRefetch(): Promise<boolean> {
+    if (!REMOTE_CONFIG_ENABLED) {
+      console.log('[FirebaseRemoteConfigAPI] Remote Config DISABLED - skipping cache clear, using defaults only');
+      return false;
+    }
+
     console.log('[FirebaseRemoteConfigAPI] Clearing cache and forcing refresh...');
     
     // Clear in-memory cache
@@ -397,3 +425,6 @@ export const validateConfigContent = (content: any): boolean => {
 
 // Create singleton instance
 export const firebaseRemoteConfigAPI = new FirebaseRemoteConfigAPI();
+
+// Export the toggle for external access if needed
+export { REMOTE_CONFIG_ENABLED };
