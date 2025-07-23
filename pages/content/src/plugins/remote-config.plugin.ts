@@ -1,5 +1,4 @@
 import type { AdapterPlugin, PluginContext, AdapterCapability } from './plugin-types';
-import { remoteConfig, fetchAndActivate, getValue, getAll, validateConfigContent } from '../shared/firebase-content-config';
 import type { RemoteNotification, FeatureFlag } from '../stores/config.store';
 
 export class RemoteConfigPlugin implements AdapterPlugin {
@@ -74,7 +73,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   }
 
   isSupported(): boolean {
-    return typeof window !== 'undefined' && !!remoteConfig;
+    return typeof window !== 'undefined' && typeof chrome !== 'undefined' && !!chrome.runtime;
   }
 
   getStatus(): 'active' | 'inactive' | 'error' | 'initializing' | 'disabled' | 'pending' {
@@ -89,25 +88,32 @@ export class RemoteConfigPlugin implements AdapterPlugin {
       // Check if we should fetch (respect minimum interval unless forced)
       const lastFetchTime = await this.getLastFetchTime();
       const now = Date.now();
-      const minInterval = remoteConfig.settings.minimumFetchIntervalMillis;
+      const minInterval = 3600000; // 1 hour - hardcoded since we're using background script
       
       if (!force && lastFetchTime && (now - lastFetchTime) < minInterval) {
         this.context.logger.debug('[RemoteConfigPlugin] Skipping fetch due to minimum interval');
         return;
       }
 
-      this.context.logger.debug('[RemoteConfigPlugin] Fetching remote config...');
+      this.context.logger.debug('[RemoteConfigPlugin] Fetching remote config via background script...');
       
       // Set loading state
       const configStore = this.context.stores.config?.();
       configStore?.setLoading(true);
       configStore?.setError(null);
 
-      // Fetch and activate
-      await fetchAndActivate(remoteConfig);
+      // Request background script to fetch config
+      const response = await chrome.runtime.sendMessage({
+        command: 'remote-config:fetch',
+        force
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to fetch remote config');
+      }
       
-      // Process the configuration
-      await this.processConfiguration();
+      // Process the configuration from background script
+      await this.processConfigurationFromBackground();
       
       // Update last fetch time
       await this.setLastFetchTime(now);
@@ -120,7 +126,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
       this.context.eventBus.emit('remote-config:fetched', {
         timestamp: now,
         success: true,
-        configCount: Object.keys(getAll(remoteConfig)).length
+        configCount: response.configCount || 0
       });
       
       this.context.logger.debug('[RemoteConfigPlugin] Remote config fetched successfully');
@@ -155,21 +161,30 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     }
   }
 
-  private async processConfiguration(): Promise<void> {
+  private async processConfigurationFromBackground(): Promise<void> {
     if (!this.context) return;
     
     try {
-      const allConfigs = getAll(remoteConfig);
+      // Get all configs from background script
+      const response = await chrome.runtime.sendMessage({
+        command: 'remote-config:get-config'
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to get config from background');
+      }
+
+      const allConfigs = response.config || {};
       const changes: string[] = [];
       
       // Process feature flags
-      await this.processFeatureFlags(allConfigs, changes);
+      await this.processFeatureFlagsFromBackground(allConfigs, changes);
       
       // Process notifications
-      await this.processNotifications(allConfigs, changes);
+      await this.processNotificationsFromBackground(allConfigs, changes);
       
       // Process user configuration updates
-      await this.processUserConfiguration(allConfigs, changes);
+      await this.processUserConfigurationFromBackground(allConfigs, changes);
       
       // Emit update event if there were changes
       if (changes.length > 0) {
@@ -185,16 +200,15 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     }
   }
 
-  private async processFeatureFlags(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
+  private async processFeatureFlagsFromBackground(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
     try {
-      const featuresRaw = getValue(remoteConfig, 'features');
-      const featuresString = featuresRaw.asString();
+      const featuresString = allConfigs.features;
       
       if (featuresString) {
         const features = JSON.parse(featuresString) as Record<string, FeatureFlag>;
         
-        // Validate features
-        if (validateConfigContent({ features })) {
+        // Basic validation
+        if (features && typeof features === 'object') {
           const configStore = this.context?.stores.config?.();
           configStore?.updateFeatureFlags(features);
           
@@ -214,16 +228,15 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     }
   }
 
-  private async processNotifications(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
+  private async processNotificationsFromBackground(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
     try {
-      const notificationsRaw = getValue(remoteConfig, 'active_notifications');
-      const notificationsString = notificationsRaw.asString();
+      const notificationsString = allConfigs.active_notifications;
       
       if (notificationsString) {
         const notifications = JSON.parse(notificationsString) as RemoteNotification[];
         
-        // Validate notifications
-        if (validateConfigContent({ notifications })) {
+        // Basic validation
+        if (Array.isArray(notifications)) {
           const configStore = this.context?.stores.config?.();
           
           for (const notification of notifications) {
@@ -262,16 +275,16 @@ export class RemoteConfigPlugin implements AdapterPlugin {
     }
   }
 
-  private async processUserConfiguration(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
+  private async processUserConfigurationFromBackground(allConfigs: Record<string, any>, changes: string[]): Promise<void> {
     try {
       // Update notification configuration
-      const notificationConfigRaw = getValue(remoteConfig, 'notifications_config');
-      const notificationConfigString = notificationConfigRaw.asString();
+      const notificationConfigString = allConfigs.notifications_config;
       
       if (notificationConfigString) {
         const notificationConfig = JSON.parse(notificationConfigString);
         
-        if (validateConfigContent({ notificationConfig })) {
+        // Basic validation
+        if (notificationConfig && typeof notificationConfig === 'object') {
           const configStore = this.context?.stores.config?.();
           configStore?.updateNotificationConfig(notificationConfig);
           changes.push('notification_config');
@@ -380,13 +393,15 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   }
 
   private async handleVersionUpdate(data: { oldVersion: string; newVersion: string }): Promise<void> {
-    // Check for update notifications
-    const updateNotificationsRaw = getValue(remoteConfig, 'update_notifications');
-    const updateNotificationsString = updateNotificationsRaw.asString();
-    
-    if (updateNotificationsString) {
-      try {
-        const updateConfig = JSON.parse(updateNotificationsString);
+    // Get update notifications config from background script
+    try {
+      const response = await chrome.runtime.sendMessage({
+        command: 'remote-config:get-config',
+        key: 'update_notifications'
+      });
+
+      if (response.success && response.value) {
+        const updateConfig = JSON.parse(response.value);
         
         if (updateConfig.enabled) {
           // Create version update notification
@@ -409,9 +424,9 @@ export class RemoteConfigPlugin implements AdapterPlugin {
             timestamp: Date.now()
           });
         }
-      } catch (error) {
-        this.context?.logger.error('[RemoteConfigPlugin] Failed to process update notification:', error);
       }
+    } catch (error) {
+      this.context?.logger.error('[RemoteConfigPlugin] Failed to process update notification:', error);
     }
   }
 }
