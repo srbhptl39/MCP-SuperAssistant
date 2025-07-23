@@ -22,27 +22,27 @@ export class MistralAdapter extends BaseAdapterPlugin {
   ];
 
   // CSS selectors for Mistral's UI elements
-  // Updated selectors based on current Mistral interface
+  // Updated selectors based on current Mistral interface (Dec 2024)
   private readonly selectors = {
-    // Primary chat input selector - the ProseMirror editor div
-    CHAT_INPUT: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-placeholder="Ask le Chat"]',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label="Send question"], .ms-auto.flex.gap-2 button[type="submit"], button.bg-state-primary',
+    // Primary chat input selector - supports both textarea and ProseMirror variants
+    CHAT_INPUT: 'textarea[name="message.text"], textarea[placeholder="Ask Le Chat anything"], div.ProseMirror[contenteditable="true"][data-placeholder="Ask Le Chat anything"], div.ProseMirror[contenteditable="true"]',
+    // Submit button selectors (multiple fallbacks) - looking for dictation/mic button as send button
+    SUBMIT_BUTTON: 'button[aria-label="Dictation"], .ms-auto .flex.gap-2 button[type="submit"], button.bg-state-primary',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attach-file-button"], button[aria-label="Add files"]',
     FILE_INPUT: 'input[name="file-upload"], input[type="file"][multiple]',
     // Main panel and container selectors
-    MAIN_PANEL: '.relative.flex.w-full.flex-col.p-4',
-    // Drop zones for file attachment - targeting the ProseMirror editor and containers
-    DROP_ZONE: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.p-4',
+    MAIN_PANEL: '.relative.flex.w-full.flex-col.px-4.pt-3.pb-4',
+    // Drop zones for file attachment - targeting the scroll area, ProseMirror, and main container
+    DROP_ZONE: 'div.ProseMirror[contenteditable="true"][data-placeholder="Ask Le Chat anything"], div.ProseMirror[contenteditable="true"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.px-4.pt-3.pb-4, textarea[name="message.text"]',
     // File preview elements - updated for Mistral's specific file attachment UI
     FILE_PREVIEW: 'div.relative.rounded-md.border.border-default.bg-muted, .file-preview, .attachment-preview, .uploaded-file',
     // Button insertion points (for MCP popover) - targeting the button container area
-    BUTTON_INSERTION_CONTAINER: '.flex.w-full.max-w-full.items-center.justify-start.gap-4, .ms-auto.flex.gap-2',
+    BUTTON_INSERTION_CONTAINER: '.flex.w-full.max-w-full.items-center.justify-start.gap-3, .flex.gap-2.ms-auto',
     // Tools button selector
     TOOLS_BUTTON: 'button[data-testid="tools-selection-button"]',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.relative.flex.w-full.flex-col.p-4, .chat-input-container'
+    FALLBACK_INSERTION: '.relative.flex.w-full.flex-col.px-4.pt-3.pb-4, .chat-input-container'
   };
 
   // URL patterns for navigation tracking
@@ -163,7 +163,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   /**
    * Insert text into the Mistral chat input field
-   * Enhanced with better selector handling and ProseMirror editor support
+   * Enhanced with better selector handling and supports both textarea and ProseMirror editors
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
     this.context.logger.debug(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
@@ -191,15 +191,32 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     try {
-      // Store the original value - handle both ProseMirror and textarea
-      const originalValue = targetElement.textContent || targetElement.innerHTML || '';
+      // Store the original value - handle both textarea and ProseMirror
+      const isTextarea = targetElement.tagName.toLowerCase() === 'textarea';
+      const isProseMirror = targetElement.classList.contains('ProseMirror');
+      
+      let originalValue = '';
+      if (isTextarea) {
+        originalValue = (targetElement as HTMLTextAreaElement).value || '';
+      } else if (isProseMirror) {
+        originalValue = targetElement.textContent || '';
+      }
 
       // Focus the input element
       targetElement.focus();
 
-      // Handle ProseMirror editor differently than textarea
-      if (targetElement.classList.contains('ProseMirror')) {
-        // For ProseMirror editor, we need to handle HTML structure properly
+      if (isTextarea) {
+        // Handle as textarea
+        const newContent = originalValue ? originalValue + '\n' + text : text;
+        (targetElement as HTMLTextAreaElement).value = newContent;
+
+        // Dispatch events to simulate user typing for better compatibility
+        targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+        targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+        targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      } else if (isProseMirror) {
+        // Handle ProseMirror editor
         const existingParagraphs = targetElement.querySelectorAll('p');
         
         // Check if there's existing content (not just the empty trailing break)
@@ -209,7 +226,6 @@ export class MistralAdapter extends BaseAdapterPlugin {
            existingParagraphs[0].textContent.trim() !== '');
         
         // Split text by newlines to create proper paragraph structure
-        // Keep empty lines to preserve blank lines in the text
         const textLines = text.split('\n');
         
         if (hasExistingContent) {
@@ -234,19 +250,20 @@ export class MistralAdapter extends BaseAdapterPlugin {
             if (textLines.length > 0) {
               lastContentParagraph.appendChild(document.createElement('br'));
               lastContentParagraph.appendChild(document.createTextNode(textLines[0]));
-                 // Add remaining lines as new paragraphs
-            for (let i = 1; i < textLines.length; i++) {
-              const newP = document.createElement('p');
-              if (textLines[i].trim() === '') {
-                // For empty lines, add a break element to maintain the blank line
-                const br = document.createElement('br');
-                br.className = 'ProseMirror-trailingBreak';
-                newP.appendChild(br);
-              } else {
-                newP.textContent = textLines[i];
+              
+              // Add remaining lines as new paragraphs
+              for (let i = 1; i < textLines.length; i++) {
+                const newP = document.createElement('p');
+                if (textLines[i].trim() === '') {
+                  // For empty lines, add a break element to maintain the blank line
+                  const br = document.createElement('br');
+                  br.className = 'ProseMirror-trailingBreak';
+                  newP.appendChild(br);
+                } else {
+                  newP.textContent = textLines[i];
+                }
+                targetElement.insertBefore(newP, targetElement.lastElementChild);
               }
-              targetElement.insertBefore(newP, targetElement.lastElementChild);
-            }
             }
           }
         } else {
@@ -254,7 +271,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
           targetElement.innerHTML = '';
           
           // Create paragraphs for each line
-          textLines.forEach((line, index) => {
+          textLines.forEach((line) => {
             const p = document.createElement('p');
             if (line.trim() === '') {
               // For empty lines, add a break element to maintain the blank line
@@ -288,32 +305,22 @@ export class MistralAdapter extends BaseAdapterPlugin {
           range.collapse(false);
           selection.addRange(range);
         }
-      } else {
-        // Fallback for regular input/textarea elements
-        const newContent = originalValue ? originalValue + '\n' + text : text;
-        (targetElement as HTMLInputElement).value = newContent;
-
-        // Dispatch events to simulate user typing for better compatibility
-        targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
-        targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-        targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
       }
 
       // Emit success event to the new event system
-      const finalContent = targetElement.classList.contains('ProseMirror') ? 
-        targetElement.textContent || '' : 
-        (targetElement as HTMLInputElement).value || '';
+      const finalContent = isTextarea ? 
+        (targetElement as HTMLTextAreaElement).value || '' : 
+        targetElement.textContent || '';
         
       this.emitExecutionCompleted('insertText', { text }, {
         success: true,
         originalLength: originalValue.length,
         newLength: text.length,
         totalLength: finalContent.length,
-        editorType: targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'
+        editorType: isTextarea ? 'textarea' : isProseMirror ? 'ProseMirror' : 'unknown'
       });
 
-      this.context.logger.debug(`Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`);
+      this.context.logger.debug(`Text inserted successfully into ${isTextarea ? 'textarea' : isProseMirror ? 'ProseMirror' : 'unknown'} editor`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -444,16 +451,20 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async attachFileDirectly(file: File): Promise<boolean> {
     try {
-      console.debug('[system] Attempting direct file attachment via drag simulation on ProseMirror editor');
+      console.debug('[system] Attempting direct file attachment via drag simulation');
       
-      // Find the ProseMirror editor (drop zone) instead of textarea
-      const proseMirrorEditor = document.querySelector('div.Editor-indented.ProseMirror[contenteditable="true"]') as HTMLElement;
-      if (!proseMirrorEditor) {
-        console.warn('[system] ProseMirror editor drop zone not found');
+      // Find the drop zone - try ProseMirror first, then scroll area container
+      let dropZone = document.querySelector('div.ProseMirror[contenteditable="true"]') as HTMLElement;
+      if (!dropZone) {
+        dropZone = document.querySelector('div[data-radix-scroll-area-viewport]') as HTMLElement;
+      }
+      
+      if (!dropZone) {
+        console.warn('[system] Drop zone not found');
         return false;
       }
 
-      // Create drag and drop events to simulate file drop on the ProseMirror editor
+      // Create drag and drop events to simulate file drop on the drop zone
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
 
@@ -463,7 +474,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      proseMirrorEditor.dispatchEvent(dragEnterEvent);
+      dropZone.dispatchEvent(dragEnterEvent);
 
       // Create and dispatch dragover event
       const dragOverEvent = new DragEvent('dragover', {
@@ -471,7 +482,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      proseMirrorEditor.dispatchEvent(dragOverEvent);
+      dropZone.dispatchEvent(dragOverEvent);
 
       // Create and dispatch drop event
       const dropEvent = new DragEvent('drop', {
@@ -479,9 +490,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
         cancelable: true,
         dataTransfer: dataTransfer
       });
-      proseMirrorEditor.dispatchEvent(dropEvent);
+      dropZone.dispatchEvent(dropEvent);
 
-      console.debug('[system] Direct drag simulation completed on ProseMirror editor');
+      console.debug(`[system] Direct drag simulation completed on ${dropZone.classList.contains('ProseMirror') ? 'ProseMirror' : 'scroll area'} drop zone`);
       return true;
     } catch (error) {
       console.error('[system] Direct drag simulation failed:', error);
@@ -831,9 +842,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     // Try primary selector for general button containers
-    const buttonContainer = document.querySelector('.flex.w-full.max-w-full.items-center.justify-start.gap-4');
+    const buttonContainer = document.querySelector('.flex.w-full.max-w-full.items-center.justify-start.gap-3');
     if (buttonContainer) {
-      this.context.logger.debug('Found button container: .flex.w-full.max-w-full.items-center.justify-start.gap-4');
+      this.context.logger.debug('Found button container: .flex.w-full.max-w-full.items-center.justify-start.gap-3');
       const btns = buttonContainer.querySelectorAll('button');
       const after = btns.length > 1 ? btns[1] : btns.length > 0 ? btns[0] : null;
       return { container: buttonContainer, insertAfter: after };
