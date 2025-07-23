@@ -204,43 +204,44 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     try {
       // Check if we're on the homepage and use the special method
       const currentUrl = window.location.href;
-      if (currentUrl === 'https://www.perplexity.ai/' || currentUrl === 'https://perplexity.ai/') {
-        this.context.logger.debug('Homepage detected, using InputEvent method for text insertion');
+      if (currentUrl === 'https://www.perplexity.ai/' || currentUrl === 'https://perplexity.ai/' || true) {
+        // this.context.logger.debug('Homepage detected, using InputEvent method for text insertion');
+        this.context.logger.debug('Using InputEvent method for text insertion for all pages');
         return await this.insertTextViaInputEvent(targetElement, text);
       }
 
-      // For other pages, use the existing method
-      const isContentEditable = this.isContentEditableElement(targetElement);
-      const originalValue = this.getElementContent(targetElement);
+      // // For other pages, use the existing method
+      // const isContentEditable = this.isContentEditableElement(targetElement);
+      // const originalValue = this.getElementContent(targetElement);
 
-      // Focus the input element
-      targetElement.focus();
+      // // Focus the input element
+      // targetElement.focus();
 
-      // Insert the text by updating the value and dispatching appropriate events
-      // Append the text to the original value on a new line if there's existing content
-      const newContent = originalValue ? originalValue + '\n\n' + text : text;
+      // // Insert the text by updating the value and dispatching appropriate events
+      // // Append the text to the original value on a new line if there's existing content
+      // const newContent = originalValue ? originalValue + '\n\n' + text : text;
       
-      if (isContentEditable) {
-        (targetElement as HTMLElement).textContent = newContent;
-      } else {
-        (targetElement as HTMLInputElement | HTMLTextAreaElement).value = newContent;
-      }
+      // if (isContentEditable) {
+      //   (targetElement as HTMLElement).textContent = newContent;
+      // } else {
+      //   (targetElement as HTMLInputElement | HTMLTextAreaElement).value = newContent;
+      // }
 
-      // Dispatch events to simulate user typing for better compatibility
-      targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-      targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+      // // Dispatch events to simulate user typing for better compatibility
+      // targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+      // targetElement.dispatchEvent(new Event('change', { bubbles: true }));
 
-      // Emit success event to the new event system
-      this.emitExecutionCompleted('insertText', { text }, {
-        success: true,
-        originalLength: originalValue.length,
-        newLength: text.length,
-        totalLength: newContent.length,
-        method: 'standard'
-      });
+      // // Emit success event to the new event system
+      // this.emitExecutionCompleted('insertText', { text }, {
+      //   success: true,
+      //   originalLength: originalValue.length,
+      //   newLength: text.length,
+      //   totalLength: newContent.length,
+      //   method: 'standard'
+      // });
 
-      this.context.logger.debug(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
-      return true;
+      // this.context.logger.debug(`Text inserted successfully. Original: ${originalValue.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      // return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.context.logger.error(`Error inserting text into Perplexity chat input: ${errorMessage}`);
@@ -1507,20 +1508,6 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
         }
       }
       
-      /* CSS custom properties for Perplexity theming */
-      :root {
-        --text-color-100: 30.4% 0.04 213.681;
-        --text-color-200: 50.2% 0.008 106.677;
-        --text-super-color-100: 55.3% 0.086 208.538;
-        --text-max-color-100: 0.77 0.1629 60.28;
-        --dark-text-color-100: 93% 0.003 106.451;
-        --dark-text-color-200: 65.3% 0.005 197.042;
-        --light-text-color-100: 30.4% 0.04 213.681;
-        --lt-color-text-dark: 0.113 0.005 247.858;
-        --lt-color-text-default: 0.196 0.007 247.858;
-        --lt-color-text-light: 0.373 0.008 247.858;
-        --lt-color-text-very-light: 0.559 0.005 247.858;
-      }
     `;
   }
 
