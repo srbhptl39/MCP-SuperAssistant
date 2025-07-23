@@ -17,7 +17,7 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
-    // 'file-attachment',
+    'file-attachment',
     'dom-manipulation'
   ];
 
@@ -30,7 +30,7 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     SUBMIT_BUTTON: 'button[aria-labelledby*="Send"], button:has(.octicon-paper-airplane), .ChatInput-module__toolbarRight--PiQJn button[type="button"]:last-child',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attachment-menu-button"], button[aria-label*="Attach"], button:has(.octicon-paperclip)',
-    FILE_INPUT: '#image-uploader, input[type="file"][accept*="image"], input[type="file"][hidden]',
+    FILE_INPUT: '#image-uploader, input[type="file"][accept*=".md"], input[type="file"][accept*=".txt"], input[type="file"][hidden], input[type="file"][multiple]',
     // Main panel and container selectors
     MAIN_PANEL: '.Layout-module__chatInputContainer--DXrKy, .ChatInput-module__container--NFzCy, main',
     // Drop zones for file attachment
@@ -38,7 +38,7 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, .ChatInput-module__attachment',
     // Button insertion points (for MCP popover)
-    BUTTON_INSERTION_CONTAINER: '.ChatInput-module__toolbarLeft--cjV2H, .ChatInput-module__toolbar--ZtCiG',
+    BUTTON_INSERTION_CONTAINER: '.ChatInput-module__toolbarLeft--cjV2H, .ChatInput-module__toolbar--ZtCiG, .ChatInput-module__toolbarRight--PiQJn',
     // Alternative insertion points
     FALLBACK_INSERTION: '.ChatInput-module__container--NFzCy, .Layout-module__chatInputContainer--DXrKy'
   };
@@ -326,12 +326,22 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
         return false;
       }
 
-      // Check if file type is supported (GitHub Copilot supports images)
-      const supportedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'];
-      if (!supportedTypes.some(type => file.type.includes(type.split('/')[1]))) {
-        this.emitExecutionFailed('attachFile', `Unsupported file type: ${file.type}. GitHub Copilot supports: ${supportedTypes.join(', ')}`);
-        return false;
-      }
+      // // Check if file type is supported (GitHub Copilot supports images and text files)
+      // const supportedTypes = [
+      //   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg',
+      //   'text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values',
+      //   'application/json', 'application/xml', 'text/xml'
+      // ];
+      // const isSupported = supportedTypes.some(type => 
+      //   file.type === type || 
+      //   file.type.includes(type.split('/')[1]) ||
+      //   (file.type === '' && file.name.match(/\.(md|txt|json|xml|csv|tsv)$/i))
+      // );
+      
+      // if (!isSupported) {
+      //   this.emitExecutionFailed('attachFile', `Unsupported file type: ${file.type}. GitHub Copilot supports: ${supportedTypes.join(', ')}`);
+      //   return false;
+      // }
 
       // Check if file upload is supported on current page
       if (!this.supportsFileUpload()) {
@@ -352,57 +362,17 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
         }
       }
 
+      // Method 1: Direct file input approach
       if (fileInput) {
-        // Create a DataTransfer object to set files
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        fileInput.files = dataTransfer.files;
-
-        // Dispatch change event
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          inputElement: fileInput.tagName
-        }, {
-          success: true,
-          method: 'direct-file-input'
-        });
-
-        this.context.logger.debug(`File attached successfully via input element: ${file.name}`);
-        return true;
+        const success = await this.tryDirectFileInput(fileInput, file);
+        if (success) return true;
       }
 
-      // Fallback: Try to trigger file upload button and simulate file selection
+      // Method 2: Click attachment button then set files approach
       const uploadButton = document.querySelector(this.selectors.FILE_UPLOAD_BUTTON) as HTMLButtonElement;
       if (uploadButton) {
-        // Click the upload button to open file dialog
-        uploadButton.click();
-
-        // Wait a bit and try to find the file input that appears
-        setTimeout(() => {
-          const newFileInput = document.querySelector(this.selectors.FILE_INPUT) as HTMLInputElement;
-          if (newFileInput) {
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            newFileInput.files = dataTransfer.files;
-            newFileInput.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }, 100);
-
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size
-        }, {
-          success: true,
-          method: 'upload-button-trigger'
-        });
-
-        this.context.logger.debug(`File attachment initiated via upload button: ${file.name}`);
-        return true;
+        const success = await this.tryAttachmentButtonApproach(uploadButton, file);
+        if (success) return true;
       }
 
       this.emitExecutionFailed('attachFile', 'Could not find file input or upload button');
@@ -495,6 +465,140 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
 
     this.context.logger.debug('No file upload support detected');
     return false;
+  }
+
+  /**
+   * Try to attach file using direct file input method
+   */
+  private async tryDirectFileInput(fileInput: HTMLInputElement, file: File): Promise<boolean> {
+    try {
+      // Log the found input element for debugging
+      // this.context.logger.debug(`Using file input: ${fileInput.id || fileInput.className}, accept: ${fileInput.accept}`);
+      this.context.logger.debug(`Using file input: ${fileInput.id || fileInput.className}`);
+      
+      // Create a DataTransfer object to set files
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      
+      // Set the files property using proper descriptor
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(fileInput, dataTransfer.files);
+      } else {
+        // Fallback for browsers that don't support the descriptor approach
+        Object.defineProperty(fileInput, 'files', { 
+          value: dataTransfer.files, 
+          writable: false 
+        });
+      }
+
+      // Trigger React's onChange handler by simulating native events
+      const nativeFilesSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files')?.set;
+      if (nativeFilesSetter) {
+        nativeFilesSetter.call(fileInput, dataTransfer.files);
+      }
+
+      // Create and dispatch a realistic change event
+      const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+      Object.defineProperty(changeEvent, 'target', { writable: false, value: fileInput });
+      Object.defineProperty(changeEvent, 'currentTarget', { writable: false, value: fileInput });
+      
+      // Dispatch the change event
+      fileInput.dispatchEvent(changeEvent);
+      
+      // Also dispatch input event for additional compatibility
+      const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+      Object.defineProperty(inputEvent, 'target', { writable: false, value: fileInput });
+      fileInput.dispatchEvent(inputEvent);
+
+      this.emitExecutionCompleted('attachFile', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        inputElement: fileInput.tagName
+      }, {
+        success: true,
+        method: 'direct-file-input'
+      });
+
+      this.context.logger.debug(`File attached successfully via input element: ${file.name}`);
+      return true;
+    } catch (error) {
+      this.context.logger.warn(`Direct file input method failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Try to attach file by clicking attachment button and then setting files
+   */
+  private async tryAttachmentButtonApproach(uploadButton: HTMLButtonElement, file: File): Promise<boolean> {
+    try {
+      // Method 1: Try to click the upload button first
+      // this.context.logger.debug('Clicking upload button to trigger file dialog');
+      // uploadButton.click();
+
+      // // Wait for any file input that might appear after clicking
+      // await new Promise<void>((resolve) => {
+      //   setTimeout(() => {
+      //     const newFileInput = document.querySelector(this.selectors.FILE_INPUT) as HTMLInputElement;
+      //     if (newFileInput) {
+      //       this.context.logger.debug('Found file input after button click, setting files');
+      //       const dataTransfer = new DataTransfer();
+      //       dataTransfer.items.add(file);
+            
+      //       const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
+      //       if (descriptor && descriptor.set) {
+      //         descriptor.set.call(newFileInput, dataTransfer.files);
+      //       } else {
+      //         newFileInput.files = dataTransfer.files;
+      //       }
+            
+      //       newFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      //     }
+      //     resolve();
+      //   }, 150);
+      // });
+
+      // Method 2: Also try drag and drop simulation on the input container
+      // const inputContainer = document.querySelector('.ChatInput-module__inputContainer--BcExV');
+      // if (inputContainer) {
+      //   this.context.logger.debug('Simulating drag and drop on input container');
+      //   await new Promise<void>((resolve) => {
+      //     setTimeout(() => {
+      //       this.simulateFileDrop(inputContainer, file);
+      //       resolve();
+      //     }, 100);
+      //   });
+      // }
+
+      // Method 3: Try drag and drop on the chat textarea as fallback
+      const chatTextarea = document.querySelector('#copilot-chat-textarea');
+      if (chatTextarea) {
+        this.context.logger.debug('Simulating drag and drop on chat textarea');
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            this.simulateFileDrop(chatTextarea, file);
+            resolve();
+          }, 200);
+        });
+      }
+
+      this.emitExecutionCompleted('attachFile', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size
+      }, {
+        success: true,
+        method: 'upload-button-trigger'
+      });
+
+      this.context.logger.debug(`File attachment initiated via upload button: ${file.name}`);
+      return true;
+    } catch (error) {
+      this.context.logger.warn(`Upload button method failed: ${error}`);
+      return false;
+    }
   }
 
   // Private helper methods
@@ -1047,7 +1151,7 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     }
   }
 
-  // Event handlers - Enhanced for new architecture integration
+    // Event handlers - Enhanced for new architecture integration
   onPageChanged?(url: string, oldUrl?: string): void {
     this.context.logger.debug(`GitHub Copilot page changed: from ${oldUrl || 'N/A'} to ${url}`);
 
@@ -1319,6 +1423,48 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
       this.context.logger.debug('GitHub Copilot button styles injected successfully');
     } catch (error) {
       this.context.logger.error('Failed to inject GitHub button styles:', error);
+    }
+  }
+
+  /**
+   * Simulate a file drop on the specified element
+   * Enhanced for GitHub Copilot's drag and drop handling
+   */
+  private simulateFileDrop(dropZone: Element, file: File): void {
+    this.context.logger.debug(`Simulating file drop for: ${file.name} on element:`, dropZone);
+
+    try {
+      // Create DataTransfer object with the file
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+
+      // Create and dispatch drag events
+      const dragEnterEvent = new DragEvent('dragenter', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer
+      });
+
+      const dragOverEvent = new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer
+      });
+
+      const dropEvent = new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer
+      });
+
+      // Dispatch the events in sequence
+      dropZone.dispatchEvent(dragEnterEvent);
+      dropZone.dispatchEvent(dragOverEvent);
+      dropZone.dispatchEvent(dropEvent);
+
+      this.context.logger.debug('File drop simulation completed');
+    } catch (error) {
+      this.context.logger.error('Error simulating file drop:', error);
     }
   }
 }
