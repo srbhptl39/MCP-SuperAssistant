@@ -17,28 +17,33 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     'text-insertion',
     'form-submission',
     'file-attachment',
-    'dom-manipulation'
+    'dom-manipulation',
   ];
 
   // CSS selectors for OpenRouter's UI elements
   private readonly selectors = {
-    // Primary chat input selector
-    CHAT_INPUT: 'textarea[name="Chat Input"][placeholder="Start a message..."].w-full, textarea[placeholder="Start a message..."], div[contenteditable="true"]',
-    // Submit button selectors
-    SUBMIT_BUTTON: 'button[aria-label="Send message"], button[data-testid="send-button"], button[aria-label="Send prompt"], button svg[data-icon="paper-airplane"]',
-    // File upload related selectors  
-    FILE_UPLOAD_BUTTON: 'button[aria-label="Attach file"], button[aria-label*="attach"], input[type="file"]',
+    // Primary chat input selector - updated for new structure
+    CHAT_INPUT:
+      'textarea[placeholder="Start a message..."], textarea[placeholder="Start a message..."].w-full, div[contenteditable="true"]',
+    // Submit button selectors - updated for new structure
+    SUBMIT_BUTTON:
+      'button[data-state="closed"] svg[stroke="currentColor"] path[d*="M4.5 10.5"], button[aria-label="Send message"], button[data-testid="send-button"], button[aria-label="Send prompt"]',
+    // File upload related selectors - updated for new attachment button
+    FILE_UPLOAD_BUTTON:
+      'button svg[fill="currentColor"] path[fill-rule="evenodd"][d*="M18.97 3.659"], button[aria-label="Attach file"], button[aria-label*="attach"], input[type="file"]',
     FILE_INPUT: 'input[type="file"]',
-    // Main panel and container selectors
-    MAIN_PANEL: '.chat-container, .main-content, .conversation-container',
-    // Drop zones for file attachment
-    DROP_ZONE: '.chat-input-area, .input-container, textarea[name="Chat Input"]',
+    // Main panel and container selectors - updated for new structure
+    MAIN_PANEL:
+      '.rounded-xl.overflow-hidden.p-2.border.border-slate-4, .chat-container, .main-content, .conversation-container',
+    // Drop zones for file attachment - updated for new structure
+    DROP_ZONE: 'textarea[placeholder="Start a message..."], .rounded-lg.w-full, .chat-input-area, .input-container',
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, .file-attachment',
-    // Button insertion points (for MCP popover)
-    BUTTON_INSERTION_CONTAINER: '.relative.flex.w-full.min-w-0.px-1.py-1, .input-actions, .chat-input-actions',
+    // Button insertion points (for MCP popover) - updated for new button container
+    BUTTON_INSERTION_CONTAINER:
+      '.relative.flex.w-full.min-w-0.items-center.gap-1, .flex.gap-1, .input-actions, .chat-input-actions',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.input-area, .chat-input-container, .conversation-input'
+    FALLBACK_INSERTION: '.flex.gap-1, .input-area, .chat-input-container, .conversation-input',
   };
 
   // URL patterns for navigation tracking
@@ -49,12 +54,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private mcpPopoverContainer: HTMLElement | null = null;
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
-  
+
   // Setup state tracking
   private storeEventListenersSetup: boolean = false;
   private domObserversSetup: boolean = false;
   private uiIntegrationSetup: boolean = false;
-  
+
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
@@ -63,13 +68,17 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     super();
     OpenRouterAdapter.instanceCount++;
     this.instanceId = OpenRouterAdapter.instanceCount;
-    console.debug(`[OpenRouterAdapter] Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`);
+    console.debug(
+      `[OpenRouterAdapter] Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`,
+    );
   }
 
   async initialize(context: PluginContext): Promise<void> {
     // Guard against multiple initialization
     if (this.currentStatus === 'initializing' || this.currentStatus === 'active') {
-      this.context?.logger.warn(`OpenRouter adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
+      this.context?.logger.warn(
+        `OpenRouter adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`,
+      );
       return;
     }
 
@@ -87,7 +96,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   async activate(): Promise<void> {
     // Guard against multiple activation
     if (this.currentStatus === 'active') {
-      this.context?.logger.warn(`OpenRouter adapter instance #${this.instanceId} already active, skipping re-activation`);
+      this.context?.logger.warn(
+        `OpenRouter adapter instance #${this.instanceId} already active, skipping re-activation`,
+      );
       return;
     }
 
@@ -101,7 +112,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Emit activation event for store synchronization
     this.context.eventBus.emit('adapter:activated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -127,7 +138,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Emit deactivation event
     this.context.eventBus.emit('adapter:deactivated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -150,7 +161,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -162,7 +173,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.debug(`Attempting to insert text into OpenRouter chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.debug(
+      `Attempting to insert text into OpenRouter chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+    );
 
     let targetElement: HTMLElement | null = null;
 
@@ -196,17 +209,17 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         const currentText = textarea.value;
         const newContent = currentText ? `${currentText}\n\n${text}` : text;
         textarea.value = newContent;
-        
+
         // Position cursor at the end
         textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-        
+
         // Trigger input event
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
       } else if (targetElement.getAttribute('contenteditable') === 'true') {
         // For contenteditable elements
         const currentText = targetElement.textContent || '';
         const newContent = currentText ? `${currentText}\n\n${text}` : text;
-        
+
         // Use execCommand for better compatibility with contenteditable
         if (currentText) {
           // Move cursor to end and insert newlines + text
@@ -216,12 +229,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
           range.collapse(false);
           selection?.removeAllRanges();
           selection?.addRange(range);
-          
+
           document.execCommand('insertText', false, `\n\n${text}`);
         } else {
           document.execCommand('insertText', false, text);
         }
-        
+
         // Trigger input event
         targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
       } else {
@@ -229,7 +242,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         const currentText = targetElement.textContent || '';
         const newContent = currentText ? `${currentText}\n\n${text}` : text;
         targetElement.textContent = newContent;
-        
+
         // Trigger input event
         targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
       }
@@ -240,11 +253,15 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
 
       // Emit success event
-      this.emitExecutionCompleted('insertText', { text }, {
-        success: true,
-        textLength: text.length,
-        elementType: targetElement.tagName
-      });
+      this.emitExecutionCompleted(
+        'insertText',
+        { text },
+        {
+          success: true,
+          textLength: text.length,
+          elementType: targetElement.tagName,
+        },
+      );
 
       this.context.logger.debug(`Text inserted successfully into OpenRouter chat input`);
       return true;
@@ -267,7 +284,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       // First try to find submit button
       let submitButton: HTMLButtonElement | null = null;
       const selectors = this.selectors.SUBMIT_BUTTON.split(', ');
-      
+
       for (const selector of selectors) {
         const element = document.querySelector(selector.trim());
         if (element) {
@@ -277,9 +294,25 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
           } else {
             submitButton = element as HTMLButtonElement;
           }
-          
+
           if (submitButton) {
             this.context.logger.debug(`Found submit button using selector: ${selector.trim()}`);
+            break;
+          }
+        }
+      }
+
+      // Additional check for the new send button structure
+      if (!submitButton) {
+        // Look for the send button by its specific characteristics
+        const sendButtons = document.querySelectorAll('button');
+        for (let i = 0; i < sendButtons.length; i++) {
+          const button = sendButtons[i];
+          const svg = button.querySelector('svg[stroke="currentColor"]');
+          const path = svg?.querySelector('path[d*="M4.5 10.5"]');
+          if (path && svg) {
+            submitButton = button as HTMLButtonElement;
+            this.context.logger.debug('Found submit button by SVG path structure');
             break;
           }
         }
@@ -292,14 +325,18 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         } else {
           // Try clicking the button
           submitButton.click();
-          
-          this.emitExecutionCompleted('submitForm', {
-            formElement: options?.formElement?.tagName || 'unknown'
-          }, {
-            success: true,
-            method: 'submitButton.click'
-          });
-          
+
+          this.emitExecutionCompleted(
+            'submitForm',
+            {
+              formElement: options?.formElement?.tagName || 'unknown',
+            },
+            {
+              success: true,
+              method: 'submitButton.click',
+            },
+          );
+
           this.context.logger.debug('OpenRouter chat input submitted successfully via button click');
           return true;
         }
@@ -312,12 +349,16 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         if (form) {
           const submitEvent = new SubmitEvent('submit', { bubbles: true, cancelable: true });
           form.dispatchEvent(submitEvent);
-          
-          this.emitExecutionCompleted('submitForm', {}, {
-            success: true,
-            method: 'form.submit'
-          });
-          
+
+          this.emitExecutionCompleted(
+            'submitForm',
+            {},
+            {
+              success: true,
+              method: 'form.submit',
+            },
+          );
+
           this.context.logger.debug('OpenRouter chat input submitted successfully via form submission');
           return true;
         }
@@ -326,29 +367,48 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       // Final fallback: Simulate Enter key press
       if (chatInput) {
         chatInput.focus();
-        
+
         const keyEvents = [
           new KeyboardEvent('keydown', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
-            bubbles: true, cancelable: true, composed: true
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
           }),
           new KeyboardEvent('keypress', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
-            bubbles: true, cancelable: true, composed: true
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
           }),
           new KeyboardEvent('keyup', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
-            bubbles: true, cancelable: true, composed: true
-          })
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
         ];
 
         keyEvents.forEach(event => chatInput.dispatchEvent(event));
-        
-        this.emitExecutionCompleted('submitForm', {}, {
-          success: true,
-          method: 'enter-key-simulation'
-        });
-        
+
+        this.emitExecutionCompleted(
+          'submitForm',
+          {},
+          {
+            success: true,
+            method: 'enter-key-simulation',
+          },
+        );
+
         this.context.logger.debug('OpenRouter chat input submitted successfully via Enter key simulation');
         return true;
       }
@@ -383,18 +443,153 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         return false;
       }
 
-      // Find the chat input element to use as drop target
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT.split(', ')[0]) as HTMLElement;
-      if (!chatInput) {
-        this.emitExecutionFailed('attachFile', 'Chat input element not found for file attachment');
-        return false;
+      // // Method 1: Try clicking the attachment button first
+      // const attachmentButton = this.findAttachmentButton();
+      // if (attachmentButton) {
+      //   this.context.logger.debug('Found attachment button, attempting click method');
+
+      //   // Click the attachment button to potentially open file dialog
+      //   attachmentButton.click();
+
+      //   // Wait a bit for any file input to appear
+      //   await new Promise(resolve => setTimeout(resolve, 100));
+
+      //   // Look for file input that might have been created
+      //   const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      //   if (fileInput) {
+      //     this.context.logger.debug('Found file input, setting files');
+
+      //     // Create a new FileList with our file
+      //     const dataTransfer = new DataTransfer();
+      //     dataTransfer.items.add(file);
+      //     fileInput.files = dataTransfer.files;
+
+      //     // Trigger change event
+      //     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      //     // Check for success
+      //     const previewFound = await this.checkFilePreview();
+      //     if (previewFound) {
+      //       this.emitExecutionCompleted('attachFile', {
+      //         fileName: file.name,
+      //         fileType: file.type,
+      //         fileSize: file.size,
+      //         method: 'file-input-click'
+      //       }, {
+      //         success: true,
+      //         previewFound: true,
+      //         method: 'file-input-click'
+      //       });
+
+      //       this.context.logger.debug(`File attached successfully via file input: ${file.name}`);
+      //       return true;
+      //     }
+      //   }
+      // }
+
+      // Method 2: Try drag and drop on the main chat container
+      // const dropTargets = [
+      //   // Try the main chat container first
+      //   document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
+      //   // Try the input area
+      //   document.querySelector('.rounded-lg.w-full'),
+      //   // Try the textarea itself
+      //   document.querySelector(this.selectors.CHAT_INPUT.split(', ')[0]),
+      //   // Try the scroll area
+      //   document.querySelector('[data-radix-scroll-area-viewport]'),
+      //   // Fallback to the flex container
+      //   document.querySelector('.flex.gap-1')
+      // ];
+
+      // for (const dropTarget of dropTargets) {
+      //   if (dropTarget) {
+      //     this.context.logger.debug(`Attempting drag-drop on: ${dropTarget.className || dropTarget.tagName}`);
+
+      //     const success = await this.tryDragDropAttachment(file, dropTarget as HTMLElement);
+      //     if (success) {
+      //       return true;
+      //     }
+      //   }
+      // }
+
+      // Method 3: Try creating a hidden file input and programmatically triggering it
+      // const success = await this.tryHiddenFileInput(file);
+      // if (success) {
+      //   return true;
+      // }
+
+      this.emitExecutionFailed('attachFile', 'All attachment methods failed');
+      return false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.context.logger.error(`Error attaching file to OpenRouter: ${errorMessage}`);
+      this.emitExecutionFailed('attachFile', errorMessage);
+      return false;
+    }
+  }
+
+  /**
+   * Find the attachment button in the new OpenRouter interface
+   */
+  private findAttachmentButton(): HTMLButtonElement | null {
+    // Look for the attachment button using the new structure
+    const buttons = document.querySelectorAll('button');
+    for (let i = 0; i < buttons.length; i++) {
+      const button = buttons[i];
+      const svg = button.querySelector('svg[fill="currentColor"]');
+      const path = svg?.querySelector('path[fill-rule="evenodd"][d*="M18.97 3.659"]');
+      if (path && svg) {
+        this.context.logger.debug('Found attachment button by SVG path structure');
+        return button as HTMLButtonElement;
       }
+    }
+
+    // Fallback selectors
+    const fallbackSelectors = [
+      'button[aria-label="Attach file"]',
+      'button[aria-label*="attach"]',
+      'input[type="file"]',
+    ];
+
+    for (const selector of fallbackSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        if (element.tagName === 'INPUT') {
+          // If it's an input, look for a related button
+          const button = element.closest('button') || element.parentElement?.querySelector('button');
+          if (button) {
+            return button as HTMLButtonElement;
+          }
+        } else {
+          return element as HTMLButtonElement;
+        }
+      }
+    }
+
+    this.context.logger.debug('No attachment button found');
+    return null;
+  }
+
+  /**
+   * Try drag and drop file attachment on a target element
+   */
+  private async tryDragDropAttachment(file: File, targetElement: HTMLElement): Promise<boolean> {
+    try {
+      this.context.logger.debug(
+        `Attempting drag-drop attachment on: ${targetElement.tagName}.${targetElement.className}`,
+      );
 
       // Create DataTransfer object and add file
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
 
-      // Create drag and drop events
+      // Create sequence of drag events
+      const dragEnterEvent = new DragEvent('dragenter', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer,
+      });
+
       const dragOverEvent = new DragEvent('dragover', {
         bubbles: true,
         cancelable: true,
@@ -407,33 +602,106 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         dataTransfer: dataTransfer,
       });
 
-      // Prevent default on dragover to enable drop
-      chatInput.addEventListener('dragover', e => e.preventDefault(), { once: true });
-      chatInput.dispatchEvent(dragOverEvent);
+      // Add event listeners to prevent default behavior
+      const preventDefault = (e: Event) => e.preventDefault();
+      targetElement.addEventListener('dragenter', preventDefault, { once: true });
+      targetElement.addEventListener('dragover', preventDefault, { once: true });
 
-      // Simulate the drop event
-      chatInput.dispatchEvent(dropEvent);
+      // Dispatch events in sequence
+      targetElement.dispatchEvent(dragEnterEvent);
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Check for file preview to confirm success
+      targetElement.dispatchEvent(dragOverEvent);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      targetElement.dispatchEvent(dropEvent);
+
+      // Wait and check for file preview
       const previewFound = await this.checkFilePreview();
 
-      this.emitExecutionCompleted('attachFile', {
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        inputElement: options?.inputElement?.tagName || 'unknown'
-      }, {
-        success: true,
-        previewFound: previewFound,
-        method: 'drag-drop-simulation'
-      });
+      if (previewFound) {
+        this.emitExecutionCompleted(
+          'attachFile',
+          {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            targetElement: targetElement.tagName,
+          },
+          {
+            success: true,
+            previewFound: true,
+            method: 'drag-drop-simulation',
+          },
+        );
 
-      this.context.logger.debug(`File attached successfully: ${file.name}`);
-      return true;
+        this.context.logger.debug(`File attached successfully via drag-drop: ${file.name}`);
+        return true;
+      }
+
+      return false;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`Error attaching file to OpenRouter: ${errorMessage}`);
-      this.emitExecutionFailed('attachFile', errorMessage);
+      this.context.logger.error('Error in drag-drop attachment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Try creating a hidden file input and programmatically triggering it
+   */
+  private async tryHiddenFileInput(file: File): Promise<boolean> {
+    try {
+      this.context.logger.debug('Attempting hidden file input method');
+
+      // Create a hidden file input
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'file';
+      hiddenInput.style.display = 'none';
+      hiddenInput.accept = '*/*';
+
+      // Add to DOM temporarily
+      document.body.appendChild(hiddenInput);
+
+      // Create FileList with our file
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      hiddenInput.files = dataTransfer.files;
+
+      // Try to trigger change event and look for any reaction
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Also try input event
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Wait a moment and check for file preview
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const previewFound = await this.checkFilePreview();
+
+      // Clean up
+      document.body.removeChild(hiddenInput);
+
+      if (previewFound) {
+        this.emitExecutionCompleted(
+          'attachFile',
+          {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+          },
+          {
+            success: true,
+            previewFound: true,
+            method: 'hidden-file-input',
+          },
+        );
+
+        this.context.logger.debug(`File attached successfully via hidden input: ${file.name}`);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      this.context.logger.error('Error in hidden file input method:', error);
       return false;
     }
   }
@@ -484,6 +752,13 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   supportsFileUpload(): boolean {
     this.context.logger.debug('Checking file upload support for OpenRouter');
 
+    // Check for the new attachment button structure
+    const attachmentButton = this.findAttachmentButton();
+    if (attachmentButton) {
+      this.context.logger.debug('Found attachment button - file upload supported');
+      return true;
+    }
+
     // Check for drop zones
     const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
     for (const selector of dropZoneSelectors) {
@@ -495,17 +770,21 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     }
 
     // Check for file upload buttons or inputs
-    const uploadSelectors = [
-      ...this.selectors.FILE_UPLOAD_BUTTON.split(', '),
-      this.selectors.FILE_INPUT
-    ];
-    
+    const uploadSelectors = [...this.selectors.FILE_UPLOAD_BUTTON.split(', '), this.selectors.FILE_INPUT];
+
     for (const selector of uploadSelectors) {
       const uploadElement = document.querySelector(selector.trim());
       if (uploadElement) {
         this.context.logger.debug(`Found upload element with selector: ${selector.trim()}`);
         return true;
       }
+    }
+
+    // Check if we're on a chat page (which should support file upload)
+    const currentUrl = window.location.href;
+    if (currentUrl.includes('/chat')) {
+      this.context.logger.debug('On chat page - assuming file upload is supported');
+      return true;
     }
 
     this.context.logger.debug('No file upload support detected');
@@ -541,13 +820,13 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up store event listeners for OpenRouter adapter instance #${this.instanceId}`);
 
     // Listen for tool execution events from the store
-    this.context.eventBus.on('tool:execution-completed', (data) => {
+    this.context.eventBus.on('tool:execution-completed', data => {
       this.context.logger.debug('Tool execution completed:', data);
       this.handleToolExecutionCompleted(data);
     });
 
     // Listen for UI state changes
-    this.context.eventBus.on('ui:sidebar-toggle', (data) => {
+    this.context.eventBus.on('ui:sidebar-toggle', data => {
       this.context.logger.debug('Sidebar toggled:', data);
     });
 
@@ -563,10 +842,10 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up DOM observers for OpenRouter adapter instance #${this.instanceId}`);
 
     // Set up mutation observer to detect page changes and re-inject UI if needed
-    this.mutationObserver = new MutationObserver((mutations) => {
+    this.mutationObserver = new MutationObserver(mutations => {
       let shouldReinject = false;
 
-      mutations.forEach((mutation) => {
+      mutations.forEach(mutation => {
         if (mutation.type === 'childList') {
           // Check if our MCP popover was removed
           if (!document.getElementById('mcp-popover-container')) {
@@ -576,11 +855,15 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       });
 
       if (shouldReinject) {
-        // Only attempt re-injection if we can find an insertion point
-        const insertionPoint = this.findButtonInsertionPoint();
-        if (insertionPoint) {
-          this.context.logger.debug('MCP popover removed, attempting to re-inject');
-          this.setupUIIntegration();
+        // Only attempt re-injection if we're on a chat page
+        const currentUrl = window.location.href;
+        if (currentUrl.includes('/chat')) {
+          // Only attempt re-injection if we can find an insertion point
+          const insertionPoint = this.findButtonInsertionPoint();
+          if (insertionPoint) {
+            this.context.logger.debug('MCP popover removed, attempting to re-inject');
+            this.setupUIIntegration();
+          }
         }
       }
     });
@@ -588,27 +871,31 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Start observing
     this.mutationObserver.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
-    
+
     this.domObserversSetup = true;
   }
 
   private setupUIIntegration(): void {
     if (this.uiIntegrationSetup) {
-      this.context.logger.debug(`UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`);
+      this.context.logger.debug(
+        `UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`,
+      );
     } else {
       this.context.logger.debug(`Setting up UI integration for OpenRouter adapter instance #${this.instanceId}`);
       this.uiIntegrationSetup = true;
     }
 
     // Wait for page to be ready, then inject MCP popover
-    this.waitForPageReady().then(() => {
-      this.injectMCPPopoverWithRetry();
-    }).catch((error) => {
-      this.context.logger.warn('Failed to wait for page ready:', error);
-      // Don't retry if we can't find insertion point
-    });
+    this.waitForPageReady()
+      .then(() => {
+        this.injectMCPPopoverWithRetry();
+      })
+      .catch(error => {
+        this.context.logger.warn('Failed to wait for page ready:', error);
+        // Don't retry if we can't find insertion point
+      });
 
     // Set up periodic check to ensure popover stays injected
     // this.setupPeriodicPopoverCheck();
@@ -618,7 +905,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const maxAttempts = 5; // Maximum 10 seconds (20 * 500ms)
-      
+
       const checkReady = () => {
         attempts++;
         const insertionPoint = this.findButtonInsertionPoint();
@@ -639,6 +926,16 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private injectMCPPopoverWithRetry(maxRetries: number = 5): void {
     const attemptInjection = (attempt: number) => {
       this.context.logger.debug(`Attempting MCP popover injection (attempt ${attempt}/${maxRetries})`);
+
+      // Only attempt re-injection if we're on a chat page
+      const currentUrl = window.location.href;
+      if (
+        !currentUrl.includes('/chat') ||
+        !this.isSupported()
+      ) {
+        this.context.logger.debug('Not on a supported chat page, skipping MCP popover injection');
+        return;
+      }
 
       // Check if popover already exists
       if (document.getElementById('mcp-popover-container')) {
@@ -716,26 +1013,45 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try primary selector first - OpenRouter's button container
-    const wrapper = document.querySelector('.relative.flex.w-full.min-w-0.px-1.py-1');
-    if (wrapper) {
-      this.context.logger.debug('Found insertion point: .relative.flex.w-full.min-w-0.px-1.py-1');
-      // Look for Web Search button to insert after
-      const webSearchButton = wrapper.querySelector('button[title="Enable Web Search"]');
-      return { container: wrapper, insertAfter: webSearchButton };
+    // Try primary selector first - using the configured selectors
+    const primarySelectors = this.selectors.BUTTON_INSERTION_CONTAINER.split(', ');
+
+    for (const selector of primarySelectors) {
+      const wrapper = document.querySelector(selector.trim());
+      if (wrapper) {
+        this.context.logger.debug(`Found insertion point: ${selector.trim()}`);
+        // Look for Web Search button/div to insert after
+        let webSearchContainer: Element | null = null;
+
+        // Find the web search container by looking for the text content
+        const flexElements = wrapper.querySelectorAll('div.inline-flex.items-center');
+        for (let i = 0; i < flexElements.length; i++) {
+          const element = flexElements[i];
+          if (element.textContent?.includes('Web search')) {
+            webSearchContainer = element;
+            break;
+          }
+        }
+
+        // Fallback: look for the web search icon
+        if (!webSearchContainer) {
+          webSearchContainer =
+            wrapper
+              .querySelector('div.inline-flex.items-center svg[stroke="currentColor"] path[d*="M12 21a9.004"]')
+              ?.closest('div.inline-flex.items-center') || null;
+        }
+
+        return { container: wrapper, insertAfter: webSearchContainer };
+      }
     }
 
-    // Try fallback selectors
-    const fallbackSelectors = [
-      '.input-actions',
-      '.chat-input-actions', 
-      '.conversation-input .actions'
-    ];
+    // Try fallback selectors from the configuration
+    const fallbackSelectors = this.selectors.FALLBACK_INSERTION.split(', ');
 
     for (const selector of fallbackSelectors) {
-      const container = document.querySelector(selector);
+      const container = document.querySelector(selector.trim());
       if (container) {
-        this.context.logger.debug(`Found fallback insertion point: ${selector}`);
+        this.context.logger.debug(`Found fallback insertion point: ${selector.trim()}`);
         return { container, insertAfter: null };
       }
     }
@@ -787,30 +1103,36 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
     try {
       // Import React and ReactDOM dynamically to avoid bundling issues
-      import('react').then(React => {
-        import('react-dom/client').then(ReactDOM => {
-          import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
-            // Create toggle state manager that integrates with new stores
-            const toggleStateManager = this.createToggleStateManager();
+      import('react')
+        .then(React => {
+          import('react-dom/client')
+            .then(ReactDOM => {
+              import('../../components/mcpPopover/mcpPopover')
+                .then(({ MCPPopover }) => {
+                  // Create toggle state manager that integrates with new stores
+                  const toggleStateManager = this.createToggleStateManager();
 
-            // Create React root and render
-            const root = ReactDOM.createRoot(container);
-            root.render(
-              React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
-              })
-            );
+                  // Create React root and render
+                  const root = ReactDOM.createRoot(container);
+                  root.render(
+                    React.createElement(MCPPopover, {
+                      toggleStateManager: toggleStateManager,
+                    }),
+                  );
 
-            this.context.logger.debug('MCP popover rendered successfully with new architecture');
-          }).catch(error => {
-            this.context.logger.error('Failed to import MCPPopover component:', error);
-          });
-        }).catch(error => {
-          this.context.logger.error('Failed to import ReactDOM:', error);
+                  this.context.logger.debug('MCP popover rendered successfully with new architecture');
+                })
+                .catch(error => {
+                  this.context.logger.error('Failed to import MCPPopover component:', error);
+                });
+            })
+            .catch(error => {
+              this.context.logger.error('Failed to import ReactDOM:', error);
+            });
+        })
+        .catch(error => {
+          this.context.logger.error('Failed to import React:', error);
         });
-      }).catch(error => {
-        this.context.logger.error('Failed to import React:', error);
-      });
     } catch (error) {
       this.context.logger.error('Failed to render MCP popover:', error);
     }
@@ -833,7 +1155,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             mcpEnabled: mcpEnabled,
             autoInsert: autoSubmitEnabled,
             autoSubmit: autoSubmitEnabled,
-            autoExecute: false
+            autoExecute: false,
           };
         } catch (error) {
           context.logger.error('Error getting toggle state:', error);
@@ -841,13 +1163,15 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             mcpEnabled: false,
             autoInsert: false,
             autoSubmit: false,
-            autoExecute: false
+            autoExecute: false,
           };
         }
       },
 
       setMCPEnabled: (enabled: boolean) => {
-        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`);
+        context.logger.debug(
+          `Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`,
+        );
 
         try {
           // Primary method: Control MCP state through UI store
@@ -856,7 +1180,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             context.logger.debug(`MCP state set to: ${enabled} via UI store`);
           } else {
             context.logger.warn('UI store setMCPEnabled method not available');
-            
+
             // Fallback: Control sidebar visibility directly
             if (context.stores.ui?.setSidebarVisibility) {
               context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle-fallback');
@@ -882,7 +1206,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.debug(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.debug(
+            `MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`,
+          );
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -922,11 +1248,11 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         if (popoverContainer) {
           const currentState = stateManager.getState();
           const event = new CustomEvent('mcp:update-toggle-state', {
-            detail: { toggleState: currentState }
+            detail: { toggleState: currentState },
           });
           popoverContainer.dispatchEvent(event);
         }
-      }
+      },
     };
 
     return stateManager;
@@ -935,15 +1261,55 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private async checkFilePreview(): Promise<boolean> {
     return new Promise(resolve => {
       setTimeout(() => {
-        const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
-        if (filePreview) {
-          this.context.logger.debug('File preview element found after attachment');
-          resolve(true);
-        } else {
-          this.context.logger.warn('File preview element not found after attachment');
-          resolve(false);
+        // Check for common file preview indicators
+        const previewSelectors = [
+          this.selectors.FILE_PREVIEW,
+          '.file-attachment',
+          '.attachment-preview',
+          '.file-upload-preview',
+          '[data-testid*="file"]',
+          '[data-testid*="attachment"]',
+          '.uploaded-file',
+          '.file-item',
+          // Check for any elements that might indicate a file was added
+          '[class*="file"]',
+          '[class*="attachment"]',
+          '[class*="upload"]',
+        ];
+
+        for (const selector of previewSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (let i = 0; i < elements.length; i++) {
+            const element = elements[i] as HTMLElement;
+            // Check if element is visible and has content
+            if (
+              element &&
+              element.offsetHeight > 0 &&
+              element.offsetWidth > 0 &&
+              (element.textContent?.trim() || element.querySelector('img, svg'))
+            ) {
+              this.context.logger.debug(`File preview found with selector: ${selector}`);
+              resolve(true);
+              return;
+            }
+          }
         }
-      }, 500);
+
+        // Alternative check: look for changes in the DOM that might indicate file upload
+        const chatContainer = document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4');
+        if (chatContainer) {
+          const images = chatContainer.querySelectorAll('img');
+          const newFiles = chatContainer.querySelectorAll('[data-file], [data-attachment]');
+          if (images.length > 0 || newFiles.length > 0) {
+            this.context.logger.debug('File content detected in chat container');
+            resolve(true);
+            return;
+          }
+        }
+
+        this.context.logger.debug('No file preview found');
+        resolve(false);
+      }, 1000); // Wait longer to allow for processing
     });
   }
 
@@ -955,8 +1321,8 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         parameters,
         result,
         timestamp: Date.now(),
-        status: 'success'
-      }
+        status: 'success',
+      },
     });
   }
 
@@ -964,7 +1330,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     this.context.eventBus.emit('tool:execution-failed', {
       toolName,
       error,
-      callId: this.generateCallId()
+      callId: this.generateCallId(),
     });
   }
 
@@ -1008,7 +1374,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
     this.context.eventBus.emit('app:site-changed', {
       site: url,
-      hostname: window.location.hostname
+      hostname: window.location.hostname,
     });
   }
 
@@ -1020,7 +1386,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       this.context.logger.warn('OpenRouter adapter no longer supported on this host/page');
       this.context.eventBus.emit('adapter:deactivated', {
         pluginName: this.name,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     } else {
       this.setupUIIntegration();
@@ -1040,14 +1406,13 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
     try {
       const activeSidebarManager = (window as any).activeSidebarManager;
-      
+
       if (!activeSidebarManager) {
         this.context.logger.warn('No active sidebar manager found after navigation');
         return;
       }
 
       // this.ensureMCPPopoverConnection();
-      
     } catch (error) {
       this.context.logger.error('Error checking sidebar state after navigation:', error);
     }
@@ -1055,7 +1420,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
   private ensureMCPPopoverConnection(): void {
     this.context.logger.debug('Ensuring MCP popover connection after navigation');
-    
+
     try {
       if (!this.isMCPPopoverInjected()) {
         this.context.logger.debug('MCP popover missing after navigation, re-injecting');

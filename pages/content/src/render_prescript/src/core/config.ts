@@ -98,9 +98,10 @@ export const WEBSITE_CONFIGS: Array<{
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
       function_result_selector: [
-        'div.flex.max-w-full.flex-col.relative.overflow-auto.gap-1.items-end',
-        'div.flex',
-        'div.flex.items-end',
+        'div.min-w-0.w-full.overflow-hidden'
+        // 'div.flex.max-w-full.flex-col.relative.overflow-auto.gap-1.items-end',
+        // 'div.flex',
+        // 'div.flex.items-end',
       ],
     },
   },
