@@ -2,6 +2,7 @@ import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateInstructions } from './instructionGenerator';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
+import { useToolStore } from '../../../stores/tool.store';
 import { Typography } from '../ui';
 import { cn } from '@src/lib/utils';
 import { logMessage } from '@src/utils/helpers';
@@ -16,23 +17,43 @@ export const instructionsState = {
       return;
     }
 
+    // Prevent recursive updates
+    if (instructionsState.updating) {
+      console.warn('[InstructionsState] Prevented recursive update');
+      return;
+    }
+
     // Set flag to prevent circular updates
     instructionsState.updating = true;
     instructionsState.instructions = newInstructions;
 
-    // Call all registered listeners when instructions change
-    instructionsState.listeners.forEach(listener => listener(newInstructions));
+    console.debug(`[InstructionsState] Broadcasting instruction update to ${instructionsState.listeners.length} listeners`);
 
-    // Reset flag after all listeners have been called
-    setTimeout(() => {
+    // Call all registered listeners when instructions change
+    try {
+      instructionsState.listeners.forEach((listener, index) => {
+        try {
+          listener(newInstructions);
+        } catch (error) {
+          console.error(`[InstructionsState] Error in listener ${index}:`, error);
+        }
+      });
+    } finally {
+      // Reset flag immediately after all listeners have been called
       instructionsState.updating = false;
-    }, 0);
+    }
   },
   listeners: [] as ((instructions: string) => void)[],
   subscribe: (listener: (instructions: string) => void) => {
     instructionsState.listeners.push(listener);
+    console.debug(`[InstructionsState] Listener subscribed (total: ${instructionsState.listeners.length})`);
+    // Return unsubscribe function
     return () => {
-      instructionsState.listeners = instructionsState.listeners.filter(l => l !== listener);
+      const index = instructionsState.listeners.indexOf(listener);
+      if (index !== -1) {
+        instructionsState.listeners.splice(index, 1);
+        console.debug(`[InstructionsState] Listener unsubscribed (total: ${instructionsState.listeners.length})`);
+      }
     };
   },
 };
@@ -141,29 +162,80 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   // Update instructions when tools or tool enablement changes or custom instructions change
   useEffect(() => {
     if (tools.length > 0) {
-      // Only log and update if the instructions have actually changed
-      if (currentInstructions !== instructions) {
-        logMessage(`[InstructionManager] Regenerating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
-        setInstructions(currentInstructions);
-        // Update global state
-        instructionsState.setInstructions(currentInstructions);
-      }
+      // Always update when dependencies change, let the state comparison happen later
+      logMessage(`[InstructionManager] Regenerating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
+      setInstructions(currentInstructions);
+      // Force update global state to ensure sync
+      instructionsState.setInstructions(currentInstructions);
     }
 
     return () => {
       logMessage('[InstructionManager] Cleaning up instruction generator effect');
     };
-  }, [toolsSignature, enabledToolsSignature, customInstructionsKey, currentInstructions, instructions, enabledTools.length, tools.length]);
+  }, [toolsSignature, enabledToolsSignature, customInstructionsKey, currentInstructions, enabledTools.length, tools.length]);
 
-  // Update global state when local state changes
+  // Force instruction regeneration and global sync when enablement changes
+  const forceInstructionUpdate = useCallback(() => {
+    if (tools.length > 0) {
+      const newInstructions = generateCurrentInstructions();
+      logMessage(`[InstructionManager] Force updating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
+      setInstructions(newInstructions);
+      // Force global state update
+      instructionsState.setInstructions(newInstructions);
+    }
+  }, [tools.length, generateCurrentInstructions, enabledTools.length]);
+
+  // Watch for changes in enabled tools count and force update when it changes
+  const [previousEnabledCount, setPreviousEnabledCount] = useState(enabledTools.length);
+  useEffect(() => {
+    if (previousEnabledCount !== enabledTools.length) {
+      setPreviousEnabledCount(enabledTools.length);
+      // Small delay to ensure store updates have propagated
+      setTimeout(() => {
+        forceInstructionUpdate();
+      }, 50);
+    }
+  }, [enabledTools.length, previousEnabledCount, forceInstructionUpdate]);
+
+  // Debug effect to monitor instruction changes
+  useEffect(() => {
+    logMessage(`[InstructionManager] Instructions updated (${instructions.length} chars)`);
+  }, [instructions]);
+
+  // Enhanced tool enablement change detection using a simpler approach
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    // Create a function to check for changes and update instructions
+    const checkAndUpdateInstructions = () => {
+      if (tools.length > 0) {
+        const newInstructions = generateCurrentInstructions();
+        if (newInstructions !== instructions) {
+          logMessage('[InstructionManager] Detected tool enablement change, updating instructions');
+          setInstructions(newInstructions);
+          instructionsState.setInstructions(newInstructions);
+        }
+      }
+    };
+
+    // Set up a periodic check (every 500ms) to catch any missed updates
+    timeoutId = setInterval(checkAndUpdateInstructions, 500);
+
+    return () => {
+      clearInterval(timeoutId);
+    };
+  }, [tools.length, generateCurrentInstructions, instructions]);
+
+  // Update global state when local state changes - separate effect for reliability
   useEffect(() => {
     // Don't update if we're in the middle of a global state update
     if (instructionsState.updating) {
       return;
     }
 
-    // Update global state
-    if (instructionsState.instructions !== instructions) {
+    // Always update global state when local instructions change (unless it's from global state update)
+    if (instructionsState.instructions !== instructions && instructions) {
+      logMessage('[InstructionManager] Updating global state with new instructions');
       instructionsState.setInstructions(instructions);
     }
   }, [instructions]);
@@ -173,14 +245,13 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     const unsubscribe = instructionsState.subscribe(newInstructions => {
       // Only update local state if it's different from current instructions
       if (newInstructions !== instructions) {
+        logMessage('[InstructionManager] Syncing instructions from global state');
         setInstructions(newInstructions);
       }
     });
 
-    return () => {
-      unsubscribe();
-    };
-  }, [instructions]);
+    return unsubscribe;
+  }, []); // Empty dependency array to avoid recreating subscription
 
   const handleInsertInChat = useCallback(async () => {
     if (!instructions) return;
