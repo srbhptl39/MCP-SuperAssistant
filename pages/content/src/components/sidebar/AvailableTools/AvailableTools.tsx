@@ -7,6 +7,11 @@ import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
 
+interface ExtendedTool extends Tool {
+  displayName?: string;
+  originalName?: string;
+}
+
 
 interface AvailableToolsProps {
   tools: Tool[];
@@ -76,30 +81,67 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     logMessage(`[AvailableTools] Component ${!isExpanded ? 'expanded' : 'collapsed'}`);
   };
 
-  // Filter and sort tools - memoized to prevent unnecessary recalculations
-  const filteredTools = useMemo(() => {
+  // Group tools by server name and filter - memoized to prevent unnecessary recalculations
+  const { groupedTools, ungroupedTools } = useMemo(() => {
     const filtered = (effectiveTools || []).filter(
       tool =>
         tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (tool.description && tool.description.toLowerCase().includes(searchTerm.toLowerCase())),
     );
-    
-    // Sort enabled tools first only after save (no pending changes)
-    if (!hasUnsavedChanges) {
-      return filtered.sort((a, b) => {
+
+    const grouped: Record<string, ExtendedTool[]> = {};
+    const ungrouped: ExtendedTool[] = [];
+
+    filtered.forEach(tool => {
+      const dotIndex = tool.name.indexOf('.');
+      if (dotIndex > 0) {
+        const serverName = tool.name.substring(0, dotIndex);
+        const toolName = tool.name.substring(dotIndex + 1);
+        
+        if (!grouped[serverName]) {
+          grouped[serverName] = [];
+        }
+        grouped[serverName].push({
+          ...tool,
+          displayName: toolName, // Store the short name for display
+          originalName: tool.name // Keep original for functionality
+        } as ExtendedTool);
+      } else {
+        ungrouped.push(tool as ExtendedTool);
+      }
+    });
+
+    // Sort tools within each group
+    Object.keys(grouped).forEach(serverName => {
+      grouped[serverName].sort((a, b) => {
+        if (!hasUnsavedChanges) {
+          const aEnabled = isToolEnabled(a.originalName || a.name);
+          const bEnabled = isToolEnabled(b.originalName || b.name);
+          
+          if (aEnabled && !bEnabled) return -1;
+          if (!aEnabled && bEnabled) return 1;
+        }
+        
+        const aName = a.displayName || a.name;
+        const bName = b.displayName || b.name;
+        return aName.localeCompare(bName);
+      });
+    });
+
+    // Sort ungrouped tools
+    ungrouped.sort((a, b) => {
+      if (!hasUnsavedChanges) {
         const aEnabled = isToolEnabled(a.name);
         const bEnabled = isToolEnabled(b.name);
         
         if (aEnabled && !bEnabled) return -1;
         if (!aEnabled && bEnabled) return 1;
-        
-        // Maintain alphabetical order within enabled/disabled groups
-        return a.name.localeCompare(b.name);
-      });
-    }
-    
-    // When there are unsaved changes, maintain current order to prevent jumping
-    return filtered;
+      }
+      
+      return a.name.localeCompare(b.name);
+    });
+
+    return { groupedTools: grouped, ungroupedTools: ungrouped };
   }, [effectiveTools, searchTerm, enabledTools, hasUnsavedChanges]);
 
   const handleExecute = (tool: Tool) => {
@@ -166,6 +208,38 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     logMessage('[AvailableTools] All tools disabled');
   };
 
+  // Group-level operations
+  const handleToggleGroup = (serverName: string, tools: ExtendedTool[]) => {
+    setHasUnsavedChanges(true);
+    const allEnabled = tools.every(tool => isToolEnabled(tool.originalName || tool.name));
+    
+    tools.forEach(tool => {
+      const toolName = tool.originalName || tool.name;
+      if (allEnabled) {
+        disableTool(toolName);
+      } else {
+        enableTool(toolName);
+      }
+    });
+    
+    logMessage(`[AvailableTools] Group ${serverName} ${allEnabled ? 'disabled' : 'enabled'}`);
+  };
+
+  // Calculate total tools count
+  const totalToolsCount = useMemo(() => {
+    const groupedCount = Object.values(groupedTools).reduce((acc, tools) => acc + tools.length, 0);
+    return groupedCount + ungroupedTools.length;
+  }, [groupedTools, ungroupedTools]);
+
+  const isGroupEnabled = (tools: ExtendedTool[]) => {
+    return tools.every(tool => isToolEnabled(tool.originalName || tool.name));
+  };
+
+  const isGroupPartiallyEnabled = (tools: ExtendedTool[]) => {
+    const enabledCount = tools.filter(tool => isToolEnabled(tool.originalName || tool.name)).length;
+    return enabledCount > 0 && enabledCount < tools.length;
+  };
+
   return (
     <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <CardHeader className="p-4 pb-2 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
@@ -205,7 +279,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
               <Typography variant="small" className="text-slate-600 dark:text-slate-400">
-                {enabledTools.size} of {effectiveTools.length} tools enabled
+                {enabledTools.size} of {totalToolsCount} tools enabled
               </Typography>
             </div>
             <div className="flex items-center gap-2">
@@ -213,7 +287,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                 onClick={handleEnableAll}
                 size="sm"
                 variant="outline"
-                disabled={isRefreshing || isLoadingEnablement || effectiveTools.length === 0}
+                disabled={isRefreshing || isLoadingEnablement || totalToolsCount === 0}
                 className="h-8 px-3 text-xs bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
                 Enable All
               </Button>
@@ -221,7 +295,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                 onClick={handleDisableAll}
                 size="sm"
                 variant="outline"
-                disabled={isRefreshing || isLoadingEnablement || effectiveTools.length === 0}
+                disabled={isRefreshing || isLoadingEnablement || totalToolsCount === 0}
                 className="h-8 px-3 text-xs bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800">
                 Disable All
               </Button>
@@ -274,7 +348,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
             </div>
           )}
 
-          {!isRefreshing && !isLoadingEnablement && filteredTools.length === 0 && (
+          {!isRefreshing && !isLoadingEnablement && totalToolsCount === 0 && (
             <div className="text-center py-8 text-slate-500 dark:text-slate-400">
               {searchTerm ? (
                 <>
@@ -323,125 +397,304 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
             </div>
           )}
 
-          {!isRefreshing && !isLoadingEnablement && filteredTools.length > 0 && (
-            <div className="space-y-3">
-              {filteredTools.map(tool => {
-                const isEnabled = isToolEnabled(tool.name);
+          {!isRefreshing && !isLoadingEnablement && totalToolsCount > 0 && (
+            <div className="space-y-4">
+              {/* Render grouped tools */}
+              {Object.entries(groupedTools).map(([serverName, tools]) => {
+                const groupEnabled = isGroupEnabled(tools);
+                const groupPartiallyEnabled = isGroupPartiallyEnabled(tools);
+                const groupExpanded = expandedTools.has(serverName);
+                
                 return (
-                  <div
-                    key={tool.name}
-                    className={cn(
-                      "border rounded-lg overflow-hidden transition-all",
-                      isEnabled 
-                        ? "border-slate-200 dark:border-slate-700" 
-                        : "border-slate-300 dark:border-slate-600 opacity-60"
-                    )}>
-                    <div
-                      className={cn(
-                        "flex items-center justify-between p-3 cursor-pointer transition-colors",
-                        isEnabled 
-                          ? "bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
-                          : "bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-150 dark:hover:bg-slate-700/50"
-                      )}
-                      onClick={() => toggleToolExpansion(tool.name)}>
-                      <div className="flex items-center">
-                        <Icon
-                          name="chevron-right"
-                          size="sm"
-                          className={cn(
-                            'mr-2 text-slate-500 dark:text-slate-400 transition-transform',
-                            expandedTools.has(tool.name) ? 'rotate-90' : '',
-                          )}
-                        />
-                        <div className="flex items-center mr-3">
+                  <div key={serverName} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    {/* Group Header */}
+                    <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => toggleToolExpansion(serverName)}
+                            className="p-1 mr-2 rounded transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
+                            aria-label={groupExpanded ? 'Collapse group' : 'Expand group'}>
+                            <Icon
+                              name="chevron-right"
+                              size="sm"
+                              className={cn(
+                                'text-slate-600 dark:text-slate-400 transition-transform',
+                                groupExpanded ? 'rotate-90' : ''
+                              )}
+                            />
+                          </button>
                           <input
                             type="checkbox"
-                            checked={isEnabled}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              handleToggleTool(tool.name);
+                            checked={groupEnabled}
+                            ref={(el) => {
+                              if (el) el.indeterminate = groupPartiallyEnabled;
                             }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                            className="w-4 h-4 mr-2 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                            onChange={() => handleToggleGroup(serverName, tools)}
+                            className="w-4 h-4 mr-3 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
                           />
+                          <Typography variant="h4" className="text-slate-800 dark:text-slate-200 font-semibold">
+                            {serverName}
+                          </Typography>
+                          <Typography variant="small" className="ml-2 text-slate-500 dark:text-slate-400">
+                            ({tools.length} tools)
+                          </Typography>
                         </div>
-                        <Typography 
-                          variant="body" 
-                          className={cn(
-                            "font-medium transition-colors",
-                            isEnabled 
-                              ? "text-slate-900 dark:text-slate-100"
-                              : "text-slate-500 dark:text-slate-400"
-                          )}>
-                          {tool.name}
-                        </Typography>
-                        {!isEnabled && (
-                          <span className="ml-2 px-2 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded">
-                            Disabled
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {groupPartiallyEnabled && (
+                            <span className="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded">
+                              Partial
+                            </span>
+                          )}
+                          {!groupEnabled && !groupPartiallyEnabled && (
+                            <span className="px-2 py-1 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded">
+                              Disabled
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {expandedTools.has(tool.name) && (
-                      <div className={cn(
-                        "p-3 border-t border-slate-200 dark:border-slate-700",
-                        isEnabled 
-                          ? "bg-white dark:bg-slate-900"
-                          : "bg-slate-50 dark:bg-slate-800/50"
-                      )}>
-                        {tool.description && (
-                          <Typography 
-                            variant="body" 
-                            className={cn(
-                              "mb-2",
-                              isEnabled 
-                                ? "text-slate-600 dark:text-slate-300"
-                                : "text-slate-500 dark:text-slate-400"
-                            )}>
-                            {tool.description}
-                          </Typography>
-                        )}
-                        <div className="mt-2">
-                          <Typography 
-                            variant="caption" 
-                            className={cn(
-                              "mb-1",
-                              isEnabled 
-                                ? "text-slate-500 dark:text-slate-400"
-                                : "text-slate-400 dark:text-slate-500"
-                            )}>
-                            Schema
-                          </Typography>
-                          <pre className={cn(
-                            "text-xs p-2 whitespace-pre-wrap max-h-60 overflow-y-auto rounded border",
-                            isEnabled 
-                              ? "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
-                              : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600"
-                          )}>
-                            {(() => {
-                              try {
-                                // Handle both schema formats (mcp.Tool and stores.Tool)
-                                const schema = (tool as any).schema || (tool as any).input_schema;
-                                if (!schema) return 'No schema available';
+                    {/* Group Tools */}
+                    {groupExpanded && (
+                      <div className="bg-white dark:bg-slate-900">
+                        {tools.map(tool => {
+                          const toolName = tool.originalName || tool.name;
+                          const displayName = tool.displayName || tool.name;
+                          const isEnabled = isToolEnabled(toolName);
+                          const toolExpanded = expandedTools.has(toolName);
+                          
+                          return (
+                            <div key={toolName} className="border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                              <div
+                                className={cn(
+                                  "flex items-center justify-between p-3 cursor-pointer transition-colors",
+                                  isEnabled 
+                                    ? "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/30 opacity-60"
+                                )}
+                                onClick={() => toggleToolExpansion(toolName)}>
+                                <div className="flex items-center">
+                                  <Icon
+                                    name="chevron-right"
+                                    size="sm"
+                                    className={cn(
+                                      'mr-2 text-slate-400 dark:text-slate-500 transition-transform',
+                                      toolExpanded ? 'rotate-90' : '',
+                                    )}
+                                  />
+                                  <input
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleTool(toolName);
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                    className="w-4 h-4 mr-3 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                                  />
+                                  <Typography 
+                                    variant="body" 
+                                    className={cn(
+                                      "font-medium transition-colors",
+                                      isEnabled 
+                                        ? "text-slate-800 dark:text-slate-200"
+                                        : "text-slate-500 dark:text-slate-400"
+                                    )}>
+                                    {displayName}
+                                  </Typography>
+                                  {!isEnabled && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded">
+                                      Disabled
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
 
-                                const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
-                                return JSON.stringify(schemaObject, null, 2);
-                              } catch (error) {
-                                console.error('Error processing tool schema:', error);
-                                const schema = (tool as any).schema || (tool as any).input_schema;
-                                return typeof schema === 'string' ? schema : 'Invalid schema format';
-                              }
-                            })()}
-                          </pre>
-                        </div>
+                              {toolExpanded && (
+                                <div className={cn(
+                                  "p-3 bg-slate-50 dark:bg-slate-800/50",
+                                  !isEnabled && "opacity-60"
+                                )}>
+                                  {tool.description && (
+                                    <Typography 
+                                      variant="body" 
+                                      className={cn(
+                                        "mb-2",
+                                        isEnabled 
+                                          ? "text-slate-600 dark:text-slate-300"
+                                          : "text-slate-500 dark:text-slate-400"
+                                      )}>
+                                      {tool.description}
+                                    </Typography>
+                                  )}
+                                  <div className="mt-2">
+                                    <Typography 
+                                      variant="caption" 
+                                      className={cn(
+                                        "mb-1",
+                                        isEnabled 
+                                          ? "text-slate-500 dark:text-slate-400"
+                                          : "text-slate-400 dark:text-slate-500"
+                                      )}>
+                                      Schema
+                                    </Typography>
+                                    <pre className={cn(
+                                      "text-xs p-2 whitespace-pre-wrap max-h-60 overflow-y-auto rounded border",
+                                      isEnabled 
+                                        ? "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                                        : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600"
+                                    )}>
+                                      {(() => {
+                                        try {
+                                          const schema = (tool as any).schema || (tool as any).input_schema;
+                                          if (!schema) return 'No schema available';
+
+                                          const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
+                                          return JSON.stringify(schemaObject, null, 2);
+                                        } catch (error) {
+                                          console.error('Error processing tool schema:', error);
+                                          const schema = (tool as any).schema || (tool as any).input_schema;
+                                          return typeof schema === 'string' ? schema : 'Invalid schema format';
+                                        }
+                                      })()}
+                                    </pre>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 );
               })}
+
+              {/* Render ungrouped tools */}
+              {ungroupedTools.length > 0 && (
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                  <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-3">
+                    <Typography variant="h4" className="text-slate-800 dark:text-slate-200 font-semibold">
+                      Individual Tools
+                    </Typography>
+                    <Typography variant="small" className="text-slate-500 dark:text-slate-400">
+                      ({ungroupedTools.length} tools)
+                    </Typography>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900">
+                    {ungroupedTools.map(tool => {
+                      const isEnabled = isToolEnabled(tool.name);
+                      const toolExpanded = expandedTools.has(tool.name);
+                      
+                      return (
+                        <div key={tool.name} className="border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                          <div
+                            className={cn(
+                              "flex items-center justify-between p-3 cursor-pointer transition-colors",
+                              isEnabled 
+                                ? "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800/30 opacity-60"
+                            )}
+                            onClick={() => toggleToolExpansion(tool.name)}>
+                            <div className="flex items-center">
+                              <Icon
+                                name="chevron-right"
+                                size="sm"
+                                className={cn(
+                                  'mr-2 text-slate-400 dark:text-slate-500 transition-transform',
+                                  toolExpanded ? 'rotate-90' : '',
+                                )}
+                              />
+                              <input
+                                type="checkbox"
+                                checked={isEnabled}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleTool(tool.name);
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                className="w-4 h-4 mr-3 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                              />
+                              <Typography 
+                                variant="body" 
+                                className={cn(
+                                  "font-medium transition-colors",
+                                  isEnabled 
+                                    ? "text-slate-800 dark:text-slate-200"
+                                    : "text-slate-500 dark:text-slate-400"
+                                )}>
+                                {tool.name}
+                              </Typography>
+                              {!isEnabled && (
+                                <span className="ml-2 px-2 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded">
+                                  Disabled
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {toolExpanded && (
+                            <div className={cn(
+                              "p-3 bg-slate-50 dark:bg-slate-800/50",
+                              !isEnabled && "opacity-60"
+                            )}>
+                              {tool.description && (
+                                <Typography 
+                                  variant="body" 
+                                  className={cn(
+                                    "mb-2",
+                                    isEnabled 
+                                      ? "text-slate-600 dark:text-slate-300"
+                                      : "text-slate-500 dark:text-slate-400"
+                                  )}>
+                                  {tool.description}
+                                </Typography>
+                              )}
+                              <div className="mt-2">
+                                <Typography 
+                                  variant="caption" 
+                                  className={cn(
+                                    "mb-1",
+                                    isEnabled 
+                                      ? "text-slate-500 dark:text-slate-400"
+                                      : "text-slate-400 dark:text-slate-500"
+                                  )}>
+                                  Schema
+                                </Typography>
+                                <pre className={cn(
+                                  "text-xs p-2 whitespace-pre-wrap max-h-60 overflow-y-auto rounded border",
+                                  isEnabled 
+                                    ? "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                                    : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600"
+                                )}>
+                                  {(() => {
+                                    try {
+                                      const schema = (tool as any).schema || (tool as any).input_schema;
+                                      if (!schema) return 'No schema available';
+
+                                      const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
+                                      return JSON.stringify(schemaObject, null, 2);
+                                    } catch (error) {
+                                      console.error('Error processing tool schema:', error);
+                                      const schema = (tool as any).schema || (tool as any).input_schema;
+                                      return typeof schema === 'string' ? schema : 'Invalid schema format';
+                                    }
+                                  })()}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
