@@ -16,7 +16,7 @@ const getZustandPreferences = (): UserPreferences => {
   } catch (error) {
     logMessage(`[SidebarManager] Error reading Zustand store: ${error}`);
   }
-  
+
   // Return default preferences
   return {
     autoSubmit: false,
@@ -46,6 +46,7 @@ declare global {
  */
 export class SidebarManager extends BaseSidebarManager {
   private static perplexityInstance: SidebarManager | null = null;
+  private static zInstance: SidebarManager | null = null;
   private static chatgptInstance: SidebarManager | null = null;
   private static grokInstance: SidebarManager | null = null;
   private static geminiInstance: SidebarManager | null = null;
@@ -89,6 +90,11 @@ export class SidebarManager extends BaseSidebarManager {
           SidebarManager.perplexityInstance = new SidebarManager(siteType);
         }
         return SidebarManager.perplexityInstance;
+      case 'z':
+        if (!SidebarManager.zInstance) {
+          SidebarManager.zInstance = new SidebarManager(siteType);
+        }
+        return SidebarManager.zInstance;
       case 'aistudio':
         if (!SidebarManager.aistudioInstance) {
           SidebarManager.aistudioInstance = new SidebarManager(siteType);
@@ -224,9 +230,9 @@ export class SidebarManager extends BaseSidebarManager {
         // Check if MCP is enabled from persistent state before showing sidebar
         const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
         const mcpEnabled = zustandState.state?.mcpEnabled ?? false;
-        
+
         logMessage(`[SidebarManager] MCP enabled from persisted state: ${mcpEnabled}`);
-        
+
         if (mcpEnabled) {
           // MCP is enabled, so show the sidebar
           logMessage('[SidebarManager] MCP is enabled, showing sidebar');
@@ -334,7 +340,7 @@ export class SidebarManager extends BaseSidebarManager {
           logMessage('[SidebarManager] Final check: Re-setting window.activeSidebarManager reference before React render');
           window.activeSidebarManager = this;
         }
-        
+
         logMessage('[SidebarManager] Rendering React component with all initial state ready');
         this.render();
 
@@ -463,8 +469,8 @@ export class SidebarManager extends BaseSidebarManager {
           const retryHasMargin = document.documentElement.style.marginRight !== '';
           const retryHasWidth = document.documentElement.style.width !== '';
           const retryComputedStyle = window.getComputedStyle(document.documentElement);
-          const retryMarginApplied = retryComputedStyle.marginRight === expectedMargin || 
-                                    retryComputedStyle.transform.includes('translateX');
+          const retryMarginApplied = retryComputedStyle.marginRight === expectedMargin ||
+            retryComputedStyle.transform.includes('translateX');
 
           if (retryHasClass && (retryHasMargin || retryMarginApplied)) {
             logMessage('[SidebarManager] Push mode successfully applied after retry');
@@ -556,7 +562,7 @@ export class SidebarManager extends BaseSidebarManager {
       logMessage(`[SidebarManager] Synced Zustand visibility state to: ${isVisible}`);
     } catch (error) {
       logMessage(`[SidebarManager] Error syncing Zustand visibility state: ${error}`);
-      
+
       // Fallback to direct localStorage manipulation if store access fails
       try {
         const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
@@ -588,6 +594,11 @@ export class SidebarManager extends BaseSidebarManager {
       case 'perplexity':
         if (SidebarManager.perplexityInstance === this) {
           SidebarManager.perplexityInstance = null;
+        }
+        break;
+      case 'z':
+        if (SidebarManager.zInstance === this) {
+          SidebarManager.zInstance = null;
         }
         break;
       case 'chatgpt':
@@ -643,8 +654,8 @@ export class SidebarManager extends BaseSidebarManager {
    */
   private isNavigationEvent(): boolean {
     // If we're on a supported site and the URL is still valid, this is likely navigation
-    return window.location.hostname === 'gemini.google.com' && 
-           window.location.href.includes('/app');
+    return window.location.hostname === 'gemini.google.com' &&
+      window.location.href.includes('/app');
   }
 
   /**
@@ -655,7 +666,7 @@ export class SidebarManager extends BaseSidebarManager {
       logMessage(`[SidebarManager] Skipping destroy during navigation for ${this.siteType}`);
       return;
     }
-    
+
     logMessage(`[SidebarManager] Performing actual destroy for ${this.siteType}`);
     this.destroy();
   }
@@ -666,7 +677,7 @@ export class SidebarManager extends BaseSidebarManager {
   public async hide(): Promise<void> {
     // Sync Zustand store with actual visibility state when hiding
     this.syncZustandVisibilityState(false);
-    
+
     // Call the parent hide method
     return super.hide();
   }

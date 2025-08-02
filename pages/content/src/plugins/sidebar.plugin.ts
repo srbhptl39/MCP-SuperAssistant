@@ -5,7 +5,7 @@ import { useUIStore } from '../stores/ui.store';
 
 /**
  * SidebarPlugin - Manages the sidebar as a plugin in the new architecture
- * 
+ *
  * This plugin:
  * - Automatically shows the sidebar when the page loads
  * - Integrates with Zustand stores and event system
@@ -26,12 +26,12 @@ export class SidebarPlugin implements AdapterPlugin {
 
   async initialize(context: PluginContext): Promise<void> {
     this.context = context;
-    
+
     context.logger.debug('[SidebarPlugin] Initializing sidebar plugin...');
-    
+
     // Set up event listeners for sidebar management
     this.setupEventListeners();
-    
+
     context.logger.debug('[SidebarPlugin] Sidebar plugin initialized successfully');
   }
 
@@ -43,7 +43,7 @@ export class SidebarPlugin implements AdapterPlugin {
 
     const hostname = window.location.hostname;
     const pathname = window.location.pathname;
-    
+
     // Handle all GitHub domains
     if (hostname === 'github.com' || hostname.endsWith('.github.com')) {
       // Only support GitHub Copilot pages
@@ -58,19 +58,19 @@ export class SidebarPlugin implements AdapterPlugin {
     try {
       // Initialize sidebar manager for current site
       await this.initializeSidebarManager();
-      
+
       // Show sidebar automatically on activation
       await this.showSidebar();
-      
+
       this.isActive = true;
       this.context?.logger.debug('[SidebarPlugin] Sidebar plugin activated successfully');
-      
+
       // Emit activation event
       this.context?.eventBus.emit('plugin:activated', {
         pluginName: this.name,
         timestamp: Date.now()
       });
-      
+
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Failed to activate:', error);
       throw error;
@@ -237,19 +237,19 @@ export class SidebarPlugin implements AdapterPlugin {
 
     try {
       this.context?.logger.debug('[SidebarPlugin] Initializing sidebar manager...');
-      
+
       // Determine site type from current hostname
       const hostname = window.location.hostname;
       const siteType = this.determineSiteType(hostname);
-      
+
       // Create sidebar manager instance
       this.sidebarManager = SidebarManager.getInstance(siteType);
-      
+
       // Expose sidebar manager globally for backward compatibility
       (window as any).activeSidebarManager = this.sidebarManager;
-      
+
       this.context?.logger.debug(`[SidebarPlugin] Sidebar manager initialized for site type: ${siteType}`);
-      
+
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Failed to initialize sidebar manager:', error);
       throw error;
@@ -259,6 +259,7 @@ export class SidebarPlugin implements AdapterPlugin {
   private determineSiteType(hostname: string): SiteType {
     // Map hostnames to site types (same logic as legacy adapters)
     if (hostname.includes('perplexity.ai')) return 'perplexity';
+    if (hostname.includes('z.ai')) return 'z';
     if (hostname.includes('chatgpt.com') || hostname.includes('chat.openai.com')) return 'chatgpt';
     if (hostname.includes('x.ai') || hostname.includes('grok')) return 'grok';
     if (hostname.includes('gemini.google.com')) return 'gemini';

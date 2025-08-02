@@ -30,6 +30,7 @@ const manifest = {
   description: 'MCP SuperAssistant',
   host_permissions: [
     '*://*.perplexity.ai/*',
+    '*://*.z.ai/*',
     '*://*.chat.openai.com/*',
     '*://*.chatgpt.com/*',
     '*://*.grok.com/*',
@@ -74,6 +75,11 @@ const manifest = {
     // Specific content script for perplexity.ai tool call parsing
     {
       matches: ['*://*.perplexity.ai/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+    {
+      matches: ['*://*.z.ai/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

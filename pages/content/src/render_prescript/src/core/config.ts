@@ -77,6 +77,15 @@ export const WEBSITE_CONFIGS: Array<{
     },
   },
   {
+    urlPattern: 'z',
+    config: {
+      targetSelectors: ['.cm-editor'],
+      streamingContainerSelectors: ['.cm-content'],
+      function_result_selector: ['div.chat-user'],
+      updateThrottle: 900,
+    },
+  },
+  {
     urlPattern: 'gemini',
     config: {
       targetSelectors: ['code-block'],

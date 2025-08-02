@@ -1,5 +1,33 @@
-import type { FunctionInfo } from '../core/types';
 import { extractLanguageTag } from './languageParser';
+import { CONFIG, FunctionInfo } from '../core';
+
+
+export function startsWithFunctionCalls(str: string | null): boolean {
+  if (str == null) {
+    return false;
+  }
+  if (CONFIG.targetSelectors.includes('.cm-editor')) {
+    const regex = /^.*?(?:›⌄⌄\s*)?<function_calls>\n?\s*<invoke/;
+    return regex.test(str);
+  }
+
+  return str.includes('<function_calls>') || str.includes('<invoke ');
+}
+
+export function getTextFromCmContent(parentElement: Element | Document = document): string | null {
+  // Find all divs with class "cm-content" within the parent element
+  const cmContentDivs = parentElement.querySelectorAll('.cm-content');
+
+  if (cmContentDivs.length === 0) {
+    return null;
+  }
+
+  // Get the last one
+  const lastCmContentDiv = cmContentDivs[cmContentDivs.length - 1];
+
+  // Get all text content from the div and its children
+  return lastCmContentDiv.textContent || lastCmContentDiv.innerText || '';
+}
 
 /**
  * Analyzes content to determine if it contains function calls
@@ -23,9 +51,8 @@ export const containsFunctionCalls = (block: HTMLElement): FunctionInfo => {
 
   // Check for any signs of function call content
   if (
+    !startsWithFunctionCalls(content) &&
     !content.includes('<') &&
-    !content.includes('<function_calls>') &&
-    !content.includes('<invoke') &&
     !content.includes('</invoke>') &&
     !content.includes('<parameter')
   ) {
@@ -42,7 +69,7 @@ export const containsFunctionCalls = (block: HTMLElement): FunctionInfo => {
   const contentToExamine = langTagResult.content || content;
 
   // Check for Claude Opus style function calls
-  if (contentToExamine.includes('<function_calls>') || contentToExamine.includes('<invoke')) {
+  if (startsWithFunctionCalls(contentToExamine)) {
     result.hasFunctionCalls = true;
     result.detectedBlockType = 'antml';
 
