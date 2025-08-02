@@ -625,7 +625,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   // Use Zustand hooks for adapter and user preferences
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
   const { preferences, updatePreferences } = useUserPreferences();
-  
+
   // Use MCP state hook to get persistent MCP toggle state
   const { mcpEnabled: mcpEnabledFromStore, setMCPEnabled } = useMCPState();
 
@@ -727,7 +727,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   useEffect(() => {
     // Initial sync
     setInstructions(instructionsState.instructions || '');
-    
+
     // Subscribe to changes in the global instructions state
     const unsubscribe = instructionsState.subscribe(newInstructions => {
       setInstructions(newInstructions);
@@ -744,7 +744,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     // Force initial state sync to ensure popover reflects current persistent MCP state
     const currentToggleState = toggleStateManager.getState();
     console.debug(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, store MCP: ${mcpEnabledFromStore}`);
-    
+
     // Sync automation state from user preferences
     const syncedState = {
       ...currentToggleState,
@@ -753,9 +753,9 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       autoSubmit: preferences.autoSubmit || false,
       autoExecute: preferences.autoExecute || false,
     };
-    
+
     setState(syncedState);
-    
+
     // Also sync the legacy toggle state manager
     toggleStateManager.setAutoInsert(preferences.autoInsert || false);
     toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
@@ -765,54 +765,54 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
     console.debug(`[MCPPopover] MCP toggle changed to: ${checked}`);
-    
+
     // Update the persistent MCP state in store (this will automatically control sidebar visibility)
     setMCPEnabled(checked, 'mcp-popover-user-toggle');
-    
+
     // Also inform the legacy toggle state manager for compatibility
     toggleStateManager.setMCPEnabled(checked);
-    
+
     // State will be updated automatically through the MCP state effect
   };
 
   const handleAutoInsert = (checked: boolean) => {
     console.debug(`[MCPPopover] Auto Insert toggle changed to: ${checked}`);
-    
+
     // Update user preferences store
     updatePreferences({ autoInsert: checked });
-    
+
     // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoInsert(checked);
     updateState();
-    
+
     // Update automation state on window for render_prescript access
     AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
 
   const handleAutoSubmit = (checked: boolean) => {
     console.debug(`[MCPPopover] Auto Submit toggle changed to: ${checked}`);
-    
+
     // Update user preferences store
     updatePreferences({ autoSubmit: checked });
-    
+
     // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoSubmit(checked);
     updateState();
-    
+
     // Update automation state on window for render_prescript access
     AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
 
   const handleAutoExecute = (checked: boolean) => {
     console.debug(`[MCPPopover] Auto Execute toggle changed to: ${checked}`);
-    
+
     // Update user preferences store
     updatePreferences({ autoExecute: checked });
-    
+
     // Also update legacy toggle state manager for compatibility
     toggleStateManager.setAutoExecute(checked);
     updateState();
-    
+
     // Update automation state on window for render_prescript access
     AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
   };
@@ -909,40 +909,41 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
 
     if (isAdapterActive && activePlugin && attachFile) {
       if (!activePlugin.capabilities.includes('file-attachment')) {
-      setAttachStatus('Not Supported');
-      console.warn(`[MCPPopover] File attachment not supported by ${activePlugin.name} adapter`);
-      return;
+        setAttachStatus('Not Supported');
+        console.warn(`[MCPPopover] File attachment not supported by ${activePlugin.name} adapter`);
+        return;
       }
 
       const isPerplexity = activePlugin.name === 'Perplexity';
+      const isZ = activePlugin.name === 'Z';
       const isGemini = activePlugin.name === 'Gemini';
-      const fileType = isPerplexity || isGemini ? 'text/plain' : 'text/markdown';
-      const fileExtension = isPerplexity || isGemini ? '.txt' : '.md';
+      const fileType = isPerplexity || isGemini || isZ ? 'text/plain' : 'text/markdown';
+      const fileExtension = isPerplexity || isGemini || isZ ? '.txt' : '.md';
       const fileName = `mcp_superassistant_instructions${fileExtension}`;
       const file = new File([instructions], fileName, { type: fileType });
       try {
-      console.debug(`[MCPPopover] Attempting to attach file using ${activePlugin.name} adapter`);
-      const success = await attachFile(file);
-      if (success) {
-        setAttachStatus('Attached!');
-        console.debug(`[MCPPopover] File attached successfully using ${activePlugin.name} adapter`);
-      } else {
-        setAttachStatus('Error');
-        console.warn(`[MCPPopover] File attachment failed using ${activePlugin.name} adapter`);
-      }
+        console.debug(`[MCPPopover] Attempting to attach file using ${activePlugin.name} adapter`);
+        const success = await attachFile(file);
+        if (success) {
+          setAttachStatus('Attached!');
+          console.debug(`[MCPPopover] File attached successfully using ${activePlugin.name} adapter`);
+        } else {
+          setAttachStatus('Error');
+          console.warn(`[MCPPopover] File attachment failed using ${activePlugin.name} adapter`);
+        }
       } catch (error) {
-      console.error(`[MCPPopover] Error attaching file:`, error);
-      setAttachStatus('Error');
+        console.error(`[MCPPopover] Error attaching file:`, error);
+        setAttachStatus('Error');
       }
     } else {
       setAttachStatus('No File');
       console.warn(`[MCPPopover] Cannot attach file. isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, attachFile: ${!!attachFile}`);
       if (activePlugin) {
-      console.warn(`[MCPPopover] Active plugin details:`, {
-        name: activePlugin.name,
-        capabilities: activePlugin.capabilities,
-        hasAttachFileMethod: !!activePlugin.attachFile
-      });
+        console.warn(`[MCPPopover] Active plugin details:`, {
+          name: activePlugin.name,
+          capabilities: activePlugin.capabilities,
+          hasAttachFileMethod: !!activePlugin.attachFile
+        });
       }
     }
     setTimeout(() => setAttachStatus('Attach'), 1200);
@@ -954,27 +955,27 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       const rect = buttonRef.current.getBoundingClientRect();
       const overlayWidth = 130; // fixed width from CSS
       const overlayHeight = 140; // approximate height for 3 buttons
-      
+
       // Calculate position above the button
       let x = rect.right - overlayWidth + 10; // Align to right edge with some offset
       let y = rect.top - overlayHeight - 10; // Position above with gap
-      
+
       // Keep within viewport bounds
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      
+
       // Adjust horizontal position if going off screen
       if (x < 10) {
         x = 10;
       } else if (x + overlayWidth > viewportWidth - 10) {
         x = viewportWidth - overlayWidth - 10;
       }
-      
+
       // Adjust vertical position if going off screen
       if (y < 10) {
         y = rect.bottom + 10; // Position below if not enough space above
       }
-      
+
       setHoverOverlayPosition({ x, y });
     }
   }, []);
@@ -1036,14 +1037,14 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   useEffect(() => {
     if (isHoverOverlayVisible) {
       updateHoverOverlayPosition();
-      
+
       const handleScrollResize = () => {
         updateHoverOverlayPosition();
       };
-      
+
       window.addEventListener('scroll', handleScrollResize, true);
       window.addEventListener('resize', handleScrollResize);
-      
+
       return () => {
         window.removeEventListener('scroll', handleScrollResize, true);
         window.removeEventListener('resize', handleScrollResize);
@@ -1073,9 +1074,9 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
 
   const buttonContent = adapterButtonConfig?.contentClassName ? (
     <span className={adapterButtonConfig.contentClassName}>
-      <img 
-        src={chrome.runtime.getURL('icon-34.png')} 
-        alt="MCP Logo" 
+      <img
+        src={chrome.runtime.getURL('icon-34.png')}
+        alt="MCP Logo"
         className={adapterButtonConfig.iconClassName || ''}
         style={{ width: '20px', height: '20px', borderRadius: '50%' }}
       />
@@ -1083,9 +1084,9 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     </span>
   ) : (
     <>
-      <img 
-        src={chrome.runtime.getURL('icon-34.png')} 
-        alt="MCP Logo" 
+      <img
+        src={chrome.runtime.getURL('icon-34.png')}
+        alt="MCP Logo"
         style={{ width: '20px', height: '20px', marginRight: '1px', verticalAlign: 'middle', borderRadius: '50%' }}
       />
       MCP
@@ -1094,7 +1095,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
 
   return (
     <div className="mcp-popover-container" id="mcp-popover-container" ref={containerRef}>
-      <div 
+      <div
         style={{ position: 'relative', display: 'inline-block' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -1109,10 +1110,10 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
           {buttonContent}
         </button>
       </div>
-      
+
       {/* Hover overlay portal */}
       {isHoverOverlayVisible && createPortal(
-        <div 
+        <div
           className={`mcp-hover-overlay ${isHoverOverlayVisible ? 'visible' : ''}`}
           ref={hoverOverlayRef}
           onMouseEnter={handleHoverOverlayEnter}
@@ -1262,14 +1263,14 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
                 boxShadow: theme.innerShadow,
               }}>
               {instructions || (
-                <div style={{ 
-                  color: theme.secondaryText, 
+                <div style={{
+                  color: theme.secondaryText,
                   fontStyle: 'italic',
                   padding: '10px',
-                  textAlign: 'center' 
+                  textAlign: 'center'
                 }}>
-                  {!instructionsState.instructions 
-                    ? 'Loading instructions...' 
+                  {!instructionsState.instructions
+                    ? 'Loading instructions...'
                     : 'Generating instructions...'
                   }
                 </div>

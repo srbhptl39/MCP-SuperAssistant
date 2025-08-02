@@ -86,7 +86,7 @@ function getAutomationState() {
       autoExecute: automationState.autoExecute || false,
     };
   }
-  
+
   // Fallback to legacy toggle state
   const legacyState = (window as any).toggleState;
   return {
@@ -870,7 +870,7 @@ const ParamElementUtils = {
 // Auto-execution utilities
 const AutoExecutionUtils = {
   setupOptimizedAutoExecution: (blockId: string, functionDetails: any): void => {
-  const setupAutoExecution = () => {
+    const setupAutoExecution = () => {
       const attempts = executionTracker.incrementAttempts(blockId);
 
       if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
@@ -981,6 +981,12 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   injectStreamingStyles();
 
   const functionInfo = containsFunctionCalls(block);
+
+  if (functionInfo.hasFunctionCalls && CONFIG.targetSelectors.includes('.cm-editor')) {
+    if (block && block.querySelector('.cm-scroller')) {
+      block.querySelector('.cm-scroller')?.style.setProperty('display', 'none', 'important');
+    }
+  }
 
   // Early exit checks
   if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
