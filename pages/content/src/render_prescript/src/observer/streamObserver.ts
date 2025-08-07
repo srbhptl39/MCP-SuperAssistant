@@ -211,7 +211,7 @@ const processChunkImmediate = (
   if (!chunkInfo.hasNewChunk || !chunkInfo.isSignificant) return;
 
   // Find target element immediately
-  const target = document.querySelector(`pre[data-block-id="${blockId}"]`) as HTMLElement;
+  const target = document.querySelector(`div[data-block-id="${blockId}"]`) as HTMLElement;
   if (!target) return;
 
   // Skip if already processing or complete
@@ -654,7 +654,7 @@ export const resyncWithOriginalContent = (blockId: string): void => {
   resyncingBlocks.add(blockId);
 
   // Find the original pre element
-  const originalPre = document.querySelector(`pre[data-block-id="${blockId}"]`);
+  const originalPre = document.querySelector(`div[data-block-id="${blockId}"]`);
   if (!originalPre || !originalPre.textContent) {
     if (CONFIG.debug) {
       console.debug(`Original pre element not found for block ${blockId}`);

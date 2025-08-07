@@ -1073,12 +1073,12 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
 
   const buttonContent = adapterButtonConfig?.contentClassName ? (
     <span className={adapterButtonConfig.contentClassName}>
-      <img 
-        src={chrome.runtime.getURL('icon-34.png')} 
-        alt="MCP Logo" 
-        className={adapterButtonConfig.iconClassName || ''}
+        <img 
+          src={chrome.runtime.getURL('icon-34.png')} 
+          alt="MCP Logo" 
+          className={adapterButtonConfig.iconClassName || ''}
         style={{ width: '20px', height: '20px', borderRadius: '50%' }}
-      />
+        />
       <span className={adapterButtonConfig.textClassName || ''}>MCP</span>
     </span>
   ) : (

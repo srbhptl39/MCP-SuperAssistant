@@ -24,6 +24,7 @@ import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
 import { KimiAdapter } from './adapters/kimi.adapter';
+import { ChatZAdapter } from './adapters/chatzai.adapter';
 import { RemoteConfigPlugin } from './remote-config.plugin';
 
 // Types for lazy initialization
@@ -947,6 +948,30 @@ class PluginRegistry {
           },
         },
       });
+
+      // Register ChatZAIAdapter factory for ChatZ.AI
+      this.registerAdapterFactory({
+        name: 'chatzai-adapter',
+        version: '2.0.0',
+        type: 'website-adapter',
+        hostnames: ['chat.z.ai'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new ChatZAdapter(),
+        config: {
+          id: 'chatzai-adapter',
+          name: 'ChatZAI Adapter',
+          description: 'Specialized adapter for ChatZ.AI with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
+        },
+      });
+
+      
       
       console.debug(`[PluginRegistry] Successfully registered SidebarPlugin (initialized) and ${this.adapterFactories.size} adapter factories (lazy)`);
     } catch (error) {

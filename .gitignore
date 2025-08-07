@@ -43,6 +43,7 @@ dev-debug.log
 node_modules/
 # Environment variables
 .env
+.env2
 # Editor directories and files
 .vscode
 *.suo
@@ -89,3 +90,4 @@ pages/content/src/shared/firebase-config.ts
 pages/content/src/utils/migration-bridge.ts
 pages/content/src/utils/siteAdapter.ts
 pages/content/src/utils/themeDetector.ts
+clients.md

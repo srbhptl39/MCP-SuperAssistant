@@ -198,7 +198,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
 
   if (blockId) {
     // Try to find the original element with the complete XML
-    const originalPre = document.querySelector(`pre[data-block-id="${blockId}"]`);
+    const originalPre = document.querySelector(`div[data-block-id="${blockId}"]`);
     if (originalPre) {
       // Use the original content directly
       rawContent = originalPre.textContent?.trim() || rawContent;

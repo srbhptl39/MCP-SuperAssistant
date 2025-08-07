@@ -65,7 +65,7 @@ const updateExistingFunctionBlock = (
     // Add execute button if not already present
     if (!block.querySelector('.execute-button')) {
       // Find the original pre element to get the raw content
-      const originalPre = document.querySelector(`pre[data-block-id="${blockId}"]`);
+      const originalPre = document.querySelector(`div[data-block-id="${blockId}"]`);
       if (originalPre && originalPre.textContent?.trim()) {
         addExecuteButton(block as HTMLDivElement, originalPre.textContent!.trim());
       }
@@ -100,9 +100,9 @@ const updateExistingFunctionBlock = (
 const updateParameters = (block: HTMLElement, functionInfo: FunctionInfo, options: RenderOptions): void => {
   // Get extracted parameters
   const parameters = extractParameters(
-    block.getAttribute('data-content') || '',
+      block.getAttribute('data-content') || '',
     block.getAttribute('data-block-id') || null,
-  );
+    );
 
   // Update parameter values
   const paramContainer = block.querySelector('.function-parameters');
