@@ -82,7 +82,7 @@ export const WEBSITE_CONFIGS: Array<{
       targetSelectors: ['.cm-editor'],
       streamingContainerSelectors: ['.cm-editor', '.cm-gutters'],
       function_result_selector: ['div.chat-user'],
-      updateThrottle: 500,
+      updateThrottle: 300,
     },
   },
   {
