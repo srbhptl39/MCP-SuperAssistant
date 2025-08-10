@@ -80,9 +80,9 @@ export const WEBSITE_CONFIGS: Array<{
     urlPattern: 'z',
     config: {
       targetSelectors: ['.cm-editor'],
-      streamingContainerSelectors: ['.cm-content'],
+      streamingContainerSelectors: ['.cm-editor', '.cm-gutters'],
       function_result_selector: ['div.chat-user'],
-      updateThrottle: 900,
+      updateThrottle: 500,
     },
   },
   {

@@ -1,5 +1,6 @@
 import { CONFIG } from '../core/config';
 import { renderFunctionResult, processedResultElements } from '../renderer/functionResult';
+import { getCMContent } from '../../../utils/helpers';
 
 // State for processing and observers
 const isProcessing = false;
@@ -238,10 +239,8 @@ export const startFunctionResultMonitoring = (): void => {
             });
 
             // Also check if the content of any text nodes might contain function result patterns
-            if (
-              element.textContent &&
-              (element.textContent.includes('<function_result') || element.textContent.includes('</function_result>'))
-            ) {
+            const content = getCMContent(element) || element.textContent;
+            if (content && (content.includes('<function_result') || content.includes('</function_result>'))) {
               potentialFunctionResult = true;
             }
 

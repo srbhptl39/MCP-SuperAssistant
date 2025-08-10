@@ -11,6 +11,7 @@ import {
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
 import type { ParamValueElement } from '../core/types';
+import { getCMContent } from '../../../utils/helpers';
 
 // Define custom property for tracking scroll state
 declare global {
@@ -982,18 +983,19 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
 
   const functionInfo = containsFunctionCalls(block);
 
-  if (functionInfo.hasFunctionCalls && CONFIG.targetSelectors.includes('.cm-editor')) {
-    if (block && block.querySelector('.cm-scroller')) {
-      block.querySelector('.cm-scroller')?.style.setProperty('display', 'none', 'important');
-    }
-  }
-
   // Early exit checks
   if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
     return false;
   }
 
-  const textContent = block.textContent?.trim() || '';
+  // Hiding cm editor content
+  if (functionInfo.hasFunctionCalls && CONFIG.targetSelectors.includes('.cm-editor')) {
+    if (block?.querySelector('.cm-scroller') != null) {
+      (block.querySelector('.cm-scroller') as any)!.style.setProperty('display', 'none', 'important');
+    }
+  }
+
+  const textContent = getCMContent(block)?.trim() || block.textContent?.trim() || '';
   if (textContent.length < 10) {
     return false;
   }
@@ -1042,7 +1044,8 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     previousCompletionStatus = !existingDiv.classList.contains('function-loading');
   }
 
-  const rawContent = block.textContent?.trim() || '';
+  let rawContent = getCMContent(block)?.trim() || block.textContent?.trim() || '';
+
   const { tag, content } = extractLanguageTag(rawContent);
   const { functionName, callId, parameters: partialParameters } = CacheUtils.parseContentEfficiently(block, rawContent);
 

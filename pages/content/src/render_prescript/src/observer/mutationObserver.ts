@@ -16,6 +16,7 @@ import {
   startStalledStreamDetection,
   stopStalledStreamDetection,
 } from './stalledStreamHandler';
+import { getCMContent } from '../../../utils/helpers';
 
 // State for processing and observers
 let isProcessing = false;
@@ -225,12 +226,14 @@ export const startDirectMonitoring = (): void => {
               element.querySelectorAll(CONFIG.streamingContainerSelectors.join(',')).length > 0;
 
             // Also check if the content of any text nodes might contain function call patterns
+            const textContent = getCMContent(element) || element.textContent;
+
             if (
-              element.textContent &&
-              (element.textContent.includes('<function_calls>') ||
-                element.textContent.includes('<invoke') ||
-                element.textContent.includes('<function_calls>') ||
-                element.textContent.includes('<invoke'))
+              textContent &&
+              (textContent.includes('<function_calls>') ||
+                textContent.includes('<invoke') ||
+                textContent.includes('<function_calls>') ||
+                textContent.includes('<invoke'))
             ) {
               potentialFunctionCall = true;
             }

@@ -1,4 +1,6 @@
 // Declare global window properties for TypeScript
+import { getCMContent } from '../../../utils/helpers';
+
 declare global {
   interface Window {
     _isProcessing?: boolean;
@@ -366,6 +368,9 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
   if (CONFIG.debug) console.debug(`Setting up direct monitoring for block: ${blockId}`);
 
+  let currentContent = getCMContent(node) || node.textContent || '';
+  let currentLength = currentContent.length;
+
   // Initialize the last updated timestamp
   streamingLastUpdated.set(blockId, Date.now());
 
@@ -374,7 +379,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
   // Track consecutive inactive periods (no content changes)
   let inactivePeriods = 0;
-  let lastContentLength = node.textContent?.length || 0;
+  let lastContentLength = currentContent.length || 0;
   let detectedIncompleteTags = false;
 
   // Setup a periodic checker for this node that can detect abrupt endings
@@ -384,9 +389,9 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
       clearInterval(periodicChecker);
       return;
     }
-
-    const currentContent = node.textContent || '';
-    const currentLength = currentContent.length;
+    // Refreshing current content
+    currentContent = getCMContent(node) || node.textContent || currentContent;
+    currentLength = currentContent.length;
 
     // Check if content has incomplete tags
     const hasOpenFunctionCallsTag =
@@ -455,7 +460,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
         // Get the content once for analysis
         const targetNode = mutation.target;
-        const textContent = targetNode.textContent || '';
+        const textContent = getCMContent(targetNode) || targetNode.textContent || '';
 
         // Use fast pattern matching instead of string includes
         if (!functionCallPattern) {
@@ -497,7 +502,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     if (contentChanged) {
       // Reset the inactive periods counter since we've seen new content
       inactivePeriods = 0;
-      lastContentLength = node.textContent?.length || 0;
+      lastContentLength = (getCMContent(node) || node.textContent)?.length || 0;
 
       // Update the last updated timestamp when content changes
       streamingLastUpdated.set(blockId, Date.now());
@@ -509,7 +514,11 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
       // Find the nearest element that contains our monitored node
       let target = node;
-      while (target && !CONFIG.targetSelectors.includes(target.tagName.toLowerCase())) {
+      while (
+        target &&
+        !CONFIG.targetSelectors.includes(target.tagName.toLowerCase()) &&
+        !CONFIG.targetSelectors.includes('.cm-editor')
+      ) {
         target = target.parentElement as HTMLElement;
         if (!target) break;
       }

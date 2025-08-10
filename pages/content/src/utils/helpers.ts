@@ -5,6 +5,8 @@
  * You can add your utility functions here as needed.
  */
 
+import { CONFIG } from '@src/render_prescript/src';
+
 /**
  * Example utility function
  * @param message The message to log
@@ -106,3 +108,45 @@ export const debugShadowDomStyles = (shadowRoot: ShadowRoot): void => {
     }
   }, 5000);
 };
+
+
+export function getCMContent(node: Element | Node): string | null {
+  // Checking if streaming container is CM Editor
+  if (
+    !(
+      (CONFIG.streamingContainerSelectors.includes('.cm-editor') ||
+        CONFIG.streamingContainerSelectors.includes('.cm-gutters')) &&
+      node.parentElement?.querySelector('.cm-content')
+    )
+  ) {
+    return null;
+  }
+
+  const element = node.parentElement?.querySelector('.cm-content');
+  if (element == null) return null;
+  const uniqueId = 'cm-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  element.setAttribute('data-cm-id', uniqueId);
+  const script = document.createElement('script');
+  script.textContent = `
+    (function() {
+      const el = document.querySelector('[data-cm-id="${uniqueId}"]');
+      if (el && el.cmView) {
+        const doc = el.cmView.view?.viewState?.state?.doc;
+        let content = '';
+        if (doc?.text) content = doc.text.join('');
+        else if (doc?.children) content = doc.children.join('');
+        el.setAttribute('data-cm-text', content);
+      }
+    })();
+  `;
+  document.documentElement.appendChild(script);
+  script.remove();
+
+  // Now read it back
+  const target = document.querySelector('[data-cm-id="' + uniqueId + '"]');
+  const content = target?.getAttribute('data-cm-text') || '';
+  if (target) {
+    target.removeAttribute('data-cm-text');
+  }
+  return content;
+}
