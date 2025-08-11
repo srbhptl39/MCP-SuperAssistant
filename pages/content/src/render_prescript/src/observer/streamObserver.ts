@@ -393,6 +393,11 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     currentContent = getCMContent(node) || node.textContent || currentContent;
     currentLength = currentContent.length;
 
+    // preventing keep checking in case of cm editor.
+    if (currentContent.includes('</function_calls>')) {
+      clearInterval(periodicChecker);
+    }
+
     // Check if content has incomplete tags
     const hasOpenFunctionCallsTag =
       currentContent.includes('<function_calls>') && !currentContent.includes('</function_calls>');

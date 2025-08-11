@@ -1,5 +1,3 @@
-import { getCMContent } from '@src/utils/helpers';
-
 (() => {
   // Configurable options
   const CONFIG = {
