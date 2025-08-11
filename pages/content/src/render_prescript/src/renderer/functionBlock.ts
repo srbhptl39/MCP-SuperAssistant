@@ -11,6 +11,7 @@ import {
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
 import type { ParamValueElement } from '../core/types';
+import { getCMContent } from '../../../utils/helpers';
 
 // Define custom property for tracking scroll state
 declare global {
@@ -86,7 +87,7 @@ function getAutomationState() {
       autoExecute: automationState.autoExecute || false,
     };
   }
-  
+
   // Fallback to legacy toggle state
   const legacyState = (window as any).toggleState;
   return {
@@ -870,7 +871,7 @@ const ParamElementUtils = {
 // Auto-execution utilities
 const AutoExecutionUtils = {
   setupOptimizedAutoExecution: (blockId: string, functionDetails: any): void => {
-  const setupAutoExecution = () => {
+    const setupAutoExecution = () => {
       const attempts = executionTracker.incrementAttempts(blockId);
 
       if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
@@ -987,7 +988,14 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     return false;
   }
 
-  const textContent = block.textContent?.trim() || '';
+  // Hiding cm editor content
+  if (functionInfo.hasFunctionCalls && CONFIG.targetSelectors.includes('.cm-editor')) {
+    if (block?.querySelector('.cm-scroller') != null) {
+      (block.querySelector('.cm-scroller') as any)!.style.setProperty('display', 'none', 'important');
+    }
+  }
+
+  const textContent = getCMContent(block)?.trim() || block.textContent?.trim() || '';
   if (textContent.length < 10) {
     return false;
   }
@@ -1036,7 +1044,8 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     previousCompletionStatus = !existingDiv.classList.contains('function-loading');
   }
 
-  const rawContent = block.textContent?.trim() || '';
+  let rawContent = getCMContent(block)?.trim() || block.textContent?.trim() || '';
+
   const { tag, content } = extractLanguageTag(rawContent);
   const { functionName, callId, parameters: partialParameters } = CacheUtils.parseContentEfficiently(block, rawContent);
 

@@ -662,7 +662,8 @@
   // Check if a block contains function calls, handling language tags
   // Returns an object with more detailed information about the function call state
   const containsFunctionCalls = block => {
-    const content = block.textContent.trim();
+    var content = getCMContent(block)?.trim() || block.textContent.trim();
+
     const result = {
       hasFunctionCalls: false,
       isComplete: false,

@@ -5,6 +5,8 @@
  * You can add your utility functions here as needed.
  */
 
+import { CONFIG } from '@src/render_prescript/src';
+
 /**
  * Example utility function
  * @param message The message to log
@@ -106,3 +108,58 @@ export const debugShadowDomStyles = (shadowRoot: ShadowRoot): void => {
     }
   }, 5000);
 };
+
+export function getCMContent(el: Element | Node): string | null {
+  // Verify element is inside a recognized CodeMirror container and has .cm-content
+  if (
+    !(
+      (CONFIG.streamingContainerSelectors.includes('.cm-editor') ||
+        CONFIG.streamingContainerSelectors.includes('.cm-gutters')) &&
+      el.parentElement?.querySelector('.cm-content')
+    )
+  ) {
+    return null;
+  }
+
+  let node = el as HTMLElement;
+
+  // Climb DOM until reaching .cm-editor or <body>
+  while (!node.matches('.cm-editor') && node !== document.body) {
+    node = node.parentElement!;
+  }
+
+  if (node === document.body) {
+    return null;
+  }
+
+  const element = node.querySelector('.cm-content');
+  if (element == null) return null;
+
+  // Unique ID for targeting in injected script
+  const uniqueId = 'cm-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  element.setAttribute('data-cm-id', uniqueId);
+
+  // Inject script in page context to access cmView (CodeMirror internal API)
+  // NOTE: Using doc.toString() here may alter formatting (line breaks/spacing).
+  const script = document.createElement('script');
+  script.textContent = `
+    (function() {
+      const el = document.querySelector('[data-cm-id="${uniqueId}"]');
+      if (el && el.cmView) {
+        const content = el.cmView.view?.viewState?.state?.doc?.toString();
+        el.setAttribute('data-cm-text', content);
+      }
+    })();
+  `;
+  document.documentElement.appendChild(script);
+  script.remove();
+
+  // Read extracted content
+  const target = document.querySelector('[data-cm-id="' + uniqueId + '"]');
+  const content = target?.getAttribute('data-cm-text') || '';
+  if (target) {
+    target.removeAttribute('data-cm-text');
+  }
+
+  return content;
+}

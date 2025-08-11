@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, Kimi, Github Copilot, Mistral and more...
+Brings MCP to ChatGPT, Perplexity, Z (GML), Grok, Gemini, Google AI Studio, OpenRouter, Kimi, Github Copilot, Mistral and more...
 </p>
 
 <!-- ![MCP SuperAssistant](chrome-extension/public/Cover3.jpg) -->
@@ -33,13 +33,14 @@ Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, K
 
 ## Overview
 
-MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio, Grokand more. It allows users to execute MCP tools directly from these platforms and insert the results back into the conversation, enhancing the capabilities of web-based AI assistants.
+MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, Z (GLM), ChatGPT, Google Gemini, Google AI Studio, Grokand more. It allows users to execute MCP tools directly from these platforms and insert the results back into the conversation, enhancing the capabilities of web-based AI assistants.
 
 ## Currently Supported Platforms
 
 - [ChatGPT](https://chatgpt.com/)
 - [Google Gemini](https://gemini.google.com/)
 - [Perplexity](https://perplexity.ai/)
+- [Z (GLM)](https://chat.z.ai/)
 - [Grok](https://grok.com/)
 - [Google AI Studio](https://aistudio.google.com/)
 - [OpenRouter Chat](https://openrouter.ai/chat)
@@ -64,13 +65,13 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 
 ## Key Features
 
-- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat!
+- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Z (GLM), Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat!
 - **Plugin Architecture**: Modular plugin system with site-specific adapters for tailored platform integration
 - **Sidebar UI**: Clean, unobtrusive interface that integrates with the AI platform
 - **Tool Detection**: Automatically detects MCP tool calls in AI responses
 - **Tool Execution**: Execute MCP tools with a single click
 - **Tool Result Integration**: Seamlessly insert tool execution results back into the AI conversation
-- **Render Mode**: Renders Function call and Function results. 
+- **Render Mode**: Renders Function call and Function results.
 - **Auto-Execute Mode**: Automatically execute detected tools
 - **Auto-Submit Mode**: Automatically submit chat input after result insertion
 - **Push Content Mode**: Option to push page content instead of overlaying
@@ -118,31 +119,31 @@ To connect the Chrome extension to a local server for proxying connections:
    ```bash
    npx @srbhptl39/mcp-superassistant-proxy@latest --config ./mcpconfig.json
    ```
-   
-   This is useful for:
-   - Proxying remote MCP servers
-   - Adding CORS support to remote servers
-   - Providing health endpoints for monitoring
 
-   Use existing MCP config file if available.
+This is useful for:
+- Proxying remote MCP servers
+- Adding CORS support to remote servers
+- Providing health endpoints for monitoring
+
+Use existing MCP config file if available.
    ```
    macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
    Windows: %APPDATA%\Claude\claude_desktop_config.json
    ```
 
-   **Example mcpconfig.json:**
+**Example mcpconfig.json:**
    ```json
    {
-     "mcpServers": {
-       "desktop-commander": {
+   "mcpServers": {
+      "desktop-commander": {
          "command": "npx",
          "args": [
-           "-y",
-           "@wonderwhy-er/desktop-commander"
+            "-y",
+            "@wonderwhy-er/desktop-commander"
          ]
-       }
-     }
+      }
    }
+}
    ```
 
 #### Connection Steps:
