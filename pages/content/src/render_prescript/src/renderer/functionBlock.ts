@@ -362,23 +362,23 @@ const ScrollUtils = {
     }
   },
 
-  performOptimizedScroll: (paramValueElement: HTMLElement): void => {
+  performOptimizedScroll: (paramValueElement: HTMLElement, forceScroll: boolean = false): void => {
     requestAnimationFrame(() => {
       // Auto-scroll the parameter value container
       if (paramValueElement.scrollHeight > paramValueElement.clientHeight) {
-        const shouldAutoScroll = !(paramValueElement as any)._userHasScrolled;
+        const shouldAutoScroll = forceScroll || !(paramValueElement as any)._userHasScrolled;
 
         if (shouldAutoScroll) {
           const targetScroll = paramValueElement.scrollHeight - paramValueElement.clientHeight;
           const currentScroll = paramValueElement.scrollTop;
           const diff = targetScroll - currentScroll;
 
-          if (diff > 100) {
+          if (diff > 10) {
             paramValueElement.scrollTo({
               top: targetScroll,
               behavior: 'smooth',
             });
-          } else {
+          } else if (diff > 0) {
             paramValueElement.scrollTop = targetScroll;
           }
         }
@@ -387,24 +387,37 @@ const ScrollUtils = {
       // Auto-scroll the inner pre element if it exists and has content
       const preElement = paramValueElement.querySelector('pre');
       if (preElement && preElement.scrollHeight > preElement.clientHeight) {
-        const shouldAutoScrollPre = !(preElement as any)._userHasScrolled;
+        const shouldAutoScrollPre = forceScroll || !(preElement as any)._userHasScrolled;
 
         if (shouldAutoScrollPre) {
           const targetScroll = preElement.scrollHeight - preElement.clientHeight;
           const currentScroll = preElement.scrollTop;
           const diff = targetScroll - currentScroll;
 
-          if (diff > 50) {
+          if (diff > 10) {
             preElement.scrollTo({
               top: targetScroll,
               behavior: 'smooth',
             });
-          } else {
+          } else if (diff > 0) {
             preElement.scrollTop = targetScroll;
           }
         }
       }
     });
+  },
+
+  // Enhanced scroll function specifically for streaming content
+  performStreamingScroll: (paramValueElement: HTMLElement): void => {
+    // Reset user scroll tracking during active streaming
+    (paramValueElement as any)._userHasScrolled = false;
+    const preElement = paramValueElement.querySelector('pre');
+    if (preElement) {
+      (preElement as any)._userHasScrolled = false;
+    }
+    
+    // Force scroll to bottom for streaming content
+    ScrollUtils.performOptimizedScroll(paramValueElement, true);
   },
 };
 
@@ -629,6 +642,128 @@ export const executionTracker: ExecutionTracker = {
   },
 };
 
+// Auto expand/collapse utilities
+const AutoExpandUtils = {
+  expandBlock: (blockDiv: HTMLDivElement, animate: boolean = true): void => {
+    if (blockDiv.classList.contains('expanded')) return;
+    
+    const expandButton = blockDiv.querySelector('.expand-button') as HTMLButtonElement;
+    const expandableContent = blockDiv.querySelector('.expandable-content') as HTMLDivElement;
+    
+    if (!expandButton || !expandableContent) return;
+    
+    blockDiv.classList.add('expanded', 'auto-expanded');
+    
+    if (animate) {
+      // Smooth expansion animation
+      DOMUtils.applyStyles(expandableContent, {
+        display: 'block',
+        maxHeight: '0px',
+        opacity: '0',
+        paddingTop: '0',
+        paddingBottom: '0',
+      });
+      
+      const targetHeight = expandableContent.scrollHeight + 24;
+      
+      requestAnimationFrame(() => {
+        DOMUtils.applyStyles(expandableContent, {
+          maxHeight: targetHeight + 'px',
+          opacity: '1',
+          paddingTop: '12px',
+          paddingBottom: '12px',
+          transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        });
+        
+        const expandIcon = expandButton.querySelector('svg path');
+        if (expandIcon) {
+          expandIcon.setAttribute('d', 'M16 14l-4-4-4 4');
+        }
+        expandButton.title = 'Collapse function details';
+      });
+    } else {
+      // Instant expansion
+      DOMUtils.applyStyles(expandableContent, {
+        display: 'block',
+        maxHeight: 'none',
+        opacity: '1',
+        paddingTop: '12px',
+        paddingBottom: '12px',
+      });
+    }
+  },
+  
+  collapseBlock: (blockDiv: HTMLDivElement, animate: boolean = true): void => {
+    if (!blockDiv.classList.contains('expanded') || !blockDiv.classList.contains('auto-expanded')) return;
+    
+    const expandButton = blockDiv.querySelector('.expand-button') as HTMLButtonElement;
+    const expandableContent = blockDiv.querySelector('.expandable-content') as HTMLDivElement;
+    
+    if (!expandButton || !expandableContent) return;
+    
+    blockDiv.classList.remove('expanded', 'auto-expanded');
+    
+    if (animate) {
+      // Smooth collapse animation
+      const currentHeight = expandableContent.scrollHeight;
+      expandableContent.style.maxHeight = currentHeight + 'px';
+      expandableContent.offsetHeight; // Force reflow
+      
+      requestAnimationFrame(() => {
+        DOMUtils.applyStyles(expandableContent, {
+          maxHeight: '0px',
+          opacity: '0',
+          paddingTop: '0',
+          paddingBottom: '0',
+          transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        });
+        
+        const expandIcon = expandButton.querySelector('svg path');
+        if (expandIcon) {
+          expandIcon.setAttribute('d', 'M8 10l4 4 4-4');
+        }
+        expandButton.title = 'Expand function details';
+      });
+      
+      // Hide after animation completes
+      setTimeout(() => {
+        if (!blockDiv.classList.contains('expanded')) {
+          expandableContent.style.display = 'none';
+        }
+      }, 400);
+    } else {
+      // Instant collapse
+      DOMUtils.applyStyles(expandableContent, {
+        display: 'none',
+        maxHeight: '0px',
+        opacity: '0',
+        paddingTop: '0',
+        paddingBottom: '0',
+      });
+    }
+  },
+  
+  scheduleAutoCollapse: (blockDiv: HTMLDivElement, delay: number = 2000): void => {
+    const blockId = blockDiv.getAttribute('data-block-id');
+    if (!blockId) return;
+    
+    const timeoutKey = `auto-collapse-${blockId}`;
+    PerformanceUtils.cleanupTimeout(timeoutKey);
+    
+    PerformanceUtils.setManagedTimeout(
+      timeoutKey,
+      () => {
+        // Only collapse if no streaming is active and block is auto-expanded
+        const stillStreaming = blockDiv.querySelector('[data-streaming="true"]');
+        if (!stillStreaming && blockDiv.classList.contains('auto-expanded')) {
+          AutoExpandUtils.collapseBlock(blockDiv, true);
+        }
+      },
+      delay
+    );
+  },
+};
+
 // Function block element creation utilities
 const BlockElementUtils = {
   createFunctionNameSection: (
@@ -838,7 +973,7 @@ const ParamElementUtils = {
       }
 
       setupAutoScroll(paramValueElement as ParamValueElement);
-      ScrollUtils.performOptimizedScroll(paramValueElement);
+      ScrollUtils.performStreamingScroll(paramValueElement);
 
       PerformanceUtils.setManagedTimeout(
         timeoutKey,
@@ -867,6 +1002,16 @@ const ParamElementUtils = {
             willChange: 'auto',
             containIntrinsicSize: 'auto',
           });
+          
+          // Check if block should auto-collapse when streaming ends
+          const blockDiv = paramValueElement.closest('.function-block') as HTMLDivElement;
+          if (blockDiv && blockDiv.classList.contains('auto-expanded')) {
+            // Check if any other parameters are still streaming
+            const stillStreaming = blockDiv.querySelector('[data-streaming="true"]');
+            if (!stillStreaming) {
+              AutoExpandUtils.scheduleAutoCollapse(blockDiv, 800);
+            }
+          }
         }, 100);
       }
 
@@ -1075,6 +1220,9 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     blockDiv.setAttribute('data-block-id', blockId);
     applyThemeClass(blockDiv);
     renderedFunctionBlocks.set(blockId, blockDiv);
+    
+    // Ensure blocks start collapsed by default
+    blockDiv.classList.remove('expanded', 'auto-expanded');
   }
 
   // Handle state transitions
@@ -1151,6 +1299,17 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   if (!expandableContent) {
     expandableContent = BlockElementUtils.createExpandableContent();
     blockDiv.appendChild(expandableContent);
+    
+    // Ensure content starts hidden for new blocks
+    if (isNewRender) {
+      DOMUtils.applyStyles(expandableContent, {
+        display: 'none',
+        maxHeight: '0px',
+        opacity: '0',
+        paddingTop: '0',
+        paddingBottom: '0',
+      });
+    }
   }
 
   if (expandButton && expandableContent) {
@@ -1184,6 +1343,11 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   let completeParameters: Record<string, any> | null = null;
   if (functionInfo.isComplete) {
     completeParameters = extractFunctionParameters(rawContent);
+    
+    // Auto-collapse if the block was auto-expanded and is now complete
+    if (blockDiv.classList.contains('auto-expanded')) {
+      AutoExpandUtils.scheduleAutoCollapse(blockDiv, 1500);
+    }
   }
 
   let contentSignature: string | null = null;
@@ -1336,7 +1500,11 @@ export const createOrUpdateParamElement = (
     };
 
     if (isStreaming) {
-      requestAnimationFrame(updateContent);
+      requestAnimationFrame(() => {
+        updateContent();
+        // Enhanced scroll for streaming content
+        ScrollUtils.performStreamingScroll(paramValueElement);
+      });
     } else {
       updateContent();
     }
@@ -1356,6 +1524,14 @@ export const createOrUpdateParamElement = (
 
   paramValueElement.setAttribute('data-param-value', JSON.stringify(value));
   ParamElementUtils.handleStreamingState(paramNameElement, paramValueElement, paramId, isStreaming);
+  
+  // Handle auto-expansion for streaming content
+  if (isStreaming) {
+    const blockDiv = container.closest('.function-block') as HTMLDivElement;
+    if (blockDiv && !blockDiv.classList.contains('expanded')) {
+      AutoExpandUtils.expandBlock(blockDiv, true);
+    }
+  }
 };
 
 // Performance: Cleanup functions for memory management
