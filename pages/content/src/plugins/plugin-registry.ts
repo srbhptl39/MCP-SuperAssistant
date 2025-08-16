@@ -24,7 +24,7 @@ import { MistralAdapter } from './adapters/mistral.adapter';
 import { SidebarPlugin } from './sidebar.plugin';
 import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
 import { KimiAdapter } from './adapters/kimi.adapter';
-import { ChatZAdapter } from './adapters/chatzai.adapter';
+import { ZAdapter } from './adapters/z.adapter';
 import { RemoteConfigPlugin } from './remote-config.plugin';
 
 // Types for lazy initialization
@@ -949,19 +949,20 @@ class PluginRegistry {
         },
       });
 
-      // Register ChatZAIAdapter factory for ChatZ.AI
+      
+    // Register ZAdapter factory for Perplexity AI
       this.registerAdapterFactory({
-        name: 'chatzai-adapter',
+        name: 'z-adapter',
         version: '2.0.0',
         type: 'website-adapter',
-        hostnames: ['chat.z.ai'],
+        hostnames: ['z.ai'],
         capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
-        create: () => new ChatZAdapter(),
+        create: () => new ZAdapter(),
         config: {
-          id: 'chatzai-adapter',
-          name: 'ChatZAI Adapter',
-          description: 'Specialized adapter for ChatZ.AI with chat input, form submission, and file attachment support',
-          version: '2.0.0',
+          id: 'z-adapter',
+          name: 'Z Adapter',
+          description: 'Specialized adapter for Z (GLM) AI with chat input, form submission, and file attachment support',
+          version: '1.0.0',
           enabled: true,
           priority: 5,
           settings: {

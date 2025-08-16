@@ -25,6 +25,8 @@ export interface FunctionCallRendererConfig {
   enableStalledStreamDetection: boolean;
   stalledStreamTimeout: number;
   stalledStreamCheckInterval: number;
+    // CodeMirror content extraction
+  useCodeMirrorExtraction: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export interface FunctionInfo {
   detectedBlockType: string | null;
   partialTagDetected: boolean;
   invokeName?: string;
+  textContent?: string;
 }
 
 /**

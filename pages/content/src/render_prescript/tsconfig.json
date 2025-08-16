@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "types": []
+    "types": ["chrome"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

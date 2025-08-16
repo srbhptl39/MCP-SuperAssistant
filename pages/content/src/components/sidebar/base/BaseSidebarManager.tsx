@@ -17,6 +17,7 @@ export type SiteType =
   | 'perplexity'
   | 'chatgpt'
   | 'grok'
+  | 'zai'
   | 'gemini'
   | 'aistudio'
   | 'openrouter'

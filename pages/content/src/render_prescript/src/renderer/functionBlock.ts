@@ -503,6 +503,33 @@ const injectStreamingStyles = (() => {
       .function-block.theme-dark .param-value[data-streaming="true"] pre {
         color: inherit !important;
       }
+      
+      /* Spinner animation styles - ensure they're loaded */
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(26, 115, 232, 0.3);
+        border-top: 2px solid #1a73e8;
+        border-radius: 50%;
+        animation: spinner-spin 1s linear infinite;
+        flex-shrink: 0;
+        will-change: transform;
+        transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
+        contain: layout style;
+        margin-left: 8px;
+      }
+      
+      .function-block.theme-dark .spinner {
+        border: 2px solid rgba(138, 180, 248, 0.3);
+        border-top: 2px solid #8ab4f8;
+      }
+      
+      @keyframes spinner-spin {
+        0% { transform: rotate(0deg) translate3d(0,0,0); }
+        100% { transform: rotate(360deg) translate3d(0,0,0); }
+      }
     `;
     document.head.appendChild(style);
   };
