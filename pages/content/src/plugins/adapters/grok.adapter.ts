@@ -910,14 +910,30 @@ export class GrokAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try to find the Think button in the bottom control bar (Grok-specific)
+    // First priority: Find the submit button container and insert before it
+    const submitButton = document.querySelector('button[aria-label="Submit"], button[type="submit"]');
+    if (submitButton) {
+      // Look for the flex container that holds the submit button
+      const submitContainer = submitButton.closest('.ml-auto.flex.flex-row.items-end.gap-1') || 
+                             submitButton.closest('.flex.flex-row.items-end') ||
+                             submitButton.closest('.flex.items-end') ||
+                             submitButton.parentElement;
+      
+      if (submitContainer) {
+        this.context.logger.debug('Found insertion point: submit button container');
+        // Insert before the submit button (insertAfter: null means insert at beginning)
+        return { container: submitContainer, insertAfter: null };
+      }
+    }
+
+    // Second priority: Try to find the Think button in the bottom control bar (Grok-specific)
     const thinkButton = document.querySelector('button[aria-label="Think"]');
     if (thinkButton && thinkButton.parentElement) {
       this.context.logger.debug('Found insertion point relative to Think button');
       return { container: thinkButton.parentElement, insertAfter: thinkButton };
     }
 
-    // Try primary selector first
+    // Third priority: Try primary selector first
     const primarySelectors = this.selectors.BUTTON_INSERTION_CONTAINER.split(', ');
     for (const selector of primarySelectors) {
       const container = document.querySelector(selector.trim());
@@ -929,7 +945,7 @@ export class GrokAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // Try fallback selectors
+    // Fourth priority: Try fallback selectors
     const fallbackSelectors = this.selectors.FALLBACK_INSERTION.split(', ');
     for (const selector of fallbackSelectors) {
       const container = document.querySelector(selector.trim());
@@ -961,7 +977,18 @@ export class GrokAdapter extends BaseAdapterPlugin {
 
       // Insert at appropriate location
       const { container, insertAfter } = insertionPoint;
-      if (insertAfter && insertAfter.parentNode === container) {
+      
+      if (insertAfter === null) {
+        // Insert at the beginning of the container (before submit button)
+        const firstChild = container.firstChild;
+        if (firstChild) {
+          container.insertBefore(reactContainer, firstChild);
+          this.context.logger.debug('Inserted popover container at beginning (before submit button)');
+        } else {
+          container.appendChild(reactContainer);
+          this.context.logger.debug('Appended popover container to empty container');
+        }
+      } else if (insertAfter && insertAfter.parentNode === container) {
         container.insertBefore(reactContainer, insertAfter.nextSibling);
         this.context.logger.debug('Inserted popover container after specified element');
       } else {
