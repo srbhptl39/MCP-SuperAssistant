@@ -917,7 +917,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             </div>
 
             {/* Input Area (Always at the bottom) */}
-            <div className="border-t border-slate-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800 shadow-inner">
+            {/* <div className="border-t border-slate-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800 shadow-inner">
               {!isInputMinimized ? (
                 <div className="relative">
                   <Button variant="ghost" size="sm" onClick={toggleInputMinimize} className="absolute top-2 right-2">
@@ -938,7 +938,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                   Show Input
                 </Button>
               )}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
