@@ -392,7 +392,10 @@ export const styles = `
     border-radius: var(--border-radius);
     font-family: var(--font-mono);
     white-space: pre-wrap;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    word-break: break-word;
+    overflow-wrap: break-word;
     font-size: 13px;
     line-height: 1.5;
     max-height: 300px;
@@ -485,7 +488,8 @@ export const styles = `
   /* Optimized streaming parameter styles with hardware acceleration */
   .param-value[data-streaming="true"] {
     padding: 0;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     max-height: 300px;
@@ -531,13 +535,16 @@ export const styles = `
   .param-value[data-streaming="true"] .content-wrapper > pre {
     margin: 0;
     padding: var(--spacing-md) 14px;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     max-height: 300px;
     flex: 1;
     font-family: var(--font-mono);
     font-size: 13px;
     line-height: 1.5;
     white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
     background-color: inherit;
     color: inherit !important;
     border: none;

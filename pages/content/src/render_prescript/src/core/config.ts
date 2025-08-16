@@ -185,11 +185,10 @@ export const WEBSITE_CONFIGS: Array<{
         {
         urlPattern: 'chat.qwen.ai',
         config: {
-      // targetSelectors: ['pre[id^="cm-hidden-pre-"]'],
-      // streamingContainerSelectors: ['pre[id^="cm-hidden-pre-"]'],
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['div.chat-user'],
+      function_result_selector: ['.user-message-text-content', 'div.user-message-content'],
+      // function_result_selector: ['div.chat-user'],
       useCodeMirrorExtraction: true
         },
       },

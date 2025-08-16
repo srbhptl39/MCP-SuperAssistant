@@ -433,7 +433,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                             onChange={() => handleToggleGroup(serverName, tools)}
                             className="w-4 h-4 mr-3 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
                           />
-                          <Typography variant="h4" className="text-slate-800 dark:text-slate-200 font-semibold">
+                          <Typography variant="subtitle" className="text-slate-800 dark:text-slate-200 font-semibold">
                             {serverName}
                           </Typography>
                           <Typography variant="small" className="ml-2 text-slate-500 dark:text-slate-400">
@@ -577,7 +577,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
               {ungroupedTools.length > 0 && (
                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                   <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-3">
-                    <Typography variant="h4" className="text-slate-800 dark:text-slate-200 font-semibold">
+                    <Typography variant="body" className="text-slate-800 dark:text-slate-200 font-semibold">
                       Individual Tools
                     </Typography>
                     <Typography variant="small" className="text-slate-500 dark:text-slate-400">
