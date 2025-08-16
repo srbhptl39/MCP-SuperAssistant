@@ -25,6 +25,7 @@ import { SidebarPlugin } from './sidebar.plugin';
 import { ChatGPTAdapter } from './adapters/chatgpt.adapter';
 import { KimiAdapter } from './adapters/kimi.adapter';
 import { ZAdapter } from './adapters/z.adapter';
+import { QwenAdapter } from './adapters/qwenchat.adapter';
 import { RemoteConfigPlugin } from './remote-config.plugin';
 
 // Types for lazy initialization
@@ -950,7 +951,7 @@ class PluginRegistry {
       });
 
       
-    // Register ZAdapter factory for Perplexity AI
+    // Register ZAdapter factory for z AI
       this.registerAdapterFactory({
         name: 'z-adapter',
         version: '2.0.0',
@@ -972,8 +973,28 @@ class PluginRegistry {
         },
       });
 
-      
-      
+      // Register QwenAdapter factory for Qwen AI
+      this.registerAdapterFactory({
+        name: 'qwen-adapter',
+        version: '2.0.0',
+        type: 'website-adapter',
+        hostnames: ['chat.qwen.ai'],
+        capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
+        create: () => new QwenAdapter(),
+        config: {
+          id: 'qwen-adapter',
+          name: 'Qwen Adapter',
+          description: 'Specialized adapter for Qwen AI with chat input, form submission, and file attachment support',
+          version: '2.0.0',
+          enabled: true,
+          priority: 5,
+          settings: {
+            logLevel: 'info',
+            urlCheckInterval: 1000,
+          },
+        },
+      });
+
       console.debug(`[PluginRegistry] Successfully registered SidebarPlugin (initialized) and ${this.adapterFactories.size} adapter factories (lazy)`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown registration error';

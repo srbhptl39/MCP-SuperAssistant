@@ -182,6 +182,17 @@ export const WEBSITE_CONFIGS: Array<{
       useCodeMirrorExtraction: true
         },
       },
+        {
+        urlPattern: 'chat.qwen.ai',
+        config: {
+      // targetSelectors: ['pre[id^="cm-hidden-pre-"]'],
+      // streamingContainerSelectors: ['pre[id^="cm-hidden-pre-"]'],
+      targetSelectors: ['pre'],
+      streamingContainerSelectors: ['pre'],
+      function_result_selector: ['div.chat-user'],
+      useCodeMirrorExtraction: true
+        },
+      },
   // Add more website-specific configurations as needed
   // Example:
   // {

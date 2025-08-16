@@ -46,6 +46,7 @@ const manifest = {
     '*://*.copilot.github.com/*',
     '*://*.kimi.com/*',
     '*://*.chat.z.ai/*',
+    '*://*.chat.qwen.ai/*',
 
   ],
 
@@ -157,6 +158,12 @@ const manifest = {
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },
+    {
+      matches: ['*://*.chat.qwen.ai/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+
   ],
   // devtools_page: 'devtools/index.html',
   web_accessible_resources: [
