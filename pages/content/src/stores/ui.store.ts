@@ -52,6 +52,9 @@ const initialUserPreferences: UserPreferences = {
   isMinimized: false,
   customInstructions: '',
   customInstructionsEnabled: false,
+  autoInsertDelay: 2,  // Default delay in seconds
+  autoExecuteDelay: 2,  // Default delay in seconds
+  autoSubmitDelay: 2,   // Default delay in seconds
 };
 
 const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSidebar' | 'setSidebarVisibility' | 'updatePreferences' | 'addNotification' | 'addRemoteNotification' | 'removeNotification' | 'dismissNotification' | 'clearNotifications' | 'openModal' | 'closeModal' | 'setGlobalLoading' | 'setTheme' | 'setMCPEnabled'> = {
@@ -61,7 +64,7 @@ const initialState: Omit<UIState, 'toggleSidebar' | 'toggleMinimize' | 'resizeSi
   activeModal: null,
   isLoading: false,
   theme: initialUserPreferences.theme,
-  mcpEnabled: false, // Default to disabled - user must explicitly enable MCP
+  mcpEnabled: true, // Default to enabled - user must explicitly disable MCP
 };
 
 export const useUIStore = create<UIState>()(

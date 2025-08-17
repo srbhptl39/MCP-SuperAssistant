@@ -1009,7 +1009,7 @@ const ParamElementUtils = {
             // Check if any other parameters are still streaming
             const stillStreaming = blockDiv.querySelector('[data-streaming="true"]');
             if (!stillStreaming) {
-              AutoExpandUtils.scheduleAutoCollapse(blockDiv, 800);
+              AutoExpandUtils.scheduleAutoCollapse(blockDiv, 1200);
             }
           }
         }, 100);

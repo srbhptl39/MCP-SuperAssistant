@@ -911,7 +911,7 @@ export class GrokAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
     // First priority: Find the submit button container and insert before it
-    const submitButton = document.querySelector('button[aria-label="Submit"], button[type="submit"]');
+    const submitButton = document.querySelector('button[aria-label="Submit"], button[type="submit"], button[aria-label="Enter voice mode"]');
     if (submitButton) {
       // Look for the flex container that holds the submit button
       const submitContainer = submitButton.closest('.ml-auto.flex.flex-row.items-end.gap-1') || 
