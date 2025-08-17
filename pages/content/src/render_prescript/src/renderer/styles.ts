@@ -499,6 +499,51 @@ export const styles = `
     transform: translate3d(0,0,0);
     scroll-behavior: smooth !important;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  
+  /* Fade gradient overlays for smooth streaming effect */
+  .param-value[data-streaming="true"]::before,
+  .param-value[data-streaming="true"]::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20px;
+    pointer-events: none;
+    z-index: 2;
+    transition: opacity 0.3s ease;
+  }
+  
+  .param-value[data-streaming="true"]::before {
+    top: 0;
+    background: linear-gradient(to bottom, 
+      rgba(255, 255, 255, 0.9) 0%, 
+      rgba(255, 255, 255, 0.7) 50%, 
+      transparent 100%);
+  }
+  
+  .param-value[data-streaming="true"]::after {
+    bottom: 0;
+    background: linear-gradient(to top, 
+      rgba(255, 255, 255, 0.9) 0%, 
+      rgba(255, 255, 255, 0.7) 50%, 
+      transparent 100%);
+  }
+  
+  /* Dark theme fade gradients */
+  .function-block.theme-dark .param-value[data-streaming="true"]::before {
+    background: linear-gradient(to bottom, 
+      rgba(32, 33, 36, 0.9) 0%, 
+      rgba(32, 33, 36, 0.7) 50%, 
+      transparent 100%);
+  }
+  
+  .function-block.theme-dark .param-value[data-streaming="true"]::after {
+    background: linear-gradient(to top, 
+      rgba(32, 33, 36, 0.9) 0%, 
+      rgba(32, 33, 36, 0.7) 50%, 
+      transparent 100%);
   }
   
   /* Enhanced streaming visual feedback */
@@ -553,6 +598,12 @@ export const styles = `
     transform: translate3d(0,0,0);
     width: 100%;
     min-height: inherit;
+    animation: textFlow 0.3s ease-out;
+  }
+  
+  @keyframes textFlow {
+    from { opacity: 0.7; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   
   /* Enhanced scrollbar for streaming content */
@@ -677,6 +728,29 @@ export const styles = `
   
   .stalled-retry-button:hover {
     background-color: rgba(255, 200, 0, 0.3);
+  }
+  
+  /* Virtual scrolling container optimizations */
+  .virtual-viewport {
+    contain: layout style paint;
+    will-change: scroll-position;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .virtual-spacer {
+    contain: layout style;
+    will-change: height, transform;
+  }
+  
+  .param-value[data-streaming="true"] .virtual-viewport {
+    scroll-behavior: auto !important;
+  }
+  
+  .param-value[data-streaming="true"] .virtual-viewport pre {
+    will-change: transform, contents;
+    contain: layout style paint;
   }
   
   /* Enhanced function block states */
