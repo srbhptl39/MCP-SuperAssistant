@@ -48,6 +48,8 @@ MCP SuperAssistant is a Chrome extension that integrates the Model Context Proto
 - [GitHub Copilot](https://github.com/copilot)
 - [Mistral AI](https://chat.mistral.ai/)
 - [Kimi](https://kimi.com/)
+- [Qwen Chat](https://chat.qwen.ai/)
+- [Z Chat](https://chat.z.ai/)
 
 
 ## Demo Video
@@ -116,7 +118,7 @@ To connect the Chrome extension to a local server for proxying connections:
 #### Run MCP SuperAssistant Proxy via npx:
 
    ```bash
-   npx @srbhptl39/mcp-superassistant-proxy@latest --config ./mcpconfig.json
+   npx @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json
    ```
    
    This is useful for:
@@ -130,7 +132,7 @@ To connect the Chrome extension to a local server for proxying connections:
    Windows: %APPDATA%\Claude\claude_desktop_config.json
    ```
 
-   **Example mcpconfig.json:**
+   **Example config.json:**
    ```json
    {
      "mcpServers": {
@@ -188,7 +190,7 @@ This page covers the most common issues users encounter with MCP SuperAssistant 
 ### 2. Tool Execution Fails
 
 - Ensure your proxy server is running and the URL is correct in the sidebar server settings.
-- check your mcpconfig.json file for any errors or formatting issues.
+- check your config.json file for any errors or formatting issues.
 - Check your network connectivity and firewall settings.
 
 ### 3. Connection Issues

@@ -41,7 +41,7 @@ export class ZAdapter extends BaseAdapterPlugin {
       'div.flex.relative.w-full.h-full > div > div.px-3.pb-3 > div.w-full.font-primary > div.transparent > div > div > form > div > div:nth-of-type(1)',
     // Button insertion points (for MCP popover) - looking for search/research toggle area
     BUTTON_INSERTION_CONTAINER:
-      'div.flex.relative.w-full.h-full > div > div.px-3.pb-3 > div.w-full.font-primary > div.transparent > div > div > form > div > div:nth-of-type(2) > div:nth-of-type(1), div.flex.relative.w-full.h-full > div > div.flex.overflow-auto.flex-col.w-full.h-full > div > div:nth-of-type(1) > div.w-full.flex.flex-col.gap-1.justify-center.items-center > div:nth-of-type(3) > div.w-full.font-primary > div.transparent > div > div > form > div > div:nth-of-type(2) > div:nth-of-type(1)',
+      'button[aria-label="More"], button[type="submit"]',
     // Alternative insertion points
     FALLBACK_INSERTION: '#chat-input',
   };
