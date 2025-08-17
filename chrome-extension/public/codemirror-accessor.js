@@ -6,8 +6,15 @@
 (function() {
   'use strict';
   
+  // Prevent multiple script execution in Firefox
+  if (window.CodeMirrorAccessorExecuted) {
+    console.log('[codemirror] Script already executed, skipping duplicate execution');
+    return;
+  }
+  window.CodeMirrorAccessorExecuted = true;
+  console.log('[codemirror] Script execution started');
+  
   const ATTRIBUTE_PREFIX = 'cm-editor-data-attribute';
-  const POLLING_FALLBACK_INTERVAL = 200; // ms - fallback only
   
   // Function call pattern detection
   const FUNCTION_CALL_PATTERNS = [
@@ -23,7 +30,6 @@
   const hiddenEditors = new WeakSet();
   
   let observer = null;
-  let fallbackIntervalId = null;
   
   function detectFunctionCallPattern(content) {
     if (!content || typeof content !== 'string') return false;
@@ -118,7 +124,7 @@
     
     // Check if content actually changed
     if (storedData && storedData.content === content) {
-      return;
+      return; // Skip update without logging for unchanged content
     }
     
     let uniqueId = storedData?.id;
@@ -160,15 +166,31 @@
     const preId = `cm-hidden-pre-${uniqueId}`;
     let preElement = document.getElementById(preId);
     
+    // Additional check for Firefox: also check if any pre with this uniqueId already exists
     if (!preElement) {
-      // Create new hidden pre element
-      preElement = document.createElement('pre');
-      preElement.id = preId;
-      preElement.style.cssText = 'display: none !important; visibility: hidden !important; position: absolute !important; left: -9999px !important;';
-      preElement.setAttribute('data-cm-source', uniqueId);
-      
-      // Insert after the cm-editor element
-      cmEditor.parentNode.insertBefore(preElement, cmEditor.nextSibling);
+      const existingPre = document.querySelector(`pre[data-cm-source="${uniqueId}"]`);
+      if (existingPre) {
+        preElement = existingPre;
+        // Ensure it has the correct ID if missing
+        if (!preElement.id) {
+          preElement.id = preId;
+        }
+      }
+    }
+    
+    if (!preElement) {
+      // Double-check one more time right before creating (Firefox race condition fix)
+      preElement = document.getElementById(preId);
+      if (!preElement) {
+        // Create new hidden pre element
+        preElement = document.createElement('pre');
+        preElement.id = preId;
+        preElement.style.cssText = 'display: none !important; visibility: hidden !important; position: absolute !important; left: -9999px !important;';
+        preElement.setAttribute('data-cm-source', uniqueId);
+        
+        // Insert after the cm-editor element
+        cmEditor.parentNode.insertBefore(preElement, cmEditor.nextSibling);
+      }
     }
     
     // Update content immediately
@@ -186,43 +208,43 @@
       if (cmContent && cmContent.cmView?.view) {
         const view = cmContent.cmView.view;
         
-        // Listen to CodeMirror's update events
-        const updateListener = view.viewState.state.facet ? 
-          view.dom.addEventListener('input', () => updateEditorDataImmediately(cmEditor), true) :
-          null;
-          
-        if (updateListener) {
-          listeners.push({ element: view.dom, event: 'input', listener: updateListener });
-        }
+        // Listen to CodeMirror's update events with debouncing
+        const updateListener = () => {
+          requestAnimationFrame(() => updateEditorDataImmediately(cmEditor));
+        };
+        
+        // High-frequency events that need immediate response
+        ['input', 'keyup', 'paste'].forEach(eventType => {
+          view.dom.addEventListener(eventType, updateListener, { passive: true });
+          listeners.push({ element: view.dom, event: eventType, listener: updateListener });
+        });
       }
     } catch (e) {
-      // Fallback to DOM events
+      // Fallback to DOM events if CodeMirror API unavailable
     }
     
-    // DOM-based event listeners as fallback/supplement
-    const domEvents = ['input', 'keyup', 'paste', 'cut', 'change'];
+    // Optimized DOM-based event listeners
+    const domEvents = ['input', 'keyup', 'paste', 'cut'];
     
     domEvents.forEach(eventType => {
       const listener = () => {
-        // Use requestAnimationFrame for immediate but optimized updates
         requestAnimationFrame(() => updateEditorDataImmediately(cmEditor));
       };
       
-      cmEditor.addEventListener(eventType, listener, true);
+      cmEditor.addEventListener(eventType, listener, { passive: true });
       listeners.push({ element: cmEditor, event: eventType, listener });
     });
     
-    // Monitor for content changes in cm-content specifically
+    // Monitor for content changes in cm-content with less frequency
     const cmContent = cmEditor.querySelector('.cm-content');
     if (cmContent) {
       const contentListener = () => {
         requestAnimationFrame(() => updateEditorDataImmediately(cmEditor));
       };
       
-      ['DOMCharacterDataModified', 'DOMSubtreeModified', 'input'].forEach(eventType => {
-        cmContent.addEventListener(eventType, contentListener, true);
-        listeners.push({ element: cmContent, event: eventType, listener: contentListener });
-      });
+      // Only use input event for content changes
+      cmContent.addEventListener('input', contentListener, { passive: true });
+      listeners.push({ element: cmContent, event: 'input', listener: contentListener });
     }
     
     // Store listeners for cleanup
@@ -234,7 +256,7 @@
     if (!listeners) return;
     
     listeners.forEach(({ element, event, listener }) => {
-      element.removeEventListener(event, listener, true);
+      element.removeEventListener(event, listener);
     });
     
     eventListeners.delete(cmEditor);
@@ -247,6 +269,7 @@
       return;
     }
     
+    console.log(`[codemirror] Monitoring new editor`);
     // New editor found
     monitoredEditors.add(cmEditor);
     
@@ -260,7 +283,9 @@
   function scanForEditors() {
     try {
       const editors = document.querySelectorAll('.cm-editor');
-      editors.forEach(processEditor);
+      if (editors.length > 0) {
+        editors.forEach(processEditor);
+      }
     } catch (error) {
       console.warn('CodeMirror monitor error:', error);
     }
@@ -295,7 +320,7 @@
           }
         }
         
-        // Check for class changes
+        // Check for class changes that might affect cm-editor
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
           const target = mutation.target;
           if (target.classList?.contains('cm-editor')) {
@@ -303,43 +328,50 @@
           }
         }
         
+        // Check for content changes in existing editors
+        if (mutation.type === 'childList' || mutation.type === 'characterData') {
+          const target = mutation.target;
+          const cmEditor = target.closest?.('.cm-editor');
+          if (cmEditor && monitoredEditors.has(cmEditor)) {
+            // Direct content update for existing editor
+            updateEditorDataImmediately(cmEditor);
+          }
+        }
+        
         if (shouldScan) break;
       }
       
       if (shouldScan) {
-        // Immediate scan for new editors
+        // Use requestAnimationFrame for smooth performance
         requestAnimationFrame(scanForEditors);
       }
     });
     
+    // Enhanced observation - watch for more changes
     observer.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class']
+      attributeFilter: ['class'],
+      characterData: true
     });
   }
   
   function startMonitoring() {
+    console.log(`[codemirror] Starting event-based monitoring`);
     // Initial scan
     scanForEditors();
     
     // Setup mutation observer for new editors
     setupMutationObserver();
     
-    // Light fallback polling (much less frequent now)
-    fallbackIntervalId = setInterval(scanForEditors, POLLING_FALLBACK_INTERVAL);
+    // No fallback polling - rely entirely on events
   }
   
   function stopMonitoring() {
     if (observer) {
       observer.disconnect();
       observer = null;
-    }
-    
-    if (fallbackIntervalId) {
-      clearInterval(fallbackIntervalId);
-      fallbackIntervalId = null;
     }
     
     // Clean up all event listeners
