@@ -104,7 +104,7 @@ const injectCodeMirrorAccessor = () => {
               console.debug('CodeMirror accessor is active and accessible');
             }
           } else {
-            console.warn('CodeMirror accessor script injected but not accessible - may be in wrong context');
+            console.debug('CodeMirror accessor script injected but not accessible - may be in wrong context');
             // Try alternative injection method only if not already attempted
             if (!document.getElementById('codemirror-accessor-script-direct')) {
               injectCodeMirrorAccessorAlternative();
@@ -113,14 +113,14 @@ const injectCodeMirrorAccessor = () => {
         }, 100);
       })
       .catch(error => {
-        console.warn('Failed to fetch CodeMirror accessor script:', error);
+        console.debug('Failed to fetch CodeMirror accessor script:', error);
         // Only try alternative if not already present
         if (!document.getElementById('codemirror-accessor-script-direct')) {
           injectCodeMirrorAccessorAlternative();
         }
       });
   } catch (error) {
-    console.warn('Error during CodeMirror script injection:', error);
+    console.debug('Error during CodeMirror script injection:', error);
     // Only try alternative if not already present
     if (!document.getElementById('codemirror-accessor-script-direct')) {
       injectCodeMirrorAccessorAlternative();
@@ -159,7 +159,7 @@ const injectCodeMirrorAccessorAlternative = () => {
           }
           codeMirrorScriptInjected = true;
         } else {
-          console.warn('CodeMirror accessor still not accessible - trying page context injection');
+          console.debug('CodeMirror accessor still not accessible - trying page context injection');
           // Only try page context if not already present
           if (!document.getElementById('codemirror-accessor-page-context')) {
             injectCodeMirrorAccessorPageContext();
@@ -177,7 +177,7 @@ const injectCodeMirrorAccessorAlternative = () => {
     
     (document.head || document.documentElement).appendChild(scriptElement);
   } catch (error) {
-    console.warn('Alternative injection method failed:', error);
+    console.debug('Alternative injection method failed:', error);
     // Only try page context if not already present
     if (!document.getElementById('codemirror-accessor-page-context')) {
       injectCodeMirrorAccessorPageContext();
@@ -251,7 +251,7 @@ updateStalledStreamTimeoutConfig();
 const initializeRenderer = () => {
   // Guard against running in non-browser environments
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    console.warn('Function Call Renderer: Not running in a browser environment.');
+    console.debug('Function Call Renderer: Not running in a browser environment.');
     return;
   }
 

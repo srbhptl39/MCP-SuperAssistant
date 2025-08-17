@@ -815,9 +815,9 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
     // Try primary selector first - GitHub Copilot's toolbar left section
-    const toolbar = document.querySelector('.ChatInput-module__toolbarLeft--cjV2H');
+    const toolbar = document.querySelector('button[data-testid="attachment-menu-button"]');
     if (toolbar) {
-      this.context.logger.debug('Found insertion point: .ChatInput-module__toolbarLeft--cjV2H');
+      this.context.logger.debug('Found insertion point: div#copilot-chat-textarea-preview');
       const attachButton = toolbar.querySelector('button[data-testid="attachment-menu-button"]');
       return { container: toolbar, insertAfter: attachButton };
     }
