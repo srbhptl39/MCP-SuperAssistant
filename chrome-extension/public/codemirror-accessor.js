@@ -8,11 +8,11 @@
   
   // Prevent multiple script execution in Firefox
   if (window.CodeMirrorAccessorExecuted) {
-    console.log('[codemirror] Script already executed, skipping duplicate execution');
+    console.debug('[codemirror] Script already executed, skipping duplicate execution');
     return;
   }
   window.CodeMirrorAccessorExecuted = true;
-  console.log('[codemirror] Script execution started');
+  console.debug('[codemirror] Script execution started');
   
   const ATTRIBUTE_PREFIX = 'cm-editor-data-attribute';
   
@@ -269,7 +269,7 @@
       return;
     }
     
-    console.log(`[codemirror] Monitoring new editor`);
+    console.debug(`[codemirror] Monitoring new editor`);
     // New editor found
     monitoredEditors.add(cmEditor);
     
@@ -358,7 +358,7 @@
   }
   
   function startMonitoring() {
-    console.log(`[codemirror] Starting event-based monitoring`);
+    console.debug(`[codemirror] Starting event-based monitoring`);
     // Initial scan
     scanForEditors();
     
