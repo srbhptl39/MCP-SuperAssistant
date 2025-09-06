@@ -151,8 +151,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/storage
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.1
-        version: 1.13.1
+        specifier: ^1.17.5
+        version: 1.17.5
       vite-plugin-node-polyfills:
         specifier: ^0.23.0
         version: 0.23.0(rollup@4.37.0)(vite@6.1.0(@types/node@22.13.14)(jiti@1.21.7)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
@@ -1182,8 +1182,8 @@ packages:
     peerDependencies:
       vite: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
-  '@modelcontextprotocol/sdk@1.13.1':
-    resolution: {integrity: sha512-8q6+9aF0yA39/qWT/uaIj6zTpC+Qu07DnN/lb9mjoquCJsAh6l3HyYqc9O3t2j7GilseOQOQimLg7W3By6jqvg==}
+  '@modelcontextprotocol/sdk@1.17.5':
+    resolution: {integrity: sha512-QakrKIGniGuRVfWBdMsDea/dx1PNE739QJ7gCM41s9q+qaCYTHCdsIBXQVVXry3mfWAiaM9kT22Hyz53Uw8mfg==}
     engines: {node: '>=18'}
 
   '@napi-rs/wasm-runtime@0.2.9':
@@ -5283,13 +5283,14 @@ snapshots:
       semver: 7.7.1
       vite: 6.1.0(@types/node@22.13.14)(jiti@1.21.7)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
-  '@modelcontextprotocol/sdk@1.13.1':
+  '@modelcontextprotocol/sdk@1.17.5':
     dependencies:
       ajv: 6.12.6
       content-type: 1.0.5
       cors: 2.8.5
       cross-spawn: 7.0.6
       eventsource: 3.0.6
+      eventsource-parser: 3.0.1
       express: 5.0.1
       express-rate-limit: 7.5.0(express@5.0.1)
       pkce-challenge: 5.0.0

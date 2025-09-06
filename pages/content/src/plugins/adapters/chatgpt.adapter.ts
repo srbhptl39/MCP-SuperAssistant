@@ -37,8 +37,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     DROP_ZONE: '#prompt-textarea, .ProseMirror, [data-testid="composer-text-input"], .composer-parent',
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, [data-testid="file-attachment"]',
-    // Button insertion points (for MCP popover)
-    BUTTON_INSERTION_CONTAINER: '[data-testid="composer-footer-actions"], .composer-footer-actions, .flex.items-center[data-testid*="composer"]',
+    // Button insertion points (for MCP popover) - targeting leading area next to plus button
+    BUTTON_INSERTION_CONTAINER: '[grid-area="leading"], .composer-leading-actions, [data-testid="composer-plus-btn"]',
     // Alternative insertion points
     FALLBACK_INSERTION: '.composer-parent, .relative.flex.w-full.items-end, [data-testid="composer-trailing-actions"]'
   };
@@ -225,6 +225,16 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       const paragraph = document.createElement('p');
       paragraph.textContent = newContent;
       targetElement.appendChild(paragraph);
+
+      // Position cursor at the end of the inserted text
+      const range = document.createRange();
+      const selection = window.getSelection();
+      if (selection && paragraph.firstChild) {
+        range.setStartAfter(paragraph.lastChild || paragraph);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
 
       // Dispatch events to simulate user typing for better compatibility
       targetElement.dispatchEvent(new Event('input', { bubbles: true }));
@@ -621,8 +631,15 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
       /* Integration with ChatGPT's composer layout */
       [data-testid="composer-footer-actions"] .mcp-chatgpt-button-base,
-      .composer-footer-actions .mcp-chatgpt-button-base {
+      .composer-footer-actions .mcp-chatgpt-button-base,
+      [grid-area="leading"] .mcp-chatgpt-button-base {
         margin: 0 4px;
+      }
+
+      /* Specific styling for leading area placement next to plus button */
+      [grid-area="leading"] .mcp-chatgpt-button-base {
+        margin-left: 8px;
+        margin-right: 4px;
       }
 
       /* Ensure proper stacking with ChatGPT's UI elements */
@@ -945,19 +962,30 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   }
 
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
-    this.context.logger.debug('Finding button insertion point for MCP popover');
+    this.context.logger.debug('Finding button insertion point for MCP popover next to plus button');
 
-    // Try primary selector first - ChatGPT's composer footer actions
-    const footerActions = document.querySelector('[data-testid="composer-footer-actions"]');
-    if (footerActions) {
-      this.context.logger.debug('Found insertion point: [data-testid="composer-footer-actions"]');
-      const buttons = footerActions.querySelectorAll('button');
-      const lastButton = buttons.length > 0 ? buttons[buttons.length - 1] : null;
-      return { container: footerActions, insertAfter: lastButton };
+    // Try to find the plus button first
+    const plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
+    if (plusButton && plusButton.parentElement) {
+      this.context.logger.debug('Found plus button, inserting MCP button after it');
+      return { container: plusButton.parentElement, insertAfter: plusButton };
     }
 
-    // Try fallback selectors
+    // Try to find the leading area container
+    const leadingArea = document.querySelector('[grid-area="leading"]');
+    if (leadingArea) {
+      this.context.logger.debug('Found leading area, looking for plus button within it');
+      const plusButtonInLeading = leadingArea.querySelector('button');
+      if (plusButtonInLeading) {
+        return { container: leadingArea, insertAfter: plusButtonInLeading };
+      }
+      // If no button found in leading area, append to the end
+      return { container: leadingArea, insertAfter: null };
+    }
+
+    // Fallback to original trailing area selectors if leading area not found
     const fallbackSelectors = [
+      '[data-testid="composer-footer-actions"]',
       '.composer-footer-actions',
       '.flex.items-center[data-testid*="composer"]',
       '.relative.flex.w-full.items-end',
@@ -992,10 +1020,16 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       const reactContainer = document.createElement('div');
       reactContainer.id = 'mcp-popover-container';
       reactContainer.style.display = 'inline-block';
-      reactContainer.style.margin = '0 4px';
+      
+      // Adjust margin based on container type
+      const { container, insertAfter } = insertionPoint;
+      if (container.matches('[grid-area="leading"]') || container.closest('[grid-area="leading"]')) {
+        reactContainer.style.margin = '0 0 0 8px'; // More space from plus button
+      } else {
+        reactContainer.style.margin = '0 4px'; // Default spacing
+      }
 
       // Insert at appropriate location
-      const { container, insertAfter } = insertionPoint;
       if (insertAfter && insertAfter.parentNode === container) {
         container.insertBefore(reactContainer, insertAfter.nextSibling);
         this.context.logger.debug('Inserted popover container after specified element');

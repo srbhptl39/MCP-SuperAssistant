@@ -24,7 +24,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private readonly selectors = {
     // Primary chat input selector - updated for new structure
     CHAT_INPUT:
-      'textarea[placeholder="Start a message..."], textarea[placeholder="Start a message..."].w-full, div[contenteditable="true"]',
+      'textarea[placeholder="Start a new message..."], textarea[placeholder="Start a new message..."].w-full, div[contenteditable="true"]',
     // Submit button selectors - updated for new structure
     SUBMIT_BUTTON:
       'button[data-state="closed"] svg[stroke="currentColor"] path[d*="M4.5 10.5"], button[aria-label="Send message"], button[data-testid="send-button"], button[aria-label="Send prompt"]',
