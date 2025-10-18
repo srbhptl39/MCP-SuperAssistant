@@ -1379,9 +1379,17 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
 
   // Process parameters
   Object.entries(partialParameters).forEach(([paramName, extractedValue]) => {
-    const isParamStreaming =
-      !rawContent.includes(`</parameter>`) ||
-      rawContent.indexOf('</parameter>', rawContent.indexOf(`<parameter name="${paramName}"`)) === -1;
+    let isParamStreaming: boolean;
+
+    if (isJSONFormat) {
+      // For JSON: parameter is streaming if function_call_end hasn't arrived
+      isParamStreaming = !functionInfo.isComplete;
+    } else {
+      // For XML: check if parameter closing tag exists
+      isParamStreaming =
+        !rawContent.includes(`</parameter>`) ||
+        rawContent.indexOf('</parameter>', rawContent.indexOf(`<parameter name="${paramName}"`)) === -1;
+    }
 
     const paramId = `${blockId}-${paramName}`;
     PerformanceUtils.batchStreamingUpdate(paramId, () => {

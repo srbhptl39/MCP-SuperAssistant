@@ -245,6 +245,14 @@ export const extractJSONFunctionInfo = (content: string): {
  */
 export const extractJSONParameters = (content: string): Record<string, any> => {
   const parameters: Record<string, any> = {};
+
+  if (!content || typeof content !== 'string') {
+    if (CONFIG.debug) {
+      console.debug('[JSON Parser] extractJSONParameters: Invalid content');
+    }
+    return parameters;
+  }
+
   const lines = content.split('\n');
 
   for (const line of lines) {
@@ -252,8 +260,12 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
     if (!parsed) continue;
 
     if (parsed.type === 'parameter' && parsed.key) {
-      parameters[parsed.key] = parsed.value;
+      parameters[parsed.key] = parsed.value ?? '';  // Ensure value is never undefined
     }
+  }
+
+  if (CONFIG.debug && Object.keys(parameters).length > 0) {
+    console.debug('[JSON Parser] extractJSONParameters result:', Object.keys(parameters));
   }
 
   return parameters;

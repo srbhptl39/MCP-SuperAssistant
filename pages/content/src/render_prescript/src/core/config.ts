@@ -81,8 +81,10 @@ export const WEBSITE_CONFIGS: Array<{
   {
     urlPattern: 'gemini',
     config: {
-      targetSelectors: ['code-block'],
-      streamingContainerSelectors: ['.code-block'],
+      // targetSelectors: ['code-block'],
+      // streamingContainerSelectors: ['.code-block'],
+      targetSelectors: ['pre'],
+      streamingContainerSelectors: ['pre'],
       function_result_selector: ['div.query-content'],
     },
   },

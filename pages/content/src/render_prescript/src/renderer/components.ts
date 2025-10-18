@@ -4,6 +4,7 @@ import { CONFIG } from '../core/config';
 import { safelySetContent } from '../utils/index';
 import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/storage';
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
+import { extractJSONParameters } from '../parser/jsonFunctionParser';
 
 // Add type declarations for the global adapter and mcpClient access
 declare global {
@@ -577,18 +578,60 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
     return;
   }
 
-  // Parse the raw XML to extract function name and parameters
+  // Detect format and extract function name and parameters
+  const isJSON = rawContent.includes('"type"') && rawContent.includes('function_call');
   const functionName = extractFunctionName(rawContent);
-  const parameters = extractFunctionParameters(rawContent);
+
+  let parameters: Record<string, any>;
+  let callId: string;
+
+  if (isJSON) {
+    // Extract JSON parameters
+    parameters = extractJSONParameters(rawContent);
+
+    if (CONFIG.debug) {
+      console.debug('[Execute Button] Extracted JSON parameters:', parameters);
+    }
+
+    // Extract call_id from JSON
+    const lines = rawContent.split('\n');
+    let extractedCallId: string | null = null;
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line.trim());
+        if (parsed.type === 'function_call_start' && parsed.call_id) {
+          extractedCallId = parsed.call_id.toString();
+          break;
+        }
+      } catch (e) {
+        // Skip invalid lines
+      }
+    }
+    callId = extractedCallId || `call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  } else {
+    // XML format
+    parameters = extractFunctionParameters(rawContent);
+
+    if (CONFIG.debug) {
+      console.debug('[Execute Button] Extracted XML parameters:', parameters);
+    }
+
+    // Extract call_id from XML using pre-compiled regex
+    const callIdMatch = INVOKE_REGEX.exec(rawContent);
+    callId = callIdMatch?.[2] || `call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
 
   // If we couldn't extract a function name, don't add the button
   if (!functionName) {
+    if (CONFIG.debug) {
+      console.debug('[Execute Button] No function name found, skipping button');
+    }
     return;
   }
 
-  // Extract call_id from the raw content if available using pre-compiled regex
-  const callIdMatch = INVOKE_REGEX.exec(rawContent);
-  const callId = callIdMatch?.[2] || `call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  if (CONFIG.debug) {
+    console.debug('[Execute Button] Creating button for:', functionName, 'with params:', Object.keys(parameters));
+  }
 
   // Generate content signature for this function call
   const contentSignature = generateContentSignature(functionName, parameters);
