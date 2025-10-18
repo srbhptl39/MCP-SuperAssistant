@@ -118,16 +118,41 @@ const CHUNK_PATTERNS = {
   // Pre-compiled for faster detection
   functionChunkStart: /(<function_calls>|<invoke\s+name="[^"]*"|<parameter\s+name="[^"]*">)/,
   significantChunk: /(<function_calls>|<invoke|<parameter|<\/)/,
+  // JSON patterns
+  jsonFunctionStart: /"type"\s*:\s*"function_call_start"/,
+  jsonParameter: /"type"\s*:\s*"parameter"/,
+  jsonDescription: /"type"\s*:\s*"description"/,
+  jsonFunctionEnd: /"type"\s*:\s*"function_call_end"/,
+  jsonSignificant: /"type"\s*:\s*"(?:function_call_start|parameter|description|function_call_end)"/,
 };
 
 // Track parameter content during streaming to prevent loss
 const parameterContentCache = new Map<string, Map<string, string>>(); // blockId -> paramName -> content
 
 /**
- * Store parameter content to prevent loss during streaming
+ * Store parameter content to prevent loss during streaming (supports both XML and JSON)
  */
 const cacheParameterContent = (blockId: string, content: string): void => {
-  const params = extractParameters(content);
+  // Detect format
+  const isJSON = content.includes('"type"') &&
+                 (content.includes('function_call_start') || content.includes('parameter'));
+
+  let params;
+  if (isJSON) {
+    // Extract JSON parameters
+    const { extractJSONParameters } = require('../parser/jsonFunctionParser');
+    const jsonParams = extractJSONParameters(content);
+
+    // Convert to array format
+    params = Object.entries(jsonParams).map(([name, value]) => ({
+      name,
+      value: typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value),
+    }));
+  } else {
+    // Extract XML parameters
+    params = extractParameters(content);
+  }
+
   if (params.length > 0) {
     const blockCache = parameterContentCache.get(blockId) || new Map();
 
@@ -142,7 +167,7 @@ const cacheParameterContent = (blockId: string, content: string): void => {
     parameterContentCache.set(blockId, blockCache);
 
     if (CONFIG.debug) {
-      console.debug(`Cached parameter content for ${blockId}:`, Array.from(blockCache.entries()));
+      console.debug(`Cached ${isJSON ? 'JSON' : 'XML'} parameter content for ${blockId}:`, Array.from(blockCache.entries()));
     }
   }
 };
@@ -172,7 +197,24 @@ const detectFunctionChunk = (
     return { hasNewChunk: false, chunkType: null, isSignificant: false };
   }
 
-  // Fast pattern matching on just the new chunk
+  // Check for JSON patterns first
+  if (CHUNK_PATTERNS.jsonFunctionStart.test(newContent)) {
+    return { hasNewChunk: true, chunkType: 'function_start', isSignificant: true };
+  }
+
+  if (CHUNK_PATTERNS.jsonParameter.test(newContent)) {
+    return { hasNewChunk: true, chunkType: 'parameter', isSignificant: true };
+  }
+
+  if (CHUNK_PATTERNS.jsonDescription.test(newContent)) {
+    return { hasNewChunk: true, chunkType: 'content', isSignificant: true };
+  }
+
+  if (CHUNK_PATTERNS.jsonFunctionEnd.test(newContent)) {
+    return { hasNewChunk: true, chunkType: 'closing', isSignificant: true };
+  }
+
+  // Check for XML patterns
   if (CHUNK_PATTERNS.functionStart.test(newContent)) {
     return { hasNewChunk: true, chunkType: 'function_start', isSignificant: true };
   }
@@ -189,8 +231,10 @@ const detectFunctionChunk = (
     return { hasNewChunk: true, chunkType: 'closing', isSignificant: true };
   }
 
-  // Check if it's any significant content
-  if (CHUNK_PATTERNS.significantChunk.test(newContent) || newContent.length > 20) {
+  // Check if it's any significant content (XML or JSON)
+  if (CHUNK_PATTERNS.significantChunk.test(newContent) ||
+      CHUNK_PATTERNS.jsonSignificant.test(newContent) ||
+      newContent.length > 20) {
     return { hasNewChunk: true, chunkType: 'content', isSignificant: newContent.length > 20 };
   }
 
@@ -275,7 +319,26 @@ const analyzeFunctionContent = (
     }
   }
 
-  // Reset regex states for accurate matching
+  // Check for JSON format first
+  const hasJSONStart = CHUNK_PATTERNS.jsonFunctionStart.test(content);
+  const hasJSONEnd = CHUNK_PATTERNS.jsonFunctionEnd.test(content);
+  const hasJSONParam = CHUNK_PATTERNS.jsonParameter.test(content);
+
+  if (hasJSONStart || hasJSONParam) {
+    const result = {
+      hasFunction: true,
+      isComplete: hasJSONStart && hasJSONEnd,
+      functionCallPattern: true,
+    };
+
+    if (useCache) {
+      contentAnalysisCache.set(content, { ...result, timestamp: Date.now() });
+    }
+
+    return result;
+  }
+
+  // Reset regex states for accurate matching (XML)
   PATTERN_CACHE.functionCallsStart.lastIndex = 0;
   PATTERN_CACHE.functionCallsEnd.lastIndex = 0;
   PATTERN_CACHE.invokeStart.lastIndex = 0;

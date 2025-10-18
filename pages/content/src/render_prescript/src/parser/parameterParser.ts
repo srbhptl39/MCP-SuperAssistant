@@ -1,9 +1,68 @@
 import { CONFIG } from '../core/config';
 import type { Parameter, PartialParameterState } from '../core/types';
+import { extractJSONParameters } from './jsonFunctionParser';
 
 // State storage for streaming parameters
 export const partialParameterState = new Map<string, PartialParameterState>();
 export const streamingContentLengths = new Map<string, number>();
+
+/**
+ * Detect if content is JSON format
+ */
+const isJSONFormat = (content: string): boolean => {
+  const trimmed = content.trim();
+  return trimmed.includes('"type"') &&
+         (trimmed.includes('function_call_start') || trimmed.includes('parameter'));
+};
+
+/**
+ * Extract parameters from JSON format with state tracking for real-time streaming
+ */
+const extractParametersFromJSON = (content: string, blockId: string | null = null): Parameter[] => {
+  const parameters: Parameter[] = [];
+  const jsonParams = extractJSONParameters(content);
+
+  // Get previous state for tracking changes
+  const partialParams: PartialParameterState = blockId ? partialParameterState.get(blockId) || {} : {};
+  const newPartialState: PartialParameterState = {};
+
+  // Check if streaming (no function_call_end)
+  const isStreaming = !content.includes('"type":"function_call_end"') &&
+                      !content.includes('"type": "function_call_end"');
+
+  Object.entries(jsonParams).forEach(([name, value]) => {
+    const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+
+    // Track content length for large content handling
+    if (blockId && displayValue.length > CONFIG.largeContentThreshold) {
+      streamingContentLengths.set(`${blockId}-${name}`, displayValue.length);
+    }
+
+    // Determine if this is a new or changed parameter
+    const isNew = !partialParams[name] || partialParams[name] !== displayValue;
+
+    // Store current state for next iteration
+    newPartialState[name] = displayValue;
+
+    parameters.push({
+      name,
+      value: displayValue,
+      isComplete: !isStreaming,
+      isStreaming,
+      isNew,
+      originalContent: displayValue,
+      contentLength: displayValue.length,
+      isLargeContent: displayValue.length > CONFIG.largeContentThreshold,
+    });
+  });
+
+  // Update state for next iteration
+  if (blockId) {
+    partialParameterState.set(blockId, newPartialState);
+  }
+
+  return parameters;
+};
 
 /**
  * Extract parameters from function call content
@@ -13,6 +72,12 @@ export const streamingContentLengths = new Map<string, number>();
  * @returns Array of extracted parameters
  */
 export const extractParameters = (content: string, blockId: string | null = null): Parameter[] => {
+  // Check if JSON format
+  if (isJSONFormat(content)) {
+    return extractParametersFromJSON(content, blockId);
+  }
+
+  // XML format extraction
   const parameters: Parameter[] = [];
   // Improved regex to handle more edge cases in opening tag - allow for attributes in any order
   const regex = /<parameter\s+(?:name="([^"]+)"[^>]*|[^>]*name="([^"]+)")(?:>|$)/g;

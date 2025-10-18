@@ -59,6 +59,7 @@ export interface FunctionInfo {
   partialTagDetected: boolean;
   invokeName?: string;
   textContent?: string;
+  description?: string;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { FunctionInfo } from '../core/types';
 import { extractLanguageTag } from './languageParser';
+import { containsJSONFunctionCalls, extractJSONFunctionInfo } from './jsonFunctionParser';
 
 /**
  * Analyzes content to determine if it contains function calls
@@ -21,7 +22,18 @@ export const containsFunctionCalls = (block: HTMLElement): FunctionInfo => {
     partialTagDetected: false,
   };
 
-  // Check for any signs of function call content
+  // First, check for JSON function calls
+  const jsonResult = containsJSONFunctionCalls(block);
+  if (jsonResult.hasFunctionCalls) {
+    // Extract description for JSON format
+    const { description } = extractJSONFunctionInfo(content);
+    return {
+      ...jsonResult,
+      description,
+    };
+  }
+
+  // Check for XML function call content
   if (
     !content.includes('<') &&
     !content.includes('<function_calls>') &&
@@ -41,7 +53,7 @@ export const containsFunctionCalls = (block: HTMLElement): FunctionInfo => {
   // The content to analyze (with or without language tag)
   const contentToExamine = langTagResult.content || content;
 
-  // Check for Claude Opus style function calls
+  // Check for Claude Opus style function calls (XML)
   if (contentToExamine.includes('<function_calls>') || contentToExamine.includes('<invoke')) {
     result.hasFunctionCalls = true;
     result.detectedBlockType = 'antml';

@@ -11,6 +11,7 @@ import {
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
 import type { ParamValueElement } from '../core/types';
+import { extractJSONFunctionInfo, extractJSONParameters } from '../parser/jsonFunctionParser';
 
 // Define custom property for tracking scroll state
 declare global {
@@ -1210,7 +1211,26 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
 
   const rawContent = block.textContent?.trim() || '';
   const { tag, content } = extractLanguageTag(rawContent);
-  const { functionName, callId, parameters: partialParameters } = CacheUtils.parseContentEfficiently(block, rawContent);
+
+  // Determine if JSON or XML format
+  const isJSONFormat = functionInfo.detectedBlockType === 'json';
+  let functionName: string;
+  let callId: string;
+  let partialParameters: Record<string, string>;
+  let description: string | null = null;
+
+  if (isJSONFormat) {
+    const jsonInfo = extractJSONFunctionInfo(rawContent);
+    functionName = jsonInfo.functionName || 'function';
+    callId = jsonInfo.callId || `block-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    description = jsonInfo.description;
+    partialParameters = extractJSONParameters(rawContent);
+  } else {
+    const parsed = CacheUtils.parseContentEfficiently(block, rawContent);
+    functionName = parsed.functionName;
+    callId = parsed.callId;
+    partialParameters = parsed.parameters;
+  }
 
   const blockDiv = existingDiv || DOMUtils.createElement<HTMLDivElement>('div');
 
@@ -1316,6 +1336,23 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     BlockElementUtils.setupExpandCollapse(blockDiv, expandButton, expandableContent);
   }
 
+  // Add description section if present (JSON format)
+  if (description && !blockDiv.querySelector('.function-description')) {
+    const descriptionElement = DOMUtils.createElement<HTMLDivElement>('div', 'function-description');
+    descriptionElement.textContent = description;
+    DOMUtils.applyStyles(descriptionElement, {
+      fontSize: '13px',
+      color: 'rgba(0, 0, 0, 0.6)',
+      marginTop: '4px',
+      fontStyle: 'italic',
+    });
+
+    // Insert description after function name, before expandable content
+    if (functionNameElement && expandableContent) {
+      blockDiv.insertBefore(descriptionElement, expandableContent);
+    }
+  }
+
   // Create parameter container
   let paramsContainer = cachedElements.paramsContainer;
   if (!paramsContainer) {
@@ -1342,8 +1379,12 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   // Handle completion and auto-execution
   let completeParameters: Record<string, any> | null = null;
   if (functionInfo.isComplete) {
-    completeParameters = extractFunctionParameters(rawContent);
-    
+    if (isJSONFormat) {
+      completeParameters = extractJSONParameters(rawContent);
+    } else {
+      completeParameters = extractFunctionParameters(rawContent);
+    }
+
     // Auto-collapse if the block was auto-expanded and is now complete
     if (blockDiv.classList.contains('auto-expanded')) {
       AutoExpandUtils.scheduleAutoCollapse(blockDiv, 1500);
@@ -1385,7 +1426,11 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
 
     if (!blockDiv.querySelector('.execute-button')) {
       if (!completeParameters) {
-        completeParameters = extractFunctionParameters(rawContent);
+        if (isJSONFormat) {
+          completeParameters = extractJSONParameters(rawContent);
+        } else {
+          completeParameters = extractFunctionParameters(rawContent);
+        }
       }
       addExecuteButton(buttonContainer!, rawContent);
 
