@@ -675,9 +675,9 @@ export class GrokAdapter extends BaseAdapterPlugin {
         margin-left: 4px;
       }
 
-      /* Ensure proper stacking context */
+      /* Ensure proper stacking context - higher than Grok's z-20 elements */
       .mcp-grok-button-base {
-        z-index: 1;
+        z-index: 25;
       }
 
       /* Match Grok's button focus ring exactly */

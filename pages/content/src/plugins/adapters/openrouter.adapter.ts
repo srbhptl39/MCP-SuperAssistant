@@ -35,10 +35,10 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Main panel and container selectors - updated for new structure
     MAIN_PANEL:
       '.rounded-xl.overflow-hidden.p-2.border.border-slate-4, .chat-container, .main-content, .conversation-container',
-    // Drop zones for file attachment - updated for new structure
-    DROP_ZONE: 'textarea[placeholder="Start a message..."], .rounded-lg.w-full, .chat-input-area, .input-container',
-    // File preview elements
-    FILE_PREVIEW: '.file-preview, .attachment-preview, .file-attachment',
+    // Drop zones for file attachment - updated for new structure with proper escaping
+    DROP_ZONE: '.rounded-xl.overflow-hidden.p-2.border.border-slate-4, .rounded-lg.w-full.focus-within\\:bg-accent, textarea[placeholder="Start a new message..."], .chat-input-area, .input-container',
+    // File preview elements - updated for OpenRouter structure
+    FILE_PREVIEW: '.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2, .bg-background.relative.h-32.w-48, .group.relative.flex.shrink-0, .file-preview, .attachment-preview, .file-attachment',
     // Button insertion points (for MCP popover) - updated for new button container
     BUTTON_INSERTION_CONTAINER:
       '.relative.flex.w-full.min-w-0.items-center.gap-1, .flex.gap-1, .input-actions, .chat-input-actions',
@@ -443,80 +443,11 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         return false;
       }
 
-      // // Method 1: Try clicking the attachment button first
-      // const attachmentButton = this.findAttachmentButton();
-      // if (attachmentButton) {
-      //   this.context.logger.debug('Found attachment button, attempting click method');
-
-      //   // Click the attachment button to potentially open file dialog
-      //   attachmentButton.click();
-
-      //   // Wait a bit for any file input to appear
-      //   await new Promise(resolve => setTimeout(resolve, 100));
-
-      //   // Look for file input that might have been created
-      //   const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      //   if (fileInput) {
-      //     this.context.logger.debug('Found file input, setting files');
-
-      //     // Create a new FileList with our file
-      //     const dataTransfer = new DataTransfer();
-      //     dataTransfer.items.add(file);
-      //     fileInput.files = dataTransfer.files;
-
-      //     // Trigger change event
-      //     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-      //     // Check for success
-      //     const previewFound = await this.checkFilePreview();
-      //     if (previewFound) {
-      //       this.emitExecutionCompleted('attachFile', {
-      //         fileName: file.name,
-      //         fileType: file.type,
-      //         fileSize: file.size,
-      //         method: 'file-input-click'
-      //       }, {
-      //         success: true,
-      //         previewFound: true,
-      //         method: 'file-input-click'
-      //       });
-
-      //       this.context.logger.debug(`File attached successfully via file input: ${file.name}`);
-      //       return true;
-      //     }
-      //   }
-      // }
-
-      // Method 2: Try drag and drop on the main chat container
-      // const dropTargets = [
-      //   // Try the main chat container first
-      //   document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
-      //   // Try the input area
-      //   document.querySelector('.rounded-lg.w-full'),
-      //   // Try the textarea itself
-      //   document.querySelector(this.selectors.CHAT_INPUT.split(', ')[0]),
-      //   // Try the scroll area
-      //   document.querySelector('[data-radix-scroll-area-viewport]'),
-      //   // Fallback to the flex container
-      //   document.querySelector('.flex.gap-1')
-      // ];
-
-      // for (const dropTarget of dropTargets) {
-      //   if (dropTarget) {
-      //     this.context.logger.debug(`Attempting drag-drop on: ${dropTarget.className || dropTarget.tagName}`);
-
-      //     const success = await this.tryDragDropAttachment(file, dropTarget as HTMLElement);
-      //     if (success) {
-      //       return true;
-      //     }
-      //   }
-      // }
-
-      // Method 3: Try creating a hidden file input and programmatically triggering it
-      // const success = await this.tryHiddenFileInput(file);
-      // if (success) {
-      //   return true;
-      // }
+      // Method 1: Try copy-paste simulation (the approach that works)
+      const copyPasteSuccess = await this.tryCopyPasteAttachment(file);
+      if (copyPasteSuccess) {
+        return true;
+      }
 
       this.emitExecutionFailed('attachFile', 'All attachment methods failed');
       return false;
@@ -571,137 +502,431 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   /**
-   * Try drag and drop file attachment on a target element
+   * Try copy-paste file attachment simulation (the method that actually works)
    */
-  private async tryDragDropAttachment(file: File, targetElement: HTMLElement): Promise<boolean> {
+  private async tryCopyPasteAttachment(file: File): Promise<boolean> {
     try {
-      this.context.logger.debug(
-        `Attempting drag-drop attachment on: ${targetElement.tagName}.${targetElement.className}`,
-      );
+      this.context.logger.debug(`Attempting copy-paste attachment for file: ${file.name}`);
 
-      // Create DataTransfer object and add file
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-
-      // Create sequence of drag events
-      const dragEnterEvent = new DragEvent('dragenter', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer,
-      });
-
-      const dragOverEvent = new DragEvent('dragover', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer,
-      });
-
-      const dropEvent = new DragEvent('drop', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer,
-      });
-
-      // Add event listeners to prevent default behavior
-      const preventDefault = (e: Event) => e.preventDefault();
-      targetElement.addEventListener('dragenter', preventDefault, { once: true });
-      targetElement.addEventListener('dragover', preventDefault, { once: true });
-
-      // Dispatch events in sequence
-      targetElement.dispatchEvent(dragEnterEvent);
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      targetElement.dispatchEvent(dragOverEvent);
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      targetElement.dispatchEvent(dropEvent);
-
-      // Wait and check for file preview
-      const previewFound = await this.checkFilePreview();
-
-      if (previewFound) {
-        this.emitExecutionCompleted(
-          'attachFile',
-          {
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            targetElement: targetElement.tagName,
-          },
-          {
-            success: true,
-            previewFound: true,
-            method: 'drag-drop-simulation',
-          },
-        );
-
-        this.context.logger.debug(`File attached successfully via drag-drop: ${file.name}`);
-        return true;
+      // Find the chat input textarea
+      const chatInput = document.querySelector('textarea[placeholder="Start a new message..."]') as HTMLTextAreaElement;
+      if (!chatInput) {
+        this.context.logger.debug('Chat input textarea not found');
+        return false;
       }
 
+      // Focus the chat input first
+      chatInput.focus();
+      chatInput.click();
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Method 1: Direct paste event with file in clipboard data
+      this.context.logger.debug('Method 1: Direct paste event simulation');
+      const success1 = await this.tryDirectPasteEvent(file, chatInput);
+      if (success1) return true;
+
+      // Method 2: Keyboard shortcut simulation
+      this.context.logger.debug('Method 2: Keyboard shortcut simulation');
+      const success2 = await this.tryKeyboardPasteSimulation(file, chatInput);
+      if (success2) return true;
+
+      // Method 3: Clipboard API approach
+      this.context.logger.debug('Method 3: Clipboard API approach');
+      const success3 = await this.tryClipboardAPIApproach(file, chatInput);
+      if (success3) return true;
+
+      // Method 4: Firefox-specific input event simulation
+      this.context.logger.debug('Method 4: Firefox-specific input event simulation');
+      const success4 = await this.tryFirefoxInputSimulation(file, chatInput);
+      if (success4) return true;
+
+      this.context.logger.debug('All copy-paste methods failed');
       return false;
+
     } catch (error) {
-      this.context.logger.error('Error in drag-drop attachment:', error);
+      this.context.logger.error('Error in copy-paste attachment:', error);
       return false;
     }
   }
 
   /**
-   * Try creating a hidden file input and programmatically triggering it
+   * Try direct paste event with file data (enhanced for Firefox compatibility)
    */
-  private async tryHiddenFileInput(file: File): Promise<boolean> {
+  private async tryDirectPasteEvent(file: File, chatInput: HTMLTextAreaElement): Promise<boolean> {
     try {
-      this.context.logger.debug('Attempting hidden file input method');
+      // Create clipboard data with the file
+      const clipboardData = new DataTransfer();
+      clipboardData.items.add(file);
 
-      // Create a hidden file input
-      const hiddenInput = document.createElement('input');
-      hiddenInput.type = 'file';
-      hiddenInput.style.display = 'none';
-      hiddenInput.accept = '*/*';
+      // Create paste event with enhanced properties for Firefox
+      const pasteEvent = new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: clipboardData,
+        composed: true,
+      });
 
-      // Add to DOM temporarily
-      document.body.appendChild(hiddenInput);
+      // Firefox-specific: Add additional properties to the event
+      Object.defineProperty(pasteEvent, 'clipboardData', {
+        value: clipboardData,
+        writable: false,
+        configurable: true,
+      });
 
-      // Create FileList with our file
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      hiddenInput.files = dataTransfer.files;
+      // Dispatch paste event on multiple targets for better compatibility
+      const targets = [
+        chatInput,
+        chatInput.parentElement,
+        chatInput.closest('.rounded-lg.w-full'),
+        chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
+        document.activeElement,
+      ].filter(Boolean);
 
-      // Try to trigger change event and look for any reaction
-      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-      // Also try input event
-      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-      // Wait a moment and check for file preview
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const previewFound = await this.checkFilePreview();
-
-      // Clean up
-      document.body.removeChild(hiddenInput);
-
-      if (previewFound) {
-        this.emitExecutionCompleted(
-          'attachFile',
-          {
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-          },
-          {
-            success: true,
-            previewFound: true,
-            method: 'hidden-file-input',
-          },
-        );
-
-        this.context.logger.debug(`File attached successfully via hidden input: ${file.name}`);
-        return true;
+      for (const target of targets) {
+        if (target) {
+          this.context.logger.debug(`Dispatching paste event on: ${target.tagName}.${target.className || 'no-class'}`);
+          target.dispatchEvent(pasteEvent);
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Check immediately after each dispatch
+          const previewFound = await this.checkFilePreview();
+          if (previewFound) {
+            this.context.logger.debug('Direct paste event succeeded');
+            this.emitExecutionCompleted('attachFile', {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+            }, {
+              success: true,
+              previewFound: true,
+              method: 'direct-paste-event',
+            });
+            return true;
+          }
+        }
       }
 
       return false;
     } catch (error) {
-      this.context.logger.error('Error in hidden file input method:', error);
+      this.context.logger.error('Error in direct paste event:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Try keyboard paste simulation (Ctrl+V) - Enhanced for Firefox
+   */
+  private async tryKeyboardPasteSimulation(file: File, chatInput: HTMLTextAreaElement): Promise<boolean> {
+    try {
+      // Create clipboard data with the file
+      const clipboardData = new DataTransfer();
+      clipboardData.items.add(file);
+
+      // Firefox-specific: Set up a global clipboard state
+      (window as any).__mcpClipboardData = clipboardData;
+
+      // Create enhanced keyboard events for Firefox compatibility
+      const createKeyEvent = (type: string) => {
+        const event = new KeyboardEvent(type, {
+          key: 'v',
+          code: 'KeyV',
+          keyCode: 86,
+          which: 86,
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+        });
+        
+        // Firefox-specific properties
+        Object.defineProperty(event, 'ctrlKey', { value: true, writable: false });
+        Object.defineProperty(event, 'metaKey', { value: false, writable: false });
+        
+        return event;
+      };
+
+      // Simulate the keyboard sequence more realistically
+      const keydownEvent = createKeyEvent('keydown');
+      const keypressEvent = createKeyEvent('keypress');
+      const keyupEvent = createKeyEvent('keyup');
+
+      // Try on multiple targets with keyboard events followed by paste events
+      const targets = [
+        chatInput,
+        chatInput.parentElement,
+        document.activeElement,
+        document,
+        window,
+      ].filter(Boolean);
+
+      for (const target of targets) {
+        if (target) {
+          this.context.logger.debug(`Trying keyboard simulation on: ${target.constructor.name}`);
+          
+          // Dispatch keyboard sequence
+          target.dispatchEvent(keydownEvent);
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          target.dispatchEvent(keypressEvent);
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          target.dispatchEvent(keyupEvent);
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Follow up with a paste event that might be triggered by the keyboard event
+          const pasteEvent = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: clipboardData,
+            composed: true,
+          });
+
+          // Firefox-specific: Ensure clipboardData is properly attached
+          Object.defineProperty(pasteEvent, 'clipboardData', {
+            value: clipboardData,
+            writable: false,
+            configurable: true,
+          });
+
+          target.dispatchEvent(pasteEvent);
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // Check for file preview after each attempt
+          const previewFound = await this.checkFilePreview();
+          if (previewFound) {
+            this.context.logger.debug('Keyboard paste simulation succeeded');
+            
+            // Clean up global state
+            delete (window as any).__mcpClipboardData;
+            
+            this.emitExecutionCompleted('attachFile', {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+            }, {
+              success: true,
+              previewFound: true,
+              method: 'keyboard-paste-simulation',
+            });
+            return true;
+          }
+        }
+      }
+
+      // Clean up global state
+      delete (window as any).__mcpClipboardData;
+      
+      return false;
+    } catch (error) {
+      this.context.logger.error('Error in keyboard paste simulation:', error);
+      // Clean up global state on error
+      delete (window as any).__mcpClipboardData;
+      return false;
+    }
+  }
+
+  /**
+   * Try Clipboard API approach - Enhanced for Firefox compatibility
+   */
+  private async tryClipboardAPIApproach(file: File, chatInput: HTMLTextAreaElement): Promise<boolean> {
+    try {
+      // Check if Clipboard API is available
+      if (!navigator.clipboard || !navigator.clipboard.write) {
+        this.context.logger.debug('Clipboard API not available, skipping');
+        return false;
+      }
+
+      this.context.logger.debug('Using Clipboard API to write file');
+
+      // Try different MIME type approaches for better Firefox compatibility
+      const mimeTypeAttempts = [
+        file.type, // Original MIME type
+        'application/octet-stream', // Generic binary
+        'text/plain', // Fallback for text files
+      ];
+
+      for (const mimeType of mimeTypeAttempts) {
+        try {
+          this.context.logger.debug(`Attempting Clipboard API with MIME type: ${mimeType}`);
+          
+          // Create a new File object with the fallback MIME type if needed
+          const fileForClipboard = mimeType === file.type 
+            ? file 
+            : new File([file], file.name, { type: mimeType });
+
+          const clipboardItem = new ClipboardItem({
+            [mimeType]: fileForClipboard,
+          });
+
+          await navigator.clipboard.write([clipboardItem]);
+          this.context.logger.debug(`Successfully wrote to clipboard with MIME type: ${mimeType}`);
+          
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // Create paste event with clipboard data
+          const clipboardData = new DataTransfer();
+          clipboardData.items.add(fileForClipboard);
+
+          const pasteEvent = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: clipboardData,
+            composed: true,
+          });
+
+          // Firefox-specific: Ensure clipboardData is properly attached
+          Object.defineProperty(pasteEvent, 'clipboardData', {
+            value: clipboardData,
+            writable: false,
+            configurable: true,
+          });
+
+          // Try dispatching on multiple targets
+          const targets = [
+            chatInput,
+            chatInput.parentElement,
+            chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
+            document.activeElement,
+          ].filter(Boolean);
+
+          for (const target of targets) {
+            if (target) {
+              target.dispatchEvent(pasteEvent);
+              await new Promise(resolve => setTimeout(resolve, 200));
+              
+              // Check for file preview
+              const previewFound = await this.checkFilePreview();
+              if (previewFound) {
+                this.context.logger.debug(`Clipboard API approach succeeded with MIME type: ${mimeType}`);
+                this.emitExecutionCompleted('attachFile', {
+                  fileName: file.name,
+                  fileType: file.type,
+                  fileSize: file.size,
+                }, {
+                  success: true,
+                  previewFound: true,
+                  method: 'clipboard-api',
+                });
+                return true;
+              }
+            }
+          }
+
+        } catch (mimeError) {
+          const errorMessage = mimeError instanceof Error ? mimeError.message : String(mimeError);
+          this.context.logger.debug(`MIME type ${mimeType} failed:`, errorMessage);
+          // Continue to next MIME type
+        }
+      }
+
+      return false;
+    } catch (error) {
+      this.context.logger.error('Error in Clipboard API approach:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Try Firefox-specific input event simulation
+   */
+  private async tryFirefoxInputSimulation(file: File, chatInput: HTMLTextAreaElement): Promise<boolean> {
+    try {
+      this.context.logger.debug('Attempting Firefox-specific input simulation');
+
+      // Create a DataTransfer with the file
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+
+      // Create an input event with file data
+      const inputEvent = new InputEvent('input', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        data: null,
+        inputType: 'insertFromPaste',
+      });
+
+      // Firefox-specific: Add dataTransfer to the input event
+      Object.defineProperty(inputEvent, 'dataTransfer', {
+        value: dataTransfer,
+        writable: false,
+        configurable: true,
+      });
+
+      // Also create a beforeinput event (Firefox sometimes needs this)
+      const beforeInputEvent = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        data: null,
+        inputType: 'insertFromPaste',
+      });
+
+      Object.defineProperty(beforeInputEvent, 'dataTransfer', {
+        value: dataTransfer,
+        writable: false,
+        configurable: true,
+      });
+
+      // Try the sequence on multiple targets
+      const targets = [
+        chatInput,
+        chatInput.parentElement,
+        chatInput.closest('.rounded-lg.w-full'),
+        chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
+      ].filter(Boolean);
+
+      for (const target of targets) {
+        if (target) {
+          this.context.logger.debug(`Trying Firefox input simulation on: ${target.tagName}.${target.className || 'no-class'}`);
+          
+          // Dispatch beforeinput first
+          target.dispatchEvent(beforeInputEvent);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Then input event
+          target.dispatchEvent(inputEvent);
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Follow up with a paste event
+          const pasteEvent = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: dataTransfer,
+            composed: true,
+          });
+
+          Object.defineProperty(pasteEvent, 'clipboardData', {
+            value: dataTransfer,
+            writable: false,
+            configurable: true,
+          });
+
+          target.dispatchEvent(pasteEvent);
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // Check for file preview
+          const previewFound = await this.checkFilePreview();
+          if (previewFound) {
+            this.context.logger.debug('Firefox input simulation succeeded');
+            this.emitExecutionCompleted('attachFile', {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+            }, {
+              success: true,
+              previewFound: true,
+              method: 'firefox-input-simulation',
+            });
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      this.context.logger.error('Error in Firefox input simulation:', error);
       return false;
     }
   }
@@ -1261,7 +1486,46 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private async checkFilePreview(): Promise<boolean> {
     return new Promise(resolve => {
       setTimeout(() => {
-        // Check for common file preview indicators
+        // Check for the specific OpenRouter file preview structure
+        const chatContainer = document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4');
+        if (chatContainer) {
+          // Look for the file preview area that appears after file drop
+          const filePreviewArea = chatContainer.querySelector('.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2');
+          if (filePreviewArea) {
+            this.context.logger.debug('Found OpenRouter file preview area');
+            resolve(true);
+            return;
+          }
+
+          // Look for file attachment containers
+          const fileAttachments = chatContainer.querySelectorAll('.bg-background.relative.h-32.w-48');
+          if (fileAttachments.length > 0) {
+            this.context.logger.debug(`Found ${fileAttachments.length} file attachment(s)`);
+            resolve(true);
+            return;
+          }
+
+          // Look for file preview with filename
+          const fileNameElements = chatContainer.querySelectorAll('.w-40.truncate.pl-2');
+          for (let i = 0; i < fileNameElements.length; i++) {
+            const element = fileNameElements[i] as HTMLElement;
+            if (element.textContent && element.textContent.trim().length > 0) {
+              this.context.logger.debug(`Found file with name: ${element.textContent.trim()}`);
+              resolve(true);
+              return;
+            }
+          }
+
+          // Look for the scroll area that contains file previews
+          const scrollArea = chatContainer.querySelector('[data-radix-scroll-area-viewport]');
+          if (scrollArea && scrollArea.children.length > 0) {
+            this.context.logger.debug('Found content in scroll area - likely file preview');
+            resolve(true);
+            return;
+          }
+        }
+
+        // Fallback: Check for common file preview indicators
         const previewSelectors = [
           this.selectors.FILE_PREVIEW,
           '.file-attachment',
@@ -1275,6 +1539,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
           '[class*="file"]',
           '[class*="attachment"]',
           '[class*="upload"]',
+          // OpenRouter specific selectors
+          '.group.relative.flex.shrink-0',
+          '.bg-background.relative.h-32',
         ];
 
         for (const selector of previewSelectors) {
@@ -1286,7 +1553,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
               element &&
               element.offsetHeight > 0 &&
               element.offsetWidth > 0 &&
-              (element.textContent?.trim() || element.querySelector('img, svg'))
+              (element.textContent?.trim() || element.querySelector('img, svg, pre'))
             ) {
               this.context.logger.debug(`File preview found with selector: ${selector}`);
               resolve(true);
@@ -1295,21 +1562,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
           }
         }
 
-        // Alternative check: look for changes in the DOM that might indicate file upload
-        const chatContainer = document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4');
-        if (chatContainer) {
-          const images = chatContainer.querySelectorAll('img');
-          const newFiles = chatContainer.querySelectorAll('[data-file], [data-attachment]');
-          if (images.length > 0 || newFiles.length > 0) {
-            this.context.logger.debug('File content detected in chat container');
-            resolve(true);
-            return;
-          }
-        }
-
         this.context.logger.debug('No file preview found');
         resolve(false);
-      }, 1000); // Wait longer to allow for processing
+      }, 1500); // Wait longer to allow for processing
     });
   }
 

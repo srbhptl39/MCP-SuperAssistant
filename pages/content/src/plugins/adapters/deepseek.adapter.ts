@@ -51,6 +51,105 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   private mcpPopoverContainer: HTMLElement | null = null;
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
+
+  // DeepSeek-specific button styling to match native design system
+  private readonly deepseekButtonStyles = `
+    /* DeepSeek MCP Button Styling - matches native ds-atom-button */
+    .mcp-ds-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 0 12px;
+      height: 34px;
+      border-radius: 17px;
+      background-color: var(--dsw-alias-bg-secondary, #f5f5f5);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--dsw-alias-label-primary, #0f1115);
+      white-space: nowrap;
+      user-select: none;
+      -webkit-user-select: none;
+      outline: none;
+      box-sizing: border-box;
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+
+    .mcp-ds-button:hover {
+      background-color: var(--dsw-alias-bg-tertiary, #e8e8e8);
+      transform: translateY(-1px);
+    }
+
+    .mcp-ds-button:active {
+      transform: translateY(0);
+      background-color: var(--dsw-alias-bg-quaternary, #d8d8d8);
+    }
+
+    .mcp-ds-button:focus-visible {
+      outline: 2px solid var(--dsw-alias-border-focus, #4a9eff);
+      outline-offset: 2px;
+    }
+
+    .mcp-ds-button.mcp-button-active {
+      background-color: var(--dsw-alias-bg-brand-secondary, #e8f0fe);
+      color: var(--dsw-alias-label-brand, #1a73e8);
+      border-color: var(--dsw-alias-border-brand, #1a73e8);
+    }
+
+    .mcp-ds-button.mcp-button-active:hover {
+      background-color: var(--dsw-alias-bg-brand-tertiary, #d2e3fc);
+    }
+
+    .mcp-ds-button-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mcp-ds-button-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .mcp-ds-button-text {
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      .mcp-ds-button {
+        background-color: var(--dsw-alias-bg-secondary-dark, #2a2a2a);
+        color: var(--dsw-alias-label-primary-dark, #e8eaed);
+      }
+
+      .mcp-ds-button:hover {
+        background-color: var(--dsw-alias-bg-tertiary-dark, #3a3a3a);
+      }
+
+      .mcp-ds-button:active {
+        background-color: var(--dsw-alias-bg-quaternary-dark, #4a4a4a);
+      }
+
+      .mcp-ds-button.mcp-button-active {
+        background-color: var(--dsw-alias-bg-brand-secondary-dark, #1a3a5a);
+        color: var(--dsw-alias-label-brand-dark, #8ab4f8);
+        border-color: var(--dsw-alias-border-brand-dark, #8ab4f8);
+      }
+
+      .mcp-ds-button.mcp-button-active:hover {
+        background-color: var(--dsw-alias-bg-brand-tertiary-dark, #2a4a6a);
+      }
+    }
+  `;
   
   // Setup state tracking
   private storeEventListenersSetup: boolean = false;
@@ -811,8 +910,23 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     const buttonContainer = document.querySelector('.ec4f5d61');
     if (buttonContainer) {
       this.context.logger.debug('Found DeepSeek button container (.ec4f5d61)');
-      
-      // Look for search button specifically
+
+      // Find the attach button container (.bf38813a) - we want to insert BEFORE this
+      const attachContainer = buttonContainer.querySelector('.bf38813a');
+      if (attachContainer) {
+        this.context.logger.debug('Found attach button container, will insert before it');
+        // Find the last toggle button (Search button) before the attach container
+        const toggleButtons = buttonContainer.querySelectorAll('.ds-toggle-button');
+        if (toggleButtons.length > 0) {
+          const lastToggleButton = toggleButtons[toggleButtons.length - 1];
+          this.context.logger.debug('Will insert after last toggle button (Search)');
+          return { container: buttonContainer, insertAfter: lastToggleButton };
+        }
+        // Fallback: insert at the beginning of container, before attach button
+        return { container: buttonContainer, insertAfter: null };
+      }
+
+      // Fallback: Look for search button specifically
       const buttons = buttonContainer.querySelectorAll('.ds-button');
       for (const button of Array.from(buttons)) {
         const buttonText = button.textContent?.trim();
@@ -867,11 +981,20 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         return;
       }
 
+      // Inject DeepSeek-specific button styles
+      if (!document.getElementById('mcp-deepseek-button-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'mcp-deepseek-button-styles';
+        styleEl.textContent = this.deepseekButtonStyles;
+        document.head.appendChild(styleEl);
+        this.context.logger.debug('DeepSeek button styles injected');
+      }
+
       // Create container for the popover
       const reactContainer = document.createElement('div');
       reactContainer.id = 'mcp-popover-container';
       reactContainer.style.display = 'inline-block';
-      reactContainer.style.margin = '0 4px';
+      // Remove margin to let button handle its own spacing
 
       // Insert at appropriate location
       const { container, insertAfter } = insertionPoint;
@@ -906,15 +1029,26 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
             // Create toggle state manager that integrates with new stores
             const toggleStateManager = this.createToggleStateManager();
 
+            // DeepSeek-specific button configuration to match native design
+            const adapterButtonConfig = {
+              className: 'mcp-ds-button',
+              contentClassName: 'mcp-ds-button-content',
+              textClassName: 'mcp-ds-button-text',
+              iconClassName: 'mcp-ds-button-icon',
+              activeClassName: 'mcp-button-active'
+            };
+
             // Create React root and render
             const root = ReactDOM.createRoot(container);
             root.render(
               React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
+                toggleStateManager: toggleStateManager,
+                adapterButtonConfig: adapterButtonConfig,
+                adapterName: 'DeepSeekAdapter'
               })
             );
 
-            this.context.logger.debug('MCP popover rendered successfully with new architecture');
+            this.context.logger.debug('MCP popover rendered successfully with DeepSeek styling');
           }).catch(error => {
             this.context.logger.error('Failed to import MCPPopover component:', error);
           });
