@@ -1231,7 +1231,9 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       block.setAttribute('data-block-id', blockId);
     }
   } else {
-    previousCompletionStatus = !existingDiv.classList.contains('function-loading');
+    // Check if block was previously complete (has function-complete class)
+    // Once complete, it should stay complete to prevent flickering
+    previousCompletionStatus = existingDiv.classList.contains('function-complete');
   }
 
   const rawContent = block.textContent?.trim() || '';
@@ -1273,6 +1275,8 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   // Handle state transitions
   if (!isNewRender) {
     const justCompleted = previousCompletionStatus === false && functionInfo.isComplete;
+    // Prevent flickering: once a block is complete, don't allow it to become incomplete
+    // This prevents re-rendering loops caused by temporary parsing issues
     const justBecameIncomplete = previousCompletionStatus === true && !functionInfo.isComplete;
 
     if (justCompleted) {
@@ -1280,7 +1284,9 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       blockDiv.classList.add('function-complete');
       const spinner = blockDiv.querySelector('.spinner');
       if (spinner) spinner.remove();
-    } else if (justBecameIncomplete) {
+    } else if (justBecameIncomplete && !blockDiv.classList.contains('function-complete')) {
+      // Only transition to incomplete if the block wasn't already marked as complete
+      // This prevents flickering from temporary state changes
       blockDiv.classList.remove('function-complete');
       blockDiv.classList.add('function-loading');
     }
