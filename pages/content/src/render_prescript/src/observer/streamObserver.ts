@@ -13,6 +13,7 @@ declare global {
 import { CONFIG } from '../core/config';
 import { renderFunctionCall } from '../renderer/index';
 import { extractParameters, containsFunctionCalls, extractLanguageTag } from '../parser/index';
+import { extractJSONParameters } from '../parser/jsonFunctionParser';
 
 // Maps to store observers and state for streaming content
 export const streamingObservers = new Map<string, MutationObserver>();
@@ -140,7 +141,6 @@ const cacheParameterContent = (blockId: string, content: string): void => {
   let params;
   if (isJSON) {
     // Extract JSON parameters
-    const { extractJSONParameters } = require('../parser/jsonFunctionParser');
     const jsonParams = extractJSONParameters(content);
 
     // Convert to array format
@@ -427,7 +427,13 @@ const scheduleOptimizedRender = (blockId: string, target: HTMLElement): void => 
 export const monitorNode = (node: HTMLElement, blockId: string): void => {
   if (streamingObservers.has(blockId)) return;
 
-  if (CONFIG.debug) console.debug(`Setting up direct monitoring for block: ${blockId}`);
+  const content = node.textContent?.substring(0, 100) || '';
+  const isJSON = content.includes('"type"');
+
+  if (CONFIG.debug) {
+    console.debug(`[Monitor] Setting up monitoring for block: ${blockId}, element: ${node.tagName}, format: ${isJSON ? 'JSON' : 'XML'}`);
+    console.debug(`[Monitor] Content preview:`, content);
+  }
 
   // Initialize the last updated timestamp
   streamingLastUpdated.set(blockId, Date.now());
@@ -451,15 +457,21 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     const currentContent = node.textContent || '';
     const currentLength = currentContent.length;
 
-    // Check if content has incomplete tags
+    // Check if content has incomplete tags (XML or JSON)
     const hasOpenFunctionCallsTag =
       currentContent.includes('<function_calls>') && !currentContent.includes('</function_calls>');
     const hasOpenInvokeTag = currentContent.includes('<invoke') && !currentContent.includes('</invoke>');
     const hasOpenParameterTags =
       (currentContent.match(/<parameter[^>]*>/g) || []).length > (currentContent.match(/<\/parameter>/g) || []).length;
 
-    // Detect incomplete tags
-    if (hasOpenFunctionCallsTag || hasOpenInvokeTag || hasOpenParameterTags) {
+    // Check for incomplete JSON
+    const hasJSONStart = currentContent.includes('"type"') && currentContent.includes('function_call_start');
+    const hasJSONEnd = currentContent.includes('"type"') &&
+                       (currentContent.includes('"function_call_end"') || currentContent.includes('"type": "function_call_end"'));
+    const hasIncompleteJSON = hasJSONStart && !hasJSONEnd;
+
+    // Detect incomplete tags (XML or JSON)
+    if (hasOpenFunctionCallsTag || hasOpenInvokeTag || hasOpenParameterTags || hasIncompleteJSON) {
       detectedIncompleteTags = true;
     }
 
@@ -507,6 +519,10 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     const functionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
     if (functionBlock?.hasAttribute('data-completing')) return;
 
+    if (CONFIG.debug) {
+      console.debug(`[Monitor] Mutation detected for blockId: ${blockId}, mutations: ${mutations.length}`);
+    }
+
     let contentChanged = false;
     let significantChange = false;
     let functionCallPattern = false;
@@ -520,10 +536,13 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
         const targetNode = mutation.target;
         const textContent = targetNode.textContent || '';
 
-        // Use fast pattern matching instead of string includes
+        // Use fast pattern matching for both XML and JSON
         if (!functionCallPattern) {
           PATTERN_CACHE.allFunctionPatterns.lastIndex = 0;
-          functionCallPattern = PATTERN_CACHE.allFunctionPatterns.test(textContent);
+          const hasXMLPattern = PATTERN_CACHE.allFunctionPatterns.test(textContent);
+          const hasJSONPattern = textContent.includes('"type"') &&
+                                (textContent.includes('function_call') || textContent.includes('parameter'));
+          functionCallPattern = hasXMLPattern || hasJSONPattern;
         }
 
         // Check for significant size changes in content
@@ -536,6 +555,10 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
           // Use immediate chunk detection for instant response
           const chunkInfo = detectFunctionChunk(newValue, previousContent);
+
+          if (CONFIG.debug && chunkInfo.hasNewChunk) {
+            console.debug(`[Monitor] Chunk detected - type: ${chunkInfo.chunkType}, significant: ${chunkInfo.isSignificant}`);
+          }
 
           if (chunkInfo.hasNewChunk && chunkInfo.isSignificant) {
             significantChange = true;

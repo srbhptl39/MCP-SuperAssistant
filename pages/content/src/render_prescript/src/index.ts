@@ -419,6 +419,18 @@ const configure = (options: Partial<FunctionCallRendererConfig>) => {
 //     }
 // }
 
+// Debug helper for JSON parser
+if (typeof window !== 'undefined') {
+  (window as any).enableJSONDebug = () => {
+    (window as any).__DEBUG_JSON_PARSER = true;
+    console.log('JSON parser debug logging enabled. Refresh or trigger a function call to see logs.');
+  };
+  (window as any).disableJSONDebug = () => {
+    (window as any).__DEBUG_JSON_PARSER = false;
+    console.log('JSON parser debug logging disabled.');
+  };
+}
+
 // --- Exports for potential module usage ---
 export {
   CONFIG,

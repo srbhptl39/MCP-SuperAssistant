@@ -1155,8 +1155,21 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
 
   const functionInfo = containsFunctionCalls(block);
 
+  if (CONFIG.debug) {
+    console.debug('[Render] containsFunctionCalls result:', {
+      hasFunctionCalls: functionInfo.hasFunctionCalls,
+      detectedBlockType: functionInfo.detectedBlockType,
+      isComplete: functionInfo.isComplete,
+      hasParameters: functionInfo.hasParameters,
+      invokeName: functionInfo.invokeName
+    });
+  }
+
   // Early exit checks
   if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
+    if (CONFIG.debug && !functionInfo.hasFunctionCalls) {
+      console.debug('[Render] Early exit - no function calls detected');
+    }
     return false;
   }
 

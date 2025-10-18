@@ -763,12 +763,35 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 };
 
 /**
- * Extract function name from raw XML content
+ * Extract function name from raw content (supports both XML and JSON formats)
  *
- * @param rawContent Raw XML content
+ * @param rawContent Raw XML or JSON content
  * @returns The function name or null if not found
  */
 const extractFunctionName = (rawContent: string): string | null => {
+  // Check for JSON format first
+  const isJSON = rawContent.includes('"type"') && rawContent.includes('function_call_start');
+
+  if (isJSON) {
+    // Extract from JSON format
+    const lines = rawContent.split('\n');
+    for (const line of lines) {
+      try {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        const parsed = JSON.parse(trimmed);
+        if (parsed.type === 'function_call_start' && parsed.name) {
+          return parsed.name;
+        }
+      } catch (e) {
+        // Skip invalid JSON lines
+      }
+    }
+    return null;
+  }
+
+  // XML format
   const invokeMatch = rawContent.match(/<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/);
   return invokeMatch && invokeMatch[1] ? invokeMatch[1] : null;
 };
