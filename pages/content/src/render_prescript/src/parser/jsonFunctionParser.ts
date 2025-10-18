@@ -34,7 +34,12 @@ const parseJSONLine = (line: string): JSONFunctionLine | null => {
     const trimmed = line.trim();
     if (!trimmed) return null;
 
-    const parsed = JSON.parse(trimmed);
+    // Strip language tags that might appear before JSON (e.g., "json{...}", "javascript{...}")
+    // This handles cases where code blocks include language identifiers
+    const cleaned = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+    if (!cleaned) return null;
+
+    const parsed = JSON.parse(cleaned);
 
     // Validate it's a function call line
     if (!parsed.type || typeof parsed.type !== 'string') {
@@ -209,7 +214,10 @@ export const extractJSONFunctionInfo = (content: string): {
     const parsed = parseJSONLine(line);
     if (!parsed) {
       // Try to extract from partial JSON line
-      const trimmed = line.trim();
+      let trimmed = line.trim();
+      // Strip language tags before checking
+      trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+
       if (trimmed.startsWith('{') && trimmed.includes('"type"') && trimmed.includes('function_call_start')) {
         // Try to extract name from partial JSON
         const nameMatch = trimmed.match(/"name"\s*:\s*"([^"]+)"/);
@@ -255,12 +263,44 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
 
   const lines = content.split('\n');
 
+  // First pass: Extract from complete, parseable JSON lines
   for (const line of lines) {
     const parsed = parseJSONLine(line);
     if (!parsed) continue;
 
     if (parsed.type === 'parameter' && parsed.key) {
       parameters[parsed.key] = parsed.value ?? '';  // Ensure value is never undefined
+    }
+  }
+
+  // Second pass: Fallback regex extraction for incomplete/streaming parameter lines
+  // This handles cases where parameter values are long and arrive in chunks
+  // Pattern matches: {"type": "parameter", "key": "keyname", "value": "partial content...
+  // Even if the closing quote and brace are missing (streaming incomplete JSON)
+  // Note: No trailing quote required - matches partial values during streaming
+  const parameterPattern = /"type"\s*:\s*"parameter"[^}]*"key"\s*:\s*"([^"]+)"[^}]*"value"\s*:\s*"((?:[^"\\]|\\.)*)/g;
+
+  let match;
+  while ((match = parameterPattern.exec(content)) !== null) {
+    const key = match[1];
+    const value = match[2];
+
+    // Only use regex-extracted value if we don't already have this parameter
+    // (prefer complete values from successfully parsed JSON lines)
+    if (!parameters.hasOwnProperty(key)) {
+      // Unescape the value (handle \n, \t, \", etc.)
+      const unescapedValue = value
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\r/g, '\r')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+
+      parameters[key] = unescapedValue;
+
+      if (CONFIG.debug) {
+        console.debug(`[JSON Parser] Extracted partial parameter via regex: ${key} (${unescapedValue.length} chars)`);
+      }
     }
   }
 

@@ -598,7 +598,12 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
     let extractedCallId: string | null = null;
     for (const line of lines) {
       try {
-        const parsed = JSON.parse(line.trim());
+        let trimmed = line.trim();
+        // Strip language tags that might appear before JSON (e.g., "json{...}")
+        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+        if (!trimmed) continue;
+
+        const parsed = JSON.parse(trimmed);
         if (parsed.type === 'function_call_start' && parsed.call_id) {
           extractedCallId = parsed.call_id.toString();
           break;
@@ -820,7 +825,11 @@ const extractFunctionName = (rawContent: string): string | null => {
     const lines = rawContent.split('\n');
     for (const line of lines) {
       try {
-        const trimmed = line.trim();
+        let trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Strip language tags that might appear before JSON (e.g., "json{...}")
+        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
         if (!trimmed) continue;
 
         const parsed = JSON.parse(trimmed);
