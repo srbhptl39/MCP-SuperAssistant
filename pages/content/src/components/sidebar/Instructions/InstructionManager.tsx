@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateInstructions } from './instructionGenerator';
+import { generateInstructionsJson } from './instructionGeneratorJson';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
 import { useToolStore } from '../../../stores/tool.store';
 import { Typography } from '../ui';
@@ -151,7 +152,8 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   // Generate instructions with custom instructions - memoized to prevent excessive calls
   const generateCurrentInstructions = useCallback(() => {
-    return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
+    // return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
+    return generateInstructionsJson(enabledTools, customInstructions, customInstructionsEnabled);
   }, [enabledTools, customInstructions, customInstructionsEnabled]);
 
   // Memoize the actual current instructions to prevent unnecessary re-calculations

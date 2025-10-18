@@ -827,7 +827,7 @@ const BlockElementUtils = {
     expandButton: HTMLButtonElement,
     expandableContent: HTMLDivElement,
   ): void => {
-    expandButton.onclick = e => {
+    const toggleExpandCollapse = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -894,6 +894,18 @@ const BlockElementUtils = {
         });
       }
     };
+
+    // Attach click handler to expand button
+    expandButton.onclick = toggleExpandCollapse;
+
+    // Make entire function-name area clickable
+    const functionNameElement = blockDiv.querySelector('.function-name') as HTMLDivElement;
+    if (functionNameElement) {
+      DOMUtils.applyStyles(functionNameElement, {
+        cursor: 'pointer',
+      });
+      functionNameElement.onclick = toggleExpandCollapse;
+    }
   },
 };
 
@@ -1350,19 +1362,30 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   }
 
   // Add description section if present (JSON format)
-  if (description && !blockDiv.querySelector('.function-description')) {
-    const descriptionElement = DOMUtils.createElement<HTMLDivElement>('div', 'function-description');
-    descriptionElement.textContent = description;
-    DOMUtils.applyStyles(descriptionElement, {
-      fontSize: '13px',
-      color: 'rgba(0, 0, 0, 0.6)',
-      marginTop: '4px',
-      fontStyle: 'italic',
-    });
+  // Insert it inside the function-name-left section, below the function name
+  if (description && functionNameElement) {
+    const leftSection = functionNameElement.querySelector('.function-name-left') as HTMLDivElement;
+    if (leftSection && !leftSection.querySelector('.function-description')) {
+      // Change flex direction to column to stack elements vertically
+      DOMUtils.applyStyles(leftSection, {
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+      });
 
-    // Insert description after function name, before expandable content
-    if (functionNameElement && expandableContent) {
-      blockDiv.insertBefore(descriptionElement, expandableContent);
+      const descriptionElement = DOMUtils.createElement<HTMLDivElement>('div', 'function-description');
+      descriptionElement.textContent = description;
+      DOMUtils.applyStyles(descriptionElement, {
+        fontSize: '12px',
+        color: 'inherit',
+        marginTop: '4px',
+        fontStyle: 'italic',
+        lineHeight: '1.4',
+        display: 'block',
+        opacity: '0.8',
+      });
+
+      // Append description to the left section (below function name)
+      leftSection.appendChild(descriptionElement);
     }
   }
 

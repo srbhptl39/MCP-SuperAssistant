@@ -599,8 +599,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
     for (const line of lines) {
       try {
         let trimmed = line.trim();
-        // Strip language tags that might appear before JSON (e.g., "json{...}")
-        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+        // Strip language tags and copy-code prefixes that might appear before JSON
+        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
         if (!trimmed) continue;
 
         const parsed = JSON.parse(trimmed);
@@ -828,8 +828,8 @@ const extractFunctionName = (rawContent: string): string | null => {
         let trimmed = line.trim();
         if (!trimmed) continue;
 
-        // Strip language tags that might appear before JSON (e.g., "json{...}")
-        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+        // Strip language tags and copy-code prefixes that might appear before JSON
+        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
         if (!trimmed) continue;
 
         const parsed = JSON.parse(trimmed);

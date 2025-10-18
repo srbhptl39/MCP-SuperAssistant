@@ -34,9 +34,9 @@ const parseJSONLine = (line: string): JSONFunctionLine | null => {
     const trimmed = line.trim();
     if (!trimmed) return null;
 
-    // Strip language tags that might appear before JSON (e.g., "json{...}", "javascript{...}")
-    // This handles cases where code blocks include language identifiers
-    const cleaned = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+    // Strip language tags and copy-code prefixes that might appear before JSON
+    // Examples: "json{...}", "jsonCopy code{...}", "javascriptCopy{...}"
+    const cleaned = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
     if (!cleaned) return null;
 
     const parsed = JSON.parse(cleaned);
@@ -215,8 +215,8 @@ export const extractJSONFunctionInfo = (content: string): {
     if (!parsed) {
       // Try to extract from partial JSON line
       let trimmed = line.trim();
-      // Strip language tags before checking
-      trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)\s*/i, '');
+      // Strip language tags and copy-code prefixes before checking
+      trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
 
       if (trimmed.startsWith('{') && trimmed.includes('"type"') && trimmed.includes('function_call_start')) {
         // Try to extract name from partial JSON

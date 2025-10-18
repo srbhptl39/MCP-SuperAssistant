@@ -18,28 +18,43 @@
   
   // Function call pattern detection
   const FUNCTION_CALL_PATTERNS = [
+    // XML patterns
     /<function_calls>/i,
     /<invoke\s+name=/i,
-    /<function_calls>/i
+    /<function_calls>/i,
+    // JSON patterns
+    /"type"\s*:\s*"function_call_start"/i,
+    /"type"\s*:\s*"parameter"/i,
+    /\{\s*"type"\s*:\s*"function_call/i
   ];
-  
+
   // Track monitored editors and their data
   const monitoredEditors = new WeakSet();
   const editorData = new WeakMap();
   const eventListeners = new WeakMap();
   const hiddenEditors = new WeakSet();
-  
+
   let observer = null;
-  
+
   function detectFunctionCallPattern(content) {
     if (!content || typeof content !== 'string') return false;
-    
-    // Check for any opening XML tags that indicate function calls
-    const hasOpeningTag = content.includes('<function_calls>') || 
-                         content.includes('<invoke ') || 
-                         content.match(/<[a-zA-Z_][a-zA-Z0-9_-]*\s*[^>]*>/);
-    
-    return hasOpeningTag;
+
+    // Strip common prefixes like "jsonCopy code", "javascriptCopy", etc.
+    const cleanedContent = content.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+
+    // Check for XML patterns (opening tags that indicate function calls)
+    const hasXMLPattern = cleanedContent.includes('<function_calls>') ||
+                         cleanedContent.includes('<invoke ') ||
+                         cleanedContent.match(/<[a-zA-Z_][a-zA-Z0-9_-]*\s*[^>]*>/);
+
+    // Check for JSON patterns (line-by-line JSON function calls)
+    const hasJSONPattern = (cleanedContent.includes('"type"') &&
+                           (cleanedContent.includes('function_call_start') ||
+                            cleanedContent.includes('function_call') ||
+                            cleanedContent.includes('parameter'))) ||
+                          cleanedContent.match(/\{\s*"type"\s*:\s*"function_call/i);
+
+    return hasXMLPattern || hasJSONPattern;
   }
   
   function hideEditor(cmEditor) {
