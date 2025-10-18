@@ -437,9 +437,9 @@ input:checked + .mcp-toggle-slider:before {
   z-index: 2147483647 !important;
   white-space: nowrap !important;
   pointer-events: none !important;
-  width: 130px !important;
-  min-width: 130px !important;
-  max-width: 130px !important;
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
   box-sizing: border-box !important;
   font-family: inherit !important;
   font-synthesis: none !important;
@@ -696,6 +696,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isHoverOverlayVisible, setIsHoverOverlayVisible] = useState(false);
   const [hoverOverlayPosition, setHoverOverlayPosition] = useState({ x: 0, y: 0 });
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Track sidebar visibility
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -744,7 +745,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     // Force initial state sync to ensure popover reflects current persistent MCP state
     const currentToggleState = toggleStateManager.getState();
     console.debug(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, store MCP: ${mcpEnabledFromStore}`);
-    
+
     // Sync automation state from user preferences
     const syncedState = {
       ...currentToggleState,
@@ -753,14 +754,43 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       autoSubmit: preferences.autoSubmit || false,
       autoExecute: preferences.autoExecute || false,
     };
-    
+
     setState(syncedState);
-    
+
     // Also sync the legacy toggle state manager
     toggleStateManager.setAutoInsert(preferences.autoInsert || false);
     toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
     toggleStateManager.setAutoExecute(preferences.autoExecute || false);
   }, [toggleStateManager, mcpEnabledFromStore, preferences.autoInsert, preferences.autoSubmit, preferences.autoExecute]); // Include dependencies
+
+  // Track sidebar visibility from window.activeSidebarManager and Zustand store
+  useEffect(() => {
+    // Listen for sidebar visibility changes via custom events
+    const handleSidebarVisibilityChange = (event: CustomEvent) => {
+      const { visible } = event.detail;
+      console.debug(`[MCPPopover] Sidebar visibility changed to: ${visible}`);
+      setIsSidebarVisible(visible);
+    };
+
+    window.addEventListener('ui:sidebar-toggle' as any, handleSidebarVisibilityChange);
+
+    // Also check activeSidebarManager if available
+    const checkSidebarVisibility = () => {
+      const manager = (window as any).activeSidebarManager;
+      if (manager && manager._isVisible !== undefined) {
+        setIsSidebarVisible(manager._isVisible);
+      }
+    };
+
+    // Check initially and periodically
+    checkSidebarVisibility();
+    const intervalId = setInterval(checkSidebarVisibility, 1000);
+
+    return () => {
+      window.removeEventListener('ui:sidebar-toggle' as any, handleSidebarVisibilityChange);
+      clearInterval(intervalId);
+    };
+  }, []);
 
   // Handlers for toggles
   const handleMCP = (checked: boolean) => {
@@ -883,6 +913,35 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   };
 
 
+  const handleToggleSidebar = async () => {
+    console.debug(`[MCPPopover] Toggle sidebar requested. Current state: ${isSidebarVisible}`);
+
+    try {
+      const manager = (window as any).activeSidebarManager;
+
+      if (manager) {
+        if (isSidebarVisible) {
+          console.debug('[MCPPopover] Hiding sidebar via activeSidebarManager');
+          await manager.hide();
+        } else {
+          console.debug('[MCPPopover] Showing sidebar via activeSidebarManager');
+          await manager.show();
+        }
+      } else {
+        console.warn('[MCPPopover] activeSidebarManager not available, using fallback');
+        // Fallback: Use Zustand store directly
+        const { useUIStore } = await import('../../stores/ui.store');
+        const store = useUIStore.getState();
+        store.setSidebarVisibility(!isSidebarVisible, 'mcp-popover-toggle');
+      }
+
+      // Update local state immediately for responsive UI
+      setIsSidebarVisible(!isSidebarVisible);
+    } catch (error) {
+      console.error('[MCPPopover] Error toggling sidebar:', error);
+    }
+  };
+
   const handleAttach = async () => {
     // Add more detailed debugging
     console.debug(`[MCPPopover] handleAttach called - isAdapterActive: ${isAdapterActive}, activePlugin: ${!!activePlugin}, attachFile: ${!!attachFile}`);
@@ -952,16 +1011,15 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const updateHoverOverlayPosition = useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      const overlayWidth = 130; // fixed width from CSS
-      const overlayHeight = 140; // approximate height for 3 buttons
-      
+      const overlayWidth = 150; // fixed width from CSS (updated for 4 buttons)
+      const overlayHeight = 180; // approximate height for 4 buttons
+
       // Calculate position above the button
       let x = rect.right - overlayWidth + 10; // Align to right edge with some offset
       let y = rect.top - overlayHeight - 10; // Position above with gap
-      
+
       // Keep within viewport bounds
       const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
       
       // Adjust horizontal position if going off screen
       if (x < 10) {
@@ -1143,6 +1201,23 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
               <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
             </svg>
             Attach
+          </button>
+          <button
+            className="mcp-hover-button"
+            onClick={handleToggleSidebar}
+            title={isSidebarVisible ? "Hide sidebar" : "Show sidebar"}
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              {isSidebarVisible ? (
+                // Eye-off icon (hide)
+                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+              ) : (
+                // Eye icon (show)
+                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+              )}
+            </svg>
+            {isSidebarVisible ? 'Hide Sidebar' : 'Show Sidebar'}
           </button>
           <button
             className="mcp-hover-button"
