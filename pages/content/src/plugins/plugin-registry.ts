@@ -363,19 +363,26 @@ class PluginRegistry {
     }
 
     try {
-      // Deactivate current plugin first
+      // Deactivate current plugin first (but never deactivate sidebar-plugin)
       if (this.activePlugin && this.activePlugin.name !== pluginName) {
-        await this.deactivateCurrentPlugin();
+        // Skip deactivation if current plugin is sidebar-plugin (it should persist)
+        if (this.activePlugin.name !== 'sidebar-plugin') {
+          await this.deactivateCurrentPlugin();
+        }
       }
 
       // Activate new plugin
       const pluginInstance = registration.plugin;
-      
+
       await performanceMonitor.time(`plugin-activation-${pluginName}`, async () => {
         await pluginInstance.activate();
       });
 
-      this.activePlugin = pluginInstance;
+      // Only set as activePlugin if it's not sidebar-plugin
+      // Sidebar-plugin persists alongside site adapters
+      if (pluginName !== 'sidebar-plugin') {
+        this.activePlugin = pluginInstance;
+      }
       registration.instance = pluginInstance;
       registration.status = 'active';
       registration.lastUsedAt = Date.now(); // Update last used timestamp

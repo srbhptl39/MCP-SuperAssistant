@@ -90,13 +90,18 @@ export const useAdapterStore = create<AdapterState>()(
 
         const currentActiveAdapter = get().getActiveAdapter();
         if (currentActiveAdapter && currentActiveAdapter.plugin.name !== name) {
-          try {
-            console.debug(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
-            await currentActiveAdapter.instance?.deactivate();
-            eventBus.emit('adapter:deactivated', { pluginName: currentActiveAdapter.plugin.name, reason: 'switching adapter', timestamp: Date.now() });
-          } catch (e) {
-            console.error(`[AdapterStore] Error deactivating previous adapter "${currentActiveAdapter.plugin.name}":`, e);
-            // Continue activation of new adapter despite error in deactivating old one
+          // Never deactivate sidebar-plugin - it should persist alongside site adapters
+          if (currentActiveAdapter.plugin.name !== 'sidebar-plugin') {
+            try {
+              console.debug(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
+              await currentActiveAdapter.instance?.deactivate();
+              eventBus.emit('adapter:deactivated', { pluginName: currentActiveAdapter.plugin.name, reason: 'switching adapter', timestamp: Date.now() });
+            } catch (e) {
+              console.error(`[AdapterStore] Error deactivating previous adapter "${currentActiveAdapter.plugin.name}":`, e);
+              // Continue activation of new adapter despite error in deactivating old one
+            }
+          } else {
+            console.debug(`[AdapterStore] Skipping deactivation of sidebar-plugin - it persists alongside site adapters.`);
           }
         }
         
@@ -116,8 +121,10 @@ export const useAdapterStore = create<AdapterState>()(
           pluginReg.status = 'active';
           pluginReg.lastUsedAt = Date.now();
 
+          // Only set as activeAdapterName if it's not sidebar-plugin
+          // Sidebar-plugin persists alongside site adapters
           set({
-            activeAdapterName: name,
+            activeAdapterName: name !== 'sidebar-plugin' ? name : get().activeAdapterName,
             currentCapabilities: pluginReg.plugin.capabilities,
             lastAdapterError: null, // Clear previous errors on successful activation
             registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg } // Update registration with instance and status

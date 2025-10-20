@@ -58,8 +58,9 @@ export class SidebarPlugin implements AdapterPlugin {
     try {
       // Initialize sidebar manager for current site
       await this.initializeSidebarManager();
-      
-      // Show sidebar automatically on activation
+
+      // Show sidebar automatically on activation (respects user's last visibility preference)
+      // The showSidebar() method will check stored state and only show if appropriate
       await this.showSidebar();
       
       this.isActive = true;
@@ -86,8 +87,9 @@ export class SidebarPlugin implements AdapterPlugin {
     this.context?.logger.debug('[SidebarPlugin] Deactivating sidebar plugin...');
 
     try {
-      // Hide sidebar
-      this.hideSidebar();
+      // DON'T hide sidebar or update visibility state during deactivation
+      // This is called during page unload/cleanup and should not overwrite user preferences
+      // Just clean up the visual state without persisting to storage
 
       // Reset state
       this.isActive = false;
@@ -150,7 +152,7 @@ export class SidebarPlugin implements AdapterPlugin {
   // Plugin-specific methods
 
   /**
-   * Show the sidebar
+   * Show the sidebar (respects user's last visibility preference)
    */
   async showSidebar(): Promise<void> {
     // Prevent infinite loops
@@ -164,21 +166,16 @@ export class SidebarPlugin implements AdapterPlugin {
     }
 
     if (this.sidebarManager) {
-      this.context?.logger.debug('[SidebarPlugin] Showing sidebar...');
+      this.context?.logger.debug('[SidebarPlugin] Showing sidebar (respects stored preferences)...');
 
       // Set flag to prevent loops
       this.isShowingSidebar = true;
 
       try {
-        // Show sidebar with tool outputs (includes preferences loading)
+        // Show sidebar with tool outputs (this method checks stored state and only shows if appropriate)
         this.sidebarManager.showWithToolOutputs();
 
-        // Update UI store to reflect sidebar visibility (without emitting event)
-        useUIStore.setState(state => ({
-          sidebar: { ...state.sidebar, isVisible: true }
-        }));
-
-        this.context?.logger.debug('[SidebarPlugin] Sidebar shown successfully');
+        this.context?.logger.debug('[SidebarPlugin] Sidebar show request completed');
       } catch (error) {
         this.context?.logger.error('[SidebarPlugin] Error showing sidebar:', error);
         this.isShowingSidebar = false; // Reset flag on error
@@ -279,17 +276,8 @@ export class SidebarPlugin implements AdapterPlugin {
     // REMOVED: ui:sidebar-toggle listener to prevent circular dependency
     // The plugin should only respond to external events, not its own actions
 
-    // Listen for app initialization events to auto-show sidebar
-    const unsubscribeAppInit = this.context.eventBus.on('app:initialized', () => {
-      this.context?.logger.debug('[SidebarPlugin] App initialized, auto-showing sidebar...');
-
-      // Auto-show sidebar after app initialization with a small delay
-      setTimeout(() => {
-        if (this.isActive && !this.isShowingSidebar) {
-          this.showSidebar();
-        }
-      }, 1000); // 1 second delay to ensure everything is ready
-    });
+    // REMOVED: app:initialized listener to prevent duplicate auto-show
+    // Sidebar is already shown during activate(), no need for additional auto-show logic
 
     // Listen for site changes to reinitialize sidebar manager
     const unsubscribeSiteChange = this.context.eventBus.on('app:site-changed', async (data) => {
@@ -323,7 +311,7 @@ export class SidebarPlugin implements AdapterPlugin {
     });
 
     // Store cleanup functions
-    this.cleanupFunctions.push(unsubscribeAppInit, unsubscribeSiteChange);
+    this.cleanupFunctions.push(unsubscribeSiteChange);
   }
 
   // Event handlers for backward compatibility

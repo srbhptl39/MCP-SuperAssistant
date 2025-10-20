@@ -34,7 +34,7 @@ export interface UIState {
 }
 
 const initialSidebarState: SidebarState = {
-  isVisible: false,
+  isVisible: true, // Default to visible for first-time users; persisted value will override for returning users
   isMinimized: false,
   position: 'left',
   width: 320, // Default width from app.store, could be synced or independent
@@ -274,14 +274,18 @@ export const useUIStore = create<UIState>()(
         setMCPEnabled: (enabled: boolean, reason?: string) => {
           const previousState = get().mcpEnabled;
           set({ mcpEnabled: enabled });
-          
+
           console.debug(`[UIStore] MCP toggle set to ${enabled}. Reason: ${reason || 'user action'}`);
-          
-          // When MCP is enabled, show sidebar; when disabled, hide sidebar
-          if (enabled !== previousState) {
-            get().setSidebarVisibility(enabled, reason || 'mcp-toggle');
+
+          // When disabling MCP, hide sidebar (but don't change visibility state when enabling)
+          // This allows sidebar visibility to be controlled independently when MCP is on
+          if (enabled !== previousState && !enabled) {
+            // MCP disabled - force hide sidebar
+            get().setSidebarVisibility(false, reason || 'mcp-toggle');
           }
-          
+          // Note: When enabling MCP, we DON'T automatically show sidebar
+          // The sidebar will check mcpEnabled and isVisible separately on initialization
+
           // Emit event for components that need to react to MCP state changes
           eventBus.emit('ui:mcp-toggle', { enabled, reason: reason || 'user action', previousState });
         },

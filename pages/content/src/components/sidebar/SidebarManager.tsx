@@ -22,6 +22,9 @@ const getZustandPreferences = (): UserPreferences => {
     autoSubmit: false,
     autoInsert: false,
     autoExecute: false,
+    autoInsertDelay: 500,
+    autoSubmitDelay: 1000,
+    autoExecuteDelay: 500,
     notifications: true,
     theme: 'system',
     language: navigator.language || 'en-US',
@@ -138,8 +141,9 @@ export class SidebarManager extends BaseSidebarManager {
 
   /**
    * Override show method to ensure preferences are loaded before rendering
+   * @param syncState - Whether to sync visibility state to Zustand (true for user actions, false for initialization)
    */
-  public async show(): Promise<void> {
+  public async show(syncState: boolean = true): Promise<void> {
     // CRITICAL FIX: Always ensure window reference is set before showing
     if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
       logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set during show()');
@@ -160,8 +164,11 @@ export class SidebarManager extends BaseSidebarManager {
         logMessage(`[SidebarManager] Set data-initial-minimized to '${wasMinimized ? 'true' : 'false'}'`);
       }
 
-      // CRITICAL FIX: Sync Zustand store with actual visibility state when showing
-      this.syncZustandVisibilityState(true);
+      // Only sync visibility state if this is a user-triggered show (not initialization)
+      if (syncState) {
+        this.syncZustandVisibilityState(true);
+        logMessage('[SidebarManager] Synced visibility state to true (user-triggered show)');
+      }
     } catch (error) {
       logMessage(
         `[SidebarManager] Error loading Zustand preferences in show(): ${error instanceof Error ? error.message : String(error)}`,
@@ -221,30 +228,43 @@ export class SidebarManager extends BaseSidebarManager {
           window.activeSidebarManager = this;
         }
 
-        // Check if MCP is enabled from persistent state before showing sidebar
+        // Check MCP state and sidebar visibility preference separately
         const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
-        const mcpEnabled = zustandState.state?.mcpEnabled ?? false;
-        
-        logMessage(`[SidebarManager] MCP enabled from persisted state: ${mcpEnabled}`);
-        
-        if (mcpEnabled) {
-          // MCP is enabled, so show the sidebar
-          logMessage('[SidebarManager] MCP is enabled, showing sidebar');
-          // Initialize with collapsed state to restore preferences including push mode
-          await this.initializeCollapsedStateWithErrorHandling();
-          logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
-        } else {
-          // MCP is disabled, ensure sidebar is hidden but still initialize for later use
-          logMessage('[SidebarManager] MCP is disabled, initializing sidebar but keeping it hidden');
-          // Initialize without showing the sidebar
-          await this.safeInitialize();
-          // Keep sidebar hidden
+        const mcpEnabled = zustandState.state?.mcpEnabled ?? true; // Default to enabled for first-time users
+
+        // Check if sidebar visibility state exists in storage
+        // If it doesn't exist (first-time user), default to true
+        // If it exists, use the stored value
+        const sidebarState = zustandState.state?.sidebar;
+        const lastVisibleState = sidebarState && typeof sidebarState.isVisible === 'boolean'
+          ? sidebarState.isVisible
+          : true; // Default to true only for first-time users
+
+        logMessage(`[SidebarManager] MCP enabled: ${mcpEnabled}, Last visibility state: ${lastVisibleState}, Storage exists: ${!!sidebarState}`);
+
+        if (!mcpEnabled) {
+          // MCP is disabled - don't initialize sidebar at all
+          logMessage('[SidebarManager] MCP is disabled, skipping sidebar initialization');
+          return;
+        }
+
+        // MCP is enabled - always initialize and render sidebar (MCP functionality needs React component)
+        // Just control visibility with CSS
+        logMessage('[SidebarManager] MCP is enabled, initializing sidebar...');
+        await this.initializeCollapsedStateWithErrorHandling();
+
+        // Now control visibility based on user preference
+        if (!lastVisibleState) {
+          // User wants sidebar UI hidden - hide it but keep it functional
+          logMessage('[SidebarManager] Hiding sidebar UI (MCP still active in background)');
           if (this.shadowHost) {
             this.shadowHost.style.display = 'none';
             this.shadowHost.style.opacity = '0';
             this._isVisible = false;
           }
-          logMessage('[SidebarManager] Sidebar initialized but kept hidden due to MCP being disabled');
+          logMessage('[SidebarManager] Sidebar UI hidden (MCP active in background)');
+        } else {
+          logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
         }
       } catch (error) {
         logMessage(
@@ -315,8 +335,9 @@ export class SidebarManager extends BaseSidebarManager {
       }
       this._isVisible = true;
 
-      // CRITICAL FIX: Sync Zustand store with actual visibility state
-      this.syncZustandVisibilityState(true);
+      // REMOVED: Don't sync visibility state here - we're reading it, not setting it
+      // The visibility state should only be updated when user explicitly toggles
+      // this.syncZustandVisibilityState(true);
 
       // Set push content mode with appropriate width immediately
       if (isPushMode) {
@@ -402,8 +423,9 @@ export class SidebarManager extends BaseSidebarManager {
         this.shadowHost.classList.add('initialized');
         this._isVisible = true;
 
-        // Sync Zustand store with actual visibility state
-        this.syncZustandVisibilityState(true);
+        // REMOVED: Don't sync visibility state during fallback initialization
+        // We should respect the stored state, not overwrite it
+        // this.syncZustandVisibilityState(true);
 
         // Single render call with error protection
         setTimeout(() => {
