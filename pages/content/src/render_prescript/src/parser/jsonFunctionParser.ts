@@ -53,6 +53,58 @@ const parseJSONLine = (line: string): JSONFunctionLine | null => {
 };
 
 /**
+ * Reconstruct complete JSON objects from pretty-printed multi-line format
+ * Converts multi-line formatted JSON into compact single-line JSON objects
+ *
+ * Example input:
+ *   {
+ *     "type": "function_call_start",
+ *     "name": "foo"
+ *   }
+ *
+ * Example output:
+ *   {"type": "function_call_start", "name": "foo"}
+ */
+function reconstructJSONObjects(lines: string[]): string[] {
+  const reconstructed: string[] = [];
+  let currentObject = '';
+  let braceDepth = 0;
+  let inObject = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue; // Skip empty lines
+
+    // Count braces to track object boundaries
+    for (const char of trimmed) {
+      if (char === '{') {
+        braceDepth++;
+        inObject = true;
+      } else if (char === '}') {
+        braceDepth--;
+      }
+    }
+
+    // Accumulate lines for current object (join with space)
+    currentObject += (currentObject ? ' ' : '') + trimmed;
+
+    // When braces balance back to 0, we have a complete object
+    if (inObject && braceDepth === 0) {
+      reconstructed.push(currentObject);
+      currentObject = '';
+      inObject = false;
+    }
+  }
+
+  // If there's leftover content (incomplete object), add it
+  if (currentObject.trim()) {
+    reconstructed.push(currentObject);
+  }
+
+  return reconstructed;
+}
+
+/**
  * Check if content contains JSON-style function calls
  * Returns detailed information about the JSON function call state
  */
@@ -129,8 +181,59 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
   };
 
   // Parse line by line
-  const lines = content.split('\n');
+  let lines = content.split('\n');
   let hasPartialJSON = false;
+
+  // Detect if JSON objects are on a single line (multiple objects without newlines)
+  // Example: json {"type": "function_call_start"} {"type": "description"} {"type": "parameter"}
+  const isSingleLineFormat = lines.length === 1 && (content.match(/\{/g) || []).length > 1;
+
+  // Detect pretty-printed JSON (objects span multiple lines with indentation)
+  // Example:
+  // {
+  //   "type": "function_call_start",
+  //   "name": "foo"
+  // }
+  const isPrettyPrinted = lines.length > 1 &&
+                         (content.includes('{\n') || content.includes('{ \n') ||
+                          lines.some(line => line.trim() === '{'));
+
+  if (isSingleLineFormat) {
+    if (CONFIG.debug) {
+      console.debug('[JSON Parser] Detected single-line multiple JSON objects format');
+    }
+
+    // Split by "} {" pattern to separate individual JSON objects
+    // Use regex to handle optional whitespace between objects
+    const splitContent = content.split(/\}\s*\{/);
+
+    lines = splitContent.map((part, index, array) => {
+      // First object: add closing brace
+      if (index === 0) return part + '}';
+      // Last object: add opening brace
+      if (index === array.length - 1) return '{' + part;
+      // Middle objects: add both braces
+      return '{' + part + '}';
+    });
+
+    if (CONFIG.debug) {
+      console.debug('[JSON Parser] Split into', lines.length, 'separate JSON objects');
+    }
+  } else if (isPrettyPrinted) {
+    if (CONFIG.debug) {
+      console.debug('[JSON Parser] Detected pretty-printed multi-line JSON format');
+    }
+
+    // Reconstruct complete JSON objects from multi-line format
+    lines = reconstructJSONObjects(lines);
+
+    if (CONFIG.debug) {
+      console.debug('[JSON Parser] Reconstructed into', lines.length, 'compact JSON objects');
+      if (lines.length > 0) {
+        console.debug('[JSON Parser] First reconstructed object:', lines[0].substring(0, 100));
+      }
+    }
+  }
 
   for (const line of lines) {
     const parsed = parseJSONLine(line);

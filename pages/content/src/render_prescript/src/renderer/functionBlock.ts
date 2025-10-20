@@ -1384,7 +1384,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
         fontSize: '12px',
         color: 'inherit',
         marginTop: '4px',
-        fontStyle: 'italic',
+        fontStyle: 'bold',
         lineHeight: '1.4',
         display: 'block',
         opacity: '0.8',
