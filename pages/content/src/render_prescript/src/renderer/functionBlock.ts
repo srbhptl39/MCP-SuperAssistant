@@ -532,7 +532,6 @@ const injectStreamingStyles = (() => {
         transform: translate3d(0, 0, 0);
         backface-visibility: hidden;
         contain: layout style;
-        margin-left: 8px;
       }
       
       .function-block.theme-dark .spinner {
@@ -776,14 +775,25 @@ const BlockElementUtils = {
     const functionNameElement = DOMUtils.createElement<HTMLDivElement>('div', 'function-name');
 
     const leftSection = DOMUtils.createElement<HTMLDivElement>('div', 'function-name-left');
+
+    // Create a container for function name and spinner (inline)
+    const functionNameRow = DOMUtils.createElement<HTMLDivElement>('div', 'function-name-row');
+    DOMUtils.applyStyles(functionNameRow, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+    });
+
     const functionNameText = DOMUtils.createElement<HTMLSpanElement>('span', 'function-name-text');
     functionNameText.textContent = functionName;
-    leftSection.appendChild(functionNameText);
+    functionNameRow.appendChild(functionNameText);
 
     if (!isComplete && !isPreExistingIncomplete) {
       const spinner = DOMUtils.createElement<HTMLDivElement>('div', 'spinner');
-      leftSection.appendChild(spinner);
+      functionNameRow.appendChild(spinner);
     }
+
+    leftSection.appendChild(functionNameRow);
 
     const rightSection = DOMUtils.createElement<HTMLDivElement>('div', 'function-name-right');
 
