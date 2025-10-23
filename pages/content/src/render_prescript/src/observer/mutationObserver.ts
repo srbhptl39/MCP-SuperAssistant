@@ -230,9 +230,12 @@ export const startDirectMonitoring = (): void => {
                 element.textContent.includes('<function_calls>') ||
                 element.textContent.includes('<invoke');
 
+              // Be lenient for JSON - allow partial/streaming content
+              const looksLikeJSONStart = element.textContent.trim().startsWith('{');
               const hasJSONPattern =
-                element.textContent.includes('"type"') &&
-                (element.textContent.includes('function_call') || element.textContent.includes('parameter'));
+                (element.textContent.includes('"type"') &&
+                  (element.textContent.includes('function_call') || element.textContent.includes('parameter'))) ||
+                (looksLikeJSONStart && element.textContent.length < 50);
 
               if (hasXMLPattern || hasJSONPattern) {
                 potentialFunctionCall = true;
@@ -257,9 +260,12 @@ export const startDirectMonitoring = (): void => {
               textContent.includes('<function_calls>') ||
               textContent.includes('<invoke');
 
+            // Be lenient for JSON - allow partial/streaming content
+            const looksLikeJSONStart = textContent.trim().startsWith('{');
             const hasJSONPattern =
-              textContent.includes('"type"') &&
-              (textContent.includes('function_call') || textContent.includes('parameter'));
+              (textContent.includes('"type"') &&
+                (textContent.includes('function_call') || textContent.includes('parameter'))) ||
+              (looksLikeJSONStart && textContent.length < 50);
 
             if (hasXMLPattern || hasJSONPattern) {
               potentialFunctionCall = true;
@@ -276,9 +282,13 @@ export const startDirectMonitoring = (): void => {
           textContent.includes('<function_calls>') ||
           textContent.includes('<invoke');
 
+        // Be lenient for JSON detection - allow partial/streaming content
+        // Check if it looks like JSON start, not just complete patterns
+        const looksLikeJSONStart = textContent.trim().startsWith('{') || textContent.trim().startsWith('[');
         const hasJSONPattern =
-          textContent.includes('"type"') &&
-          (textContent.includes('function_call') || textContent.includes('parameter'));
+          (textContent.includes('"type"') &&
+            (textContent.includes('function_call') || textContent.includes('parameter'))) ||
+          (looksLikeJSONStart && textContent.length < 50); // Allow short JSON-like content
 
         if (hasXMLPattern || hasJSONPattern) {
           potentialFunctionCall = true;

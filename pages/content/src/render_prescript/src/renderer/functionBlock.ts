@@ -1180,13 +1180,23 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   // Early exit checks
   if (!functionInfo.hasFunctionCalls || block.closest('.function-block')) {
     if (CONFIG.debug && !functionInfo.hasFunctionCalls) {
-      console.debug('[Render] Early exit - no function calls detected');
+      const textContent = block.textContent?.trim() || '';
+      if (textContent.length === 0) {
+        console.debug('[Render] Skipping empty block - waiting for content');
+      } else if (textContent.length < 10) {
+        console.debug('[Render] Skipping very short content - waiting for more data');
+      } else {
+        console.debug('[Render] Early exit - no function calls detected');
+      }
     }
     return false;
   }
 
   const textContent = block.textContent?.trim() || '';
   if (textContent.length < 10) {
+    if (CONFIG.debug) {
+      console.debug('[Render] Skipping block with insufficient content (length:', textContent.length, ')');
+    }
     return false;
   }
 

@@ -153,6 +153,11 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   // Generate instructions with custom instructions - memoized to prevent excessive calls
   const generateCurrentInstructions = useCallback(() => {
     // return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
+
+    if (adapter.name === 'OpenRouterAdapter') {
+      return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
+    }
+
     return generateInstructionsJson(enabledTools, customInstructions, customInstructionsEnabled);
   }, [enabledTools, customInstructions, customInstructionsEnabled]);
 

@@ -377,7 +377,7 @@ export const renderFunctionResult = (block: HTMLElement, isProcessingRef: { curr
     let content = block.textContent || '';
 
     // Check if it contains MCP SuperAssistant system message tags
-    if (content.includes('<SYSTEM>') || content.includes('</SYSTEM>')) {
+    if (content.includes('<SYSTEM>') || content.includes('</SYSTEM>') || content.includes('<system>') || content.includes('</system>')) {
       // Extract content between SYSTEM tags
       const systemMatch = content;
       if (systemMatch) {

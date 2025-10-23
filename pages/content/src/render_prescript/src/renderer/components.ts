@@ -235,7 +235,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
   // Create toggle button with optimized element creation
   const toggleBtn = createOptimizedElement('button', {
     className: 'raw-toggle',
-    innerHTML: `${ICONS.CODE}<span>Show Raw XML</span>`,
+    innerHTML: `${ICONS.CODE}<span>Show Raw Info</span>`,
     styles: {
       display: 'flex',
       alignItems: 'center',
@@ -255,7 +255,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
     // Use requestAnimationFrame for smooth visual updates
     requestAnimationFrame(() => {
       rawXmlContainer.style.display = isVisible ? 'block' : 'none';
-      textSpan.textContent = isVisible ? 'Hide Raw XML' : 'Show Raw XML';
+      textSpan.textContent = isVisible ? 'Hide Raw Info' : 'Show Raw Info';
     });
   };
 
