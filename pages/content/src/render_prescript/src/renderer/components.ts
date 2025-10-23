@@ -4,7 +4,7 @@ import { CONFIG } from '../core/config';
 import { safelySetContent } from '../utils/index';
 import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/storage';
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
-import { extractJSONParameters } from '../parser/jsonFunctionParser';
+import { extractJSONParameters, stripLanguageTags } from '../parser/jsonFunctionParser';
 
 // Add type declarations for the global adapter and mcpClient access
 declare global {
@@ -598,9 +598,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
     let extractedCallId: string | null = null;
     for (const line of lines) {
       try {
-        let trimmed = line.trim();
-        // Strip language tags and copy-code prefixes that might appear before JSON
-        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+        const trimmed = stripLanguageTags(line);
         if (!trimmed) continue;
 
         const parsed = JSON.parse(trimmed);
@@ -825,11 +823,7 @@ const extractFunctionName = (rawContent: string): string | null => {
     const lines = rawContent.split('\n');
     for (const line of lines) {
       try {
-        let trimmed = line.trim();
-        if (!trimmed) continue;
-
-        // Strip language tags and copy-code prefixes that might appear before JSON
-        trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+        const trimmed = stripLanguageTags(line);
         if (!trimmed) continue;
 
         const parsed = JSON.parse(trimmed);

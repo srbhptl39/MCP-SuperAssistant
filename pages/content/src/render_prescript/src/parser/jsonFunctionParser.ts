@@ -36,7 +36,7 @@ const parseJSONLine = (line: string): JSONFunctionLine | null => {
 
     // Strip language tags and copy-code prefixes that might appear before JSON
     // Examples: "json{...}", "jsonCopy code{...}", "javascriptCopy{...}"
-    const cleaned = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+    const cleaned = stripLanguageTags(trimmed);
     if (!cleaned) return null;
 
     const parsed = JSON.parse(cleaned);
@@ -50,6 +50,31 @@ const parseJSONLine = (line: string): JSONFunctionLine | null => {
   } catch (e) {
     return null;
   }
+};
+
+/**
+ * Strip Language tags and prefixes from a line
+ * Handles various formats:
+ * - Language identifiers: json, jsonl, javascript, typescript, python, etc.
+ * - Copy code buttons: "Copy code", "copy", etc.
+ * - Combined formats: "jsonCopy code", "javascriptcopy", etc.
+ * - Markdown code fence indicators: ```json, ```javascript, etc.
+ * - Multiple spaces and case variations
+ */
+export const stripLanguageTags = (line: string): string => {
+  const trimmed = line.trim();
+
+  // First, strip markdown code fence markers (```)
+  let cleaned = trimmed.replace(/^```\s*(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh|xml|html|css|sql|yaml|yml|toml|ini|markdown|md|go|rust|java|c|cpp|csharp|cs|php|ruby|rb|swift|kotlin|scala|r|perl|lua|shell)?\s*/i, '');
+
+  // Then strip language tags with optional "copy" or "copy code" suffix
+  // Supports: json, jsonCopy, json Copy, json copy code, jsonCopycode, etc.
+  cleaned = cleaned.replace(/^(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh|xml|html|css|sql|yaml|yml|toml|ini|markdown|md|go|rust|java|c|cpp|csharp|cs|php|ruby|rb|swift|kotlin|scala|r|perl|lua|shell)(\s*copy(\s*code)?)?\s*/i, '');
+
+  // Strip standalone "copy" or "copy code" buttons that might remain
+  cleaned = cleaned.replace(/^copy(\s+code)?\s*/i, '');
+
+  return cleaned;
 };
 
 /**
@@ -319,7 +344,7 @@ export const extractJSONFunctionInfo = (content: string): {
       // Try to extract from partial JSON line
       let trimmed = line.trim();
       // Strip language tags and copy-code prefixes before checking
-      trimmed = trimmed.replace(/^(json|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+      trimmed = trimmed.replace(/^(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
 
       if (trimmed.startsWith('{') && trimmed.includes('"type"') && trimmed.includes('function_call_start')) {
         // Try to extract name from partial JSON
