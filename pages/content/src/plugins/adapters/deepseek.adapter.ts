@@ -29,7 +29,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current DeepSeek interface
   private readonly selectors = {
     // Primary chat input selector - DeepSeek uses textarea elements
-    CHAT_INPUT: 'textarea[spellcheck="false"], textarea[data-gramm="false"], textarea[placeholder*="Ask"], textarea.chat-input, div[contenteditable="true"]',
+    CHAT_INPUT: 'textarea[spellcheck="false"], textarea[data-gramm="false"], textarea[placeholder*="Ask"], textarea[placeholder*="Message DeepSeek"], textarea.chat-input, div[contenteditable="true"]',
     // Submit button selectors (multiple fallbacks)
     SUBMIT_BUTTON: 'button[aria-label*="Send"], button[data-testid="send-button"], button.send-button, svg.send-icon',
     // File upload related selectors

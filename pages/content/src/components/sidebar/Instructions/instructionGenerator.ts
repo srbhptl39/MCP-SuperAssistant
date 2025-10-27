@@ -72,7 +72,8 @@ The instructions regarding \'call_id="$CALL_ID">
 
 You can invoke one or more functions by writing a "<function_calls>" block like the following as part of your reply to the user, MAKE SURE TO INVOKE ONLY ONE FUNCTION AT A TIME, meaning only one \'<function_calls>\' tag in your output :
 
-<Example>
+<example_function_call>
+### Add New Line Here
 \`\`\`xml
 <function_calls>
 <invoke name="$FUNCTION_NAME" call_id="$CALL_ID">
@@ -82,7 +83,7 @@ You can invoke one or more functions by writing a "<function_calls>" block like 
 </invoke>
 </function_calls>
 \`\`\`
-</Example>
+</example_function_call>
 
 String and scalar parameters should be specified as is, while lists and objects should use JSON format. Note that spaces for string values are not stripped. The output is not expected to be valid XML and is parsed with regular expressions.
 
