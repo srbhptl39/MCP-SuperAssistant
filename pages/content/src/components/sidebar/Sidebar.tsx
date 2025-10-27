@@ -14,7 +14,11 @@ import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } fr
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
 import type { UserPreferences } from '@src/types/stores';
+import { createLogger } from '@extension/shared/lib/logger';
 // Debug helper function to check if activeSidebarManager is available
+
+const logger = createLogger('Sidebar');
+
 const checkActiveSidebarManager = (): boolean => {
   const available = !!(window as any).activeSidebarManager;
   logMessage(`[Sidebar] checkActiveSidebarManager: ${available}`);
@@ -386,7 +390,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   //       }
   //     } catch (error) {
   //       // If getMasterToolDict fails, just log the error
-  //       console.error("Error updating detected tools:", error);
+  //       logger.error("Error updating detected tools:", error);
   //     }
   //   };
 

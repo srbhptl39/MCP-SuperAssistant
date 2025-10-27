@@ -9,20 +9,24 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { applicationInit, applicationCleanup } from '../core/main-initializer';
 import { logMessage } from '../utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Simple logger for UI contexts
+
+const logger = createLogger('UILogger');
+
 class UILogger {
   constructor(private context: string) {}
   
   log(message: string, ...args: any[]): void {
     logMessage(`[${this.context}] ${message}`);
     if (args.length > 0) {
-      console.debug(...args);
+      logger.debug(...args);
     }
   }
   
   error(message: string, ...args: any[]): void {
-    console.error(`[${this.context}] ${message}`, ...args);
+    logger.error(`${message}`, ...args);
   }
 }
 
@@ -34,15 +38,15 @@ export async function initializeUIApplication(
   rootElementId: string = 'root',
   context: string = 'UI'
 ): Promise<void> {
-  const logger = new UILogger(context);
+
   
-  logger.log('UI application initialization started...');
+  logger.debug('UI application initialization started...');
   
   try {
     // Step 1: Initialize core application
-    logger.log('Initializing core application...');
+    logger.debug('Initializing core application...');
     await applicationInit();
-    logger.log('Core application initialized successfully.');
+    logger.debug('Core application initialized successfully.');
 
     // Step 2: Find root element
     const rootElement = document.getElementById(rootElementId);
@@ -51,7 +55,7 @@ export async function initializeUIApplication(
     }
 
     // Step 3: Create React root and render
-    logger.log('Creating React root and rendering application...');
+    logger.debug('Creating React root and rendering application...');
     const root = ReactDOM.createRoot(rootElement);
     
     // Use React.createElement instead of JSX to avoid TypeScript compilation issues
@@ -63,7 +67,7 @@ export async function initializeUIApplication(
       )
     );
     
-    logger.log('React UI rendered successfully.');
+    logger.debug('React UI rendered successfully.');
 
   } catch (error) {
     logger.error('Failed to initialize and render UI application:', error);
@@ -130,14 +134,14 @@ export function setupUICleanup(): void {
   // Note: This might not always run reliably for popups due to their lifecycle
   window.addEventListener('beforeunload', () => {
     applicationCleanup().catch(err => {
-      console.error('Error during UI cleanup:', err);
+      logger.error('Error during UI cleanup:', err);
     });
   });
 
   // For Chrome extension contexts, also listen for the page hiding
   window.addEventListener('pagehide', () => {
     applicationCleanup().catch(err => {
-      console.error('Error during page hide cleanup:', err);
+      logger.error('Error during page hide cleanup:', err);
     });
   });
 }

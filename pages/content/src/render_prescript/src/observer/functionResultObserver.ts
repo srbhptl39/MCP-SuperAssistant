@@ -1,7 +1,11 @@
 import { CONFIG } from '../core/config';
 import { renderFunctionResult, processedResultElements } from '../renderer/functionResult';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // State for processing and observers
+
+const logger = createLogger('FunctionResultObserver');
+
 const isProcessing = false;
 let functionResultObserver: MutationObserver | null = null;
 
@@ -41,7 +45,7 @@ export const checkForUnprocessedFunctionResults = (): number => {
   }
 
   if (CONFIG.debug && processedCount > 0) {
-    console.debug(`Processed ${processedCount} function results`);
+    logger.debug(`Processed ${processedCount} function results`);
   }
 
   return processedCount;
@@ -78,7 +82,7 @@ const getTargetElements = (): HTMLElement[] => {
         handleMultiClassSelector(selector, elements);
       }
     } catch (e) {
-      console.error(`Invalid selector: ${selector}`, e);
+      logger.error(`Invalid selector: ${selector}`, e);
       // Try alternative approach for complex selectors
       if (selector.includes('.')) {
         handleFallbackSelector(selector, elements);
@@ -152,7 +156,7 @@ const handleMultiClassSelector = (selector: string, elements: HTMLElement[]): vo
  */
 const handleFallbackSelector = (selector: string, elements: HTMLElement[]): void => {
   if (CONFIG.debug) {
-    console.debug(`Using fallback method for selector: ${selector}`);
+    logger.debug(`Using fallback method for selector: ${selector}`);
   }
 
   // Try to extract the element type and classes
@@ -191,7 +195,7 @@ const handleDomChanges = (): void => {
 export const startFunctionResultMonitoring = (): void => {
   if (!CONFIG.function_result_selector || CONFIG.function_result_selector.length === 0) {
     if (CONFIG.debug) {
-      console.debug('Function result monitoring disabled: no selectors configured');
+      logger.debug('Function result monitoring disabled: no selectors configured');
     }
     return;
   }
@@ -201,7 +205,7 @@ export const startFunctionResultMonitoring = (): void => {
   }
 
   if (CONFIG.debug) {
-    console.debug('Starting function result monitoring');
+    logger.debug('Starting function result monitoring');
   }
 
   // Initial processing
@@ -273,7 +277,7 @@ export const startFunctionResultMonitoring = (): void => {
 
     if (shouldProcess) {
       if (potentialFunctionResult && CONFIG.debug) {
-        console.debug('Potential function result detected, processing DOM changes');
+        logger.debug('Potential function result detected, processing DOM changes');
       }
       handleDomChanges();
     }
@@ -288,7 +292,7 @@ export const startFunctionResultMonitoring = (): void => {
   });
 
   if (CONFIG.debug) {
-    console.debug('Function result monitoring started');
+    logger.debug('Function result monitoring started');
   }
 };
 
@@ -301,7 +305,7 @@ export const stopFunctionResultMonitoring = (): void => {
     functionResultObserver = null;
 
     if (CONFIG.debug) {
-      console.debug('Function result monitoring stopped');
+      logger.debug('Function result monitoring stopped');
     }
   }
 };
@@ -312,7 +316,7 @@ export const stopFunctionResultMonitoring = (): void => {
 export const initializeFunctionResultObserver = (): void => {
   if (!CONFIG.function_result_selector || CONFIG.function_result_selector.length === 0) {
     if (CONFIG.debug) {
-      console.debug('Function result observer not initialized: no selectors configured');
+      logger.debug('Function result observer not initialized: no selectors configured');
     }
     return;
   }

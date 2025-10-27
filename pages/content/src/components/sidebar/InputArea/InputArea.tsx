@@ -4,6 +4,10 @@ import { useState } from 'react';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('InputArea');
 
 interface InputAreaProps {
   onSubmit: (text: string) => void;
@@ -28,7 +32,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSubmit, onToggleMinimize }) => 
         await new Promise(resolve => setTimeout(resolve, 100));
         setInputText('');
       } catch (error) {
-        console.error('Error submitting input:', error);
+        logger.error('Error submitting input:', error);
       } finally {
         setIsSubmitting(false);
       }

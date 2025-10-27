@@ -4,6 +4,10 @@ import type { RegistryEvents } from '../types/events.js';
 import { SSEPlugin } from '../plugins/sse/SSEPlugin.js';
 import { WebSocketPlugin } from '../plugins/websocket/WebSocketPlugin.js';
 import { StreamableHttpPlugin } from '../plugins/streamable-http/StreamableHttpPlugin.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('PluginRegistry');
 
 export class PluginRegistry extends EventEmitter<RegistryEvents> {
   private plugins = new Map<TransportType, ITransportPlugin>();
@@ -11,19 +15,18 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
 
   constructor() {
     super();
-    console.log('[PluginRegistry] Initialized');
+    logger.debug('[PluginRegistry] Initialized');
   }
 
   async register(plugin: ITransportPlugin): Promise<void> {
     const { transportType } = plugin.metadata;
 
     if (this.plugins.has(transportType)) {
-      console.warn(`[PluginRegistry] Plugin for transport '${transportType}' already registered, replacing`);
+      logger.warn(`Plugin for transport '${transportType}' already registered, replacing`);
     }
 
     this.plugins.set(transportType, plugin);
-    console.log(
-      `[PluginRegistry] Registered plugin: ${plugin.metadata.name} v${plugin.metadata.version} (${transportType})`,
+    logger.debug(`Registered plugin: ${plugin.metadata.name} v${plugin.metadata.version} (${transportType})`,
     );
 
     this.emit('registry:plugin-registered', { plugin });
@@ -37,7 +40,7 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
 
     this.plugins.delete(type);
     this.initialized.delete(type);
-    console.log(`[PluginRegistry] Unregistered plugin for transport: ${type}`);
+    logger.debug(`Unregistered plugin for transport: ${type}`);
 
     this.emit('registry:plugin-unregistered', { type });
     return true;
@@ -58,7 +61,7 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
       const pluginConfig = config || plugin.getDefaultConfig();
       await plugin.initialize(pluginConfig);
       this.initialized.add(type);
-      console.log(`[PluginRegistry] Initialized plugin: ${type}`);
+      logger.debug(`Initialized plugin: ${type}`);
     }
 
     return plugin;
@@ -94,7 +97,7 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
   }
 
   async loadDefaultPlugins(): Promise<void> {
-    console.log('[PluginRegistry] Loading default plugins...');
+    logger.debug('[PluginRegistry] Loading default plugins...');
 
     try {
       // Use static imports - plugins are imported at the top of the file
@@ -103,11 +106,11 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
       await this.register(new StreamableHttpPlugin());
 
       const loadedCount = this.plugins.size;
-      console.log(`[PluginRegistry] Loaded ${loadedCount} default plugins`);
+      logger.debug(`Loaded ${loadedCount} default plugins`);
 
       this.emit('registry:plugins-loaded', { count: loadedCount });
     } catch (error) {
-      console.error('[PluginRegistry] Failed to load default plugins:', error);
+      logger.error('[PluginRegistry] Failed to load default plugins:', error);
       throw new Error(`Failed to load default plugins: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -115,7 +118,7 @@ export class PluginRegistry extends EventEmitter<RegistryEvents> {
   clear(): void {
     this.plugins.clear();
     this.initialized.clear();
-    console.log('[PluginRegistry] Cleared all plugins');
+    logger.debug('[PluginRegistry] Cleared all plugins');
   }
 
   getStats(): {

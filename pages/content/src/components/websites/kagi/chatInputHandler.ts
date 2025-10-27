@@ -5,8 +5,12 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Cache for the last found input element to improve reliability
+
+const logger = createLogger('KagiChatInputHandler');
+
 let lastFoundInputElement: HTMLElement | null = null;
 
 /**
@@ -88,7 +92,7 @@ export const insertTextToChatInput = (text: string): boolean => {
 
     if (!chatInput) {
       logMessage('Could not find Kagi input element');
-      console.error('Could not find Kagi input element');
+      logger.error('Could not find Kagi input element');
       return false;
     }
 
@@ -195,7 +199,7 @@ export const insertTextToChatInput = (text: string): boolean => {
     }
   } catch (error) {
     logMessage(`Error inserting text into Kagi input: ${error}`);
-    console.error('Error inserting text into Kagi input:', error);
+    logger.error('Error inserting text into Kagi input:', error);
     return false;
   }
 };
@@ -240,7 +244,7 @@ export const attachFileToChatInput = (file: File): boolean => {
     return true;
   } catch (error) {
     logMessage(`Error attaching file to Kagi chat: ${error}`);
-    console.error('Error attaching file to Kagi chat:', error);
+    logger.error('Error attaching file to Kagi chat:', error);
     return false;
   }
 };
@@ -280,7 +284,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
       const button = document.querySelector(selector);
       if (button && button instanceof HTMLElement) {
         submitButton = button;
-        // console.debug(submitButton)
+        // logger.debug(submitButton)
         break;
       }
     }
@@ -347,7 +351,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
     });
   } catch (error) {
     logMessage(`Error submitting Kagi chat input: ${error}`);
-    console.error('Error submitting Kagi chat input:', error);
+    logger.error('Error submitting Kagi chat input:', error);
     return false;
   }
 };

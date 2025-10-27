@@ -5,11 +5,15 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Find the Perplexity chat input textarea element
  * @returns The chat input textarea element or null if not found
  */
+
+const logger = createLogger('PerplexityChatInputHandler');
+
 export const findChatInputElement = (): HTMLTextAreaElement | null => {
   // Try to find the main "Ask anything..." input first
   let chatInput = document.querySelector('textarea[placeholder="Ask anything..."]');
@@ -86,13 +90,13 @@ export const insertTextToChatInput = (text: string): boolean => {
       return true;
     } else {
       logMessage('Could not find Perplexity chat input');
-      console.error('Could not find Perplexity chat input textarea');
+      logger.error('Could not find Perplexity chat input textarea');
       return false;
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error inserting text into chat input: ${errorMessage}`);
-    console.error('Error inserting text into chat input:', error);
+    logger.error('Error inserting text into chat input:', error);
     return false;
   }
 };
@@ -116,7 +120,7 @@ export const insertToolResultToChatInput = (result: any): boolean => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error formatting tool result: ${errorMessage}`);
-    console.error('Error formatting tool result:', error);
+    logger.error('Error formatting tool result:', error);
     return false;
   }
 };
@@ -209,7 +213,7 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error attaching file to Perplexity input: ${errorMessage}`);
-    console.error('Error attaching file to Perplexity input:', error);
+    logger.error('Error attaching file to Perplexity input:', error);
     return false;
   }
 };
@@ -282,7 +286,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error submitting chat input: ${errorMessage}`);
-    console.error('Error submitting chat input:', error);
+    logger.error('Error submitting chat input:', error);
     return false;
   }
 };

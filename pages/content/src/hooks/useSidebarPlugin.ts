@@ -4,10 +4,14 @@ import { useSidebarState } from './useStores';
 import { pluginRegistry } from '../plugins/plugin-registry';
 import type { SidebarPlugin } from '../plugins/sidebar.plugin';
 import type { EventMap } from '../events/event-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Hook for interacting with the sidebar plugin
  */
+
+const logger = createLogger('useSidebarPlugin');
+
 export const useSidebarPlugin = () => {
   const [sidebarPlugin, setSidebarPlugin] = useState<SidebarPlugin | null>(null);
   const [isPluginActive, setIsPluginActive] = useState(false);
@@ -84,7 +88,7 @@ export const useSidebarPlugin = () => {
       try {
         await pluginRegistry.activatePlugin('sidebar-plugin');
       } catch (error) {
-        console.error('[useSidebarPlugin] Failed to activate sidebar plugin:', error);
+        logger.error('[useSidebarPlugin] Failed to activate sidebar plugin:', error);
       }
     }
   }, [sidebarPlugin, isPluginActive]);
@@ -95,7 +99,7 @@ export const useSidebarPlugin = () => {
       try {
         await pluginRegistry.deactivateCurrentPlugin();
       } catch (error) {
-        console.error('[useSidebarPlugin] Failed to deactivate sidebar plugin:', error);
+        logger.error('[useSidebarPlugin] Failed to deactivate sidebar plugin:', error);
       }
     }
   }, [sidebarPlugin, isPluginActive]);
@@ -208,7 +212,7 @@ export const useSidebarPluginManagement = () => {
         priority: 1, // High priority for core functionality
       });
     } catch (error) {
-      console.error('[useSidebarPluginManagement] Failed to register sidebar plugin:', error);
+      logger.error('[useSidebarPluginManagement] Failed to register sidebar plugin:', error);
       throw error;
     }
   }, []);
@@ -217,7 +221,7 @@ export const useSidebarPluginManagement = () => {
     try {
       await pluginRegistry.unregister('sidebar-plugin');
     } catch (error) {
-      console.error('[useSidebarPluginManagement] Failed to unregister sidebar plugin:', error);
+      logger.error('[useSidebarPluginManagement] Failed to unregister sidebar plugin:', error);
       throw error;
     }
   }, []);

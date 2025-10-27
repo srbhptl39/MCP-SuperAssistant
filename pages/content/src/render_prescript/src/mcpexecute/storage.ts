@@ -5,6 +5,10 @@
  */
 
 // Define the interface for stored function execution data
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('STORAGE_KEY');
+
 export interface ExecutedFunction {
   functionName: string; // Name of the executed function
   callId: string; // Unique ID for the function call
@@ -76,16 +80,16 @@ export const storeExecutedFunction = (
         retries++;
         // Short delay before retrying
         if (retries < maxRetries) {
-          console.warn(`Storage write failed, retrying (${retries}/${maxRetries})`);
+          logger.warn(`Storage write failed, retrying (${retries}/${maxRetries})`);
         }
       }
     }
 
     if (!saved) {
-      console.error('Failed to store executed function after multiple attempts');
+      logger.error('Failed to store executed function after multiple attempts');
     }
   } catch (error) {
-    console.error('Failed to store executed function:', error);
+    logger.error('Failed to store executed function:', error);
   }
 
   return executionRecord;
@@ -108,7 +112,7 @@ const getURLBasedStorage = (): URLBasedFunctionHistory => {
     const storedData = localStorage.getItem(STORAGE_KEY);
     return storedData ? JSON.parse(storedData) : {};
   } catch (error) {
-    console.error('Failed to retrieve URL-based function history:', error);
+    logger.error('Failed to retrieve URL-based function history:', error);
     return {};
   }
 };
@@ -135,7 +139,7 @@ export const getExecutedFunctions = (): (ExecutedFunction & { url: string })[] =
 
     return result;
   } catch (error) {
-    console.error('Failed to retrieve executed functions:', error);
+    logger.error('Failed to retrieve executed functions:', error);
     return [];
   }
 };
@@ -254,7 +258,7 @@ export const generateContentSignature = (functionName: string, params: Record<st
     }
     return hash.toString(16);
   } catch (error) {
-    console.error('Failed to generate content signature:', error);
+    logger.error('Failed to generate content signature:', error);
     // Fallback to timestamp if hashing fails
     return Date.now().toString(16);
   }

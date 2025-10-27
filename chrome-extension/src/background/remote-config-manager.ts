@@ -1,4 +1,8 @@
 import { firebaseRemoteConfigAPI, validateConfigContent } from './firebase-remote-config-api';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('RemoteConfigManager');
 
 export class RemoteConfigManager {
   private isInitialized = false;
@@ -9,7 +13,7 @@ export class RemoteConfigManager {
 
   async initialize(): Promise<void> {
     try {
-      console.log('[RemoteConfigManager] Initializing Remote Config Manager...');
+      logger.debug('[RemoteConfigManager] Initializing Remote Config Manager...');
       
       // Initialize the Firebase Remote Config API
       await firebaseRemoteConfigAPI.initialize();
@@ -21,10 +25,10 @@ export class RemoteConfigManager {
       this.startPeriodicFetch();
       
       this.isInitialized = true;
-      console.log('[RemoteConfigManager] Remote Config Manager initialized successfully');
+      logger.debug('[RemoteConfigManager] Remote Config Manager initialized successfully');
       
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to initialize:', error);
+      logger.error('[RemoteConfigManager] Failed to initialize:', error);
       throw error;
     }
   }
@@ -36,11 +40,11 @@ export class RemoteConfigManager {
       const minInterval = 3600000; // 1 hour - hardcoded since we can't access remoteConfig.settings
       
       if (!force && this.lastFetchTime && (now - this.lastFetchTime) < minInterval) {
-        console.debug('[RemoteConfigManager] Skipping fetch due to minimum interval');
+        logger.debug('[RemoteConfigManager] Skipping fetch due to minimum interval');
         return;
       }
 
-      console.log('[RemoteConfigManager] Fetching remote config...');
+      logger.debug('[RemoteConfigManager] Fetching remote config...');
 
       // Fetch and activate using our service worker compatible API
       await firebaseRemoteConfigAPI.fetchAndActivate(force);
@@ -55,20 +59,20 @@ export class RemoteConfigManager {
       // Reset retry count on success
       this.retryCount = 0;
       
-      console.log('[RemoteConfigManager] Remote config fetched successfully');
+      logger.debug('[RemoteConfigManager] Remote config fetched successfully');
       
       // Debug log: Show summary of what was fetched
       const allConfigs = firebaseRemoteConfigAPI.getAll();
       const remoteConfigCount = Object.values(allConfigs).filter(config => config.source === 'remote').length;
       const defaultConfigCount = Object.values(allConfigs).filter(config => config.source === 'default').length;
       
-      console.debug(`[RemoteConfigManager] Config summary: ${remoteConfigCount} remote values, ${defaultConfigCount} default values`);
+      logger.debug(`Config summary: ${remoteConfigCount} remote values, ${defaultConfigCount} default values`);
       
     } catch (error) {
       this.retryCount++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      console.error('[RemoteConfigManager] Failed to fetch config:', errorMessage);
+      logger.error('[RemoteConfigManager] Failed to fetch config:', errorMessage);
       
       // Retry logic with exponential backoff
       if (this.retryCount <= this.maxRetries) {
@@ -85,7 +89,7 @@ export class RemoteConfigManager {
       const allConfigs = firebaseRemoteConfigAPI.getAll();
       
       // Debug log: Show all available configuration
-      console.debug('[RemoteConfigManager] Processing configuration. Available configs:');
+      logger.debug('[RemoteConfigManager] Processing configuration. Available configs:');
       Object.entries(allConfigs).forEach(([key, configValue]) => {
         const value = configValue.value;
         const source = configValue.source;
@@ -99,7 +103,7 @@ export class RemoteConfigManager {
           // Keep as string if not JSON
         }
         
-        console.debug(`  ${key} (${source}):`, displayValue);
+        logger.debug(`  ${key} (${source}):`, displayValue);
       });
       
       // Process feature flags
@@ -115,7 +119,7 @@ export class RemoteConfigManager {
       await this.processVersionConfigurations(allConfigs);
       
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to process configuration:', error);
+      logger.error('[RemoteConfigManager] Failed to process configuration:', error);
       throw error;
     }
   }
@@ -132,11 +136,11 @@ export class RemoteConfigManager {
         if (validateConfigContent({ features })) {
           // Broadcast to content scripts
           await this.broadcastFeatureFlags(features);
-          console.log(`[RemoteConfigManager] Updated ${Object.keys(features).length} feature flags`);
+          logger.debug(`Updated ${Object.keys(features).length} feature flags`);
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to process feature flags:', error);
+      logger.error('[RemoteConfigManager] Failed to process feature flags:', error);
     }
   }
 
@@ -152,11 +156,11 @@ export class RemoteConfigManager {
         if (validateConfigContent({ notifications })) {
           // Broadcast to content scripts
           await this.broadcastNotifications(notifications);
-          console.log(`[RemoteConfigManager] Processed ${notifications.length} notifications`);
+          logger.debug(`Processed ${notifications.length} notifications`);
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to process notifications:', error);
+      logger.error('[RemoteConfigManager] Failed to process notifications:', error);
     }
   }
 
@@ -174,9 +178,9 @@ export class RemoteConfigManager {
           const unifiedConfigs = JSON.parse(adapterConfigsString);
           adapterConfigs = { ...unifiedConfigs };
           foundConfigs = true;
-          console.log(`[RemoteConfigManager] Found unified adapter_configs with ${Object.keys(unifiedConfigs).length} adapters`);
+          logger.debug(`Found unified adapter_configs with ${Object.keys(unifiedConfigs).length} adapters`);
         } catch (error) {
-          console.warn('[RemoteConfigManager] Failed to parse unified adapter_configs:', error);
+          logger.warn('[RemoteConfigManager] Failed to parse unified adapter_configs:', error);
         }
       }
 
@@ -184,7 +188,7 @@ export class RemoteConfigManager {
       const individualConfigKeys = Object.keys(allConfigs).filter(key => key.endsWith('_adapter_config'));
       
       if (individualConfigKeys.length > 0) {
-        console.log(`[RemoteConfigManager] Found ${individualConfigKeys.length} individual adapter config parameters:`, individualConfigKeys);
+        logger.debug(`Found ${individualConfigKeys.length} individual adapter config parameters:`, individualConfigKeys);
         
         for (const configKey of individualConfigKeys) {
           try {
@@ -194,10 +198,10 @@ export class RemoteConfigManager {
               const adapterName = configKey.replace('_adapter_config', '');
               adapterConfigs[adapterName] = config;
               foundConfigs = true;
-              console.log(`[RemoteConfigManager] Loaded individual config for adapter: ${adapterName}`);
+              logger.debug(`Loaded individual config for adapter: ${adapterName}`);
             }
           } catch (error) {
-            console.warn(`[RemoteConfigManager] Failed to parse ${configKey}:`, error);
+            logger.warn(`Failed to parse ${configKey}:`, error);
           }
         }
       }
@@ -206,34 +210,34 @@ export class RemoteConfigManager {
       if (foundConfigs && Object.keys(adapterConfigs).length > 0) {
         if (this.validateAdapterConfigs(adapterConfigs)) {
           await this.broadcastAdapterConfigs(adapterConfigs);
-          console.log(`[RemoteConfigManager] Processed and broadcasted ${Object.keys(adapterConfigs).length} adapter configurations`);
+          logger.debug(`Processed and broadcasted ${Object.keys(adapterConfigs).length} adapter configurations`);
         } else {
-          console.warn('[RemoteConfigManager] Adapter configs validation failed');
+          logger.warn('[RemoteConfigManager] Adapter configs validation failed');
         }
       } else {
-        console.debug('[RemoteConfigManager] No adapter configurations found');
+        logger.debug('[RemoteConfigManager] No adapter configurations found');
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to process adapter configurations:', error);
+      logger.error('[RemoteConfigManager] Failed to process adapter configurations:', error);
     }
   }
 
   private validateAdapterConfigs(configs: any): boolean {
     if (!configs || typeof configs !== 'object') {
-      console.warn('[RemoteConfigManager] Invalid adapter configs structure');
+      logger.warn('[RemoteConfigManager] Invalid adapter configs structure');
       return false;
     }
 
     // Validate each adapter config has required structure
     for (const [adapterName, config] of Object.entries(configs)) {
       if (!config || typeof config !== 'object') {
-        console.warn(`[RemoteConfigManager] Invalid config for adapter: ${adapterName}`);
+        logger.warn(`Invalid config for adapter: ${adapterName}`);
         continue;
       }
 
       const adapterConfig = config as any;
       if (!adapterConfig.selectors || !adapterConfig.ui) {
-        console.warn(`[RemoteConfigManager] Missing required fields for adapter: ${adapterName}`);
+        logger.warn(`Missing required fields for adapter: ${adapterName}`);
         continue;
       }
     }
@@ -256,11 +260,11 @@ export class RemoteConfigManager {
         if (validateConfigContent(versionConfig)) {
           // Broadcast version-specific config
           await this.broadcastVersionConfig(versionConfig);
-          console.log('[RemoteConfigManager] Applied version-specific configuration');
+          logger.debug('[RemoteConfigManager] Applied version-specific configuration');
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to process version configurations:', error);
+      logger.error('[RemoteConfigManager] Failed to process version configurations:', error);
     }
   }
 
@@ -281,12 +285,12 @@ export class RemoteConfigManager {
             });
           } catch (error) {
             // Tab may not have content script injected, ignore
-            console.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
+            logger.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
           }
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to broadcast feature flags:', error);
+      logger.error('[RemoteConfigManager] Failed to broadcast feature flags:', error);
     }
   }
 
@@ -307,12 +311,12 @@ export class RemoteConfigManager {
             });
           } catch (error) {
             // Tab may not have content script injected, ignore
-            console.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
+            logger.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
           }
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to broadcast notifications:', error);
+      logger.error('[RemoteConfigManager] Failed to broadcast notifications:', error);
     }
   }
 
@@ -335,14 +339,14 @@ export class RemoteConfigManager {
             broadcastCount++;
           } catch (error) {
             // Tab may not have content script injected, ignore
-            console.debug(`[RemoteConfigManager] Could not send adapter config message to tab ${tab.id}:`, error instanceof Error ? error.message : String(error));
+            logger.debug(`Could not send adapter config message to tab ${tab.id}:`, error instanceof Error ? error.message : String(error));
           }
         }
       }
       
-      console.log(`[RemoteConfigManager] Broadcasted adapter configs to ${broadcastCount} tabs`);
+      logger.debug(`Broadcasted adapter configs to ${broadcastCount} tabs`);
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to broadcast adapter configurations:', error);
+      logger.error('[RemoteConfigManager] Failed to broadcast adapter configurations:', error);
     }
   }
 
@@ -363,12 +367,12 @@ export class RemoteConfigManager {
             });
           } catch (error) {
             // Tab may not have content script injected, ignore
-            console.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
+            logger.debug('[RemoteConfigManager] Could not send message to tab:', tab.id);
           }
         }
       }
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to broadcast version config:', error);
+      logger.error('[RemoteConfigManager] Failed to broadcast version config:', error);
     }
   }
 
@@ -380,7 +384,7 @@ export class RemoteConfigManager {
 //       this.fetchConfig(true);
 //     }, 5000);
     
-//     console.debug('[RemoteConfigManager] Started periodic config fetching');
+//     logger.debug('[RemoteConfigManager] Started periodic config fetching');
 //   }
   private startPeriodicFetch(): void {
     // Fetch every 12 hours
@@ -388,14 +392,14 @@ export class RemoteConfigManager {
       this.fetchConfig(false);
     }, 12 * 60 * 60 * 1000);
     
-    console.debug('[RemoteConfigManager] Started periodic config fetching');
+    logger.debug('[RemoteConfigManager] Started periodic config fetching');
   }
 
   private stopPeriodicFetch(): void {
     if (this.fetchInterval) {
       clearInterval(this.fetchInterval);
       this.fetchInterval = null;
-      console.debug('[RemoteConfigManager] Stopped periodic config fetching');
+      logger.debug('[RemoteConfigManager] Stopped periodic config fetching');
     }
   }
 
@@ -420,7 +424,7 @@ export class RemoteConfigManager {
       
       return null;
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to get feature flag:', error);
+      logger.error('[RemoteConfigManager] Failed to get feature flag:', error);
       return null;
     }
   }
@@ -429,7 +433,7 @@ export class RemoteConfigManager {
     try {
       return firebaseRemoteConfigAPI.getAll();
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to get all config:', error);
+      logger.error('[RemoteConfigManager] Failed to get all config:', error);
       return {};
     }
   }
@@ -478,7 +482,7 @@ export class RemoteConfigManager {
       
       return { [key]: null };
     } catch (error) {
-      console.error(`[RemoteConfigManager] Failed to get specific config for key ${key}:`, error);
+      logger.error(`Failed to get specific config for key ${key}:`, error);
       return { [key]: null };
     }
   }
@@ -488,7 +492,7 @@ export class RemoteConfigManager {
     this.isInitialized = false;
     this.lastFetchTime = null;
     this.retryCount = 0;
-    console.log('[RemoteConfigManager] Cleaned up');
+    logger.debug('[RemoteConfigManager] Cleaned up');
   }
 
   get initialized(): boolean {
@@ -504,7 +508,7 @@ export class RemoteConfigManager {
    */
   async clearCacheAndRefresh(): Promise<boolean> {
     try {
-      console.log('[RemoteConfigManager] Clearing cache and forcing refresh...');
+      logger.debug('[RemoteConfigManager] Clearing cache and forcing refresh...');
       
       // Clear the Firebase API cache and force refetch
       const success = await firebaseRemoteConfigAPI.clearCacheAndRefetch();
@@ -512,12 +516,12 @@ export class RemoteConfigManager {
       if (success) {
         // Process the fresh configuration
         await this.processConfiguration();
-        console.log('[RemoteConfigManager] Cache cleared and config refreshed successfully');
+        logger.debug('[RemoteConfigManager] Cache cleared and config refreshed successfully');
       }
       
       return success;
     } catch (error) {
-      console.error('[RemoteConfigManager] Failed to clear cache and refresh:', error);
+      logger.error('[RemoteConfigManager] Failed to clear cache and refresh:', error);
       return false;
     }
   }

@@ -2,6 +2,10 @@ import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ITransportPlugin, PluginMetadata, PluginConfig } from '../../types/plugin.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('StreamableHttpPlugin');
 
 export class StreamableHttpPlugin implements ITransportPlugin {
   readonly metadata: PluginMetadata = {
@@ -16,19 +20,19 @@ export class StreamableHttpPlugin implements ITransportPlugin {
 
   async initialize(config: PluginConfig): Promise<void> {
     // Configuration can be used for future enhancements
-    console.log(`[StreamableHttpPlugin] Initialized with config:`, config);
+    logger.debug(`Initialized with config:`, config);
   }
 
   async connect(uri: string): Promise<Transport> {
-    console.log(`[StreamableHttpPlugin] Creating transport for: ${uri}`);
+    logger.debug(`Creating transport for: ${uri}`);
 
     try {
       const transport = await this.createConnection(uri);
       this.transport = transport;
-      console.log('[StreamableHttpPlugin] Transport created successfully');
+      logger.debug('[StreamableHttpPlugin] Transport created successfully');
       return transport;
     } catch (error) {
-      console.error('[StreamableHttpPlugin] Transport creation failed:', error);
+      logger.error('[StreamableHttpPlugin] Transport creation failed:', error);
       throw error;
     }
   }
@@ -37,14 +41,14 @@ export class StreamableHttpPlugin implements ITransportPlugin {
     try {
       // Validate and parse URI
       const url = new URL(uri);
-      console.log(`[StreamableHttpPlugin] Creating Streamable HTTP transport for: ${url.toString()}`);
+      logger.debug(`Creating Streamable HTTP transport for: ${url.toString()}`);
 
       // Create streamable HTTP transport
       const transport = new StreamableHTTPClientTransport(url);
 
       // Return the transport without testing
       // The main client will handle the connection test
-      console.log('[StreamableHttpPlugin] Streamable HTTP transport created successfully');
+      logger.debug('[StreamableHttpPlugin] Streamable HTTP transport created successfully');
       return transport;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -66,19 +70,19 @@ export class StreamableHttpPlugin implements ITransportPlugin {
   }
 
   async disconnect(): Promise<void> {
-    console.log('[StreamableHttpPlugin] Disconnecting...');
+    logger.debug('[StreamableHttpPlugin] Disconnecting...');
 
     if (this.transport) {
       try {
         await this.transport.close();
       } catch (error) {
-        console.warn('[StreamableHttpPlugin] Error during transport cleanup:', error);
+        logger.warn('[StreamableHttpPlugin] Error during transport cleanup:', error);
       }
     }
 
     this.transport = null;
 
-    console.log('[StreamableHttpPlugin] Disconnected');
+    logger.debug('[StreamableHttpPlugin] Disconnected');
   }
 
   isConnected(): boolean {
@@ -116,7 +120,7 @@ export class StreamableHttpPlugin implements ITransportPlugin {
       // The streamable HTTP transport handles its own health monitoring
       return true;
     } catch (error) {
-      console.warn('[StreamableHttpPlugin] Health check failed:', error);
+      logger.warn('[StreamableHttpPlugin] Health check failed:', error);
       return false;
     }
   }
@@ -126,14 +130,14 @@ export class StreamableHttpPlugin implements ITransportPlugin {
       throw new Error('StreamableHttpPlugin: Not connected');
     }
 
-    console.log(`[StreamableHttpPlugin] Calling tool: ${toolName}`);
+    logger.debug(`Calling tool: ${toolName}`);
 
     try {
       const result = await client.callTool({ name: toolName, arguments: args });
-      console.log(`[StreamableHttpPlugin] Tool call completed: ${toolName}`);
+      logger.debug(`Tool call completed: ${toolName}`);
       return result;
     } catch (error) {
-      console.error(`[StreamableHttpPlugin] Tool call failed: ${toolName}`, error);
+      logger.error(`Tool call failed: ${toolName}`, error);
       throw error;
     }
   }
@@ -143,7 +147,7 @@ export class StreamableHttpPlugin implements ITransportPlugin {
       throw new Error('StreamableHttpPlugin: Not connected');
     }
 
-    console.log('[StreamableHttpPlugin] Getting primitives...');
+    logger.debug('[StreamableHttpPlugin] Getting primitives...');
 
     try {
       const capabilities = client.getServerCapabilities();
@@ -155,7 +159,7 @@ export class StreamableHttpPlugin implements ITransportPlugin {
           client.listResources().then(({ resources }) => {
             resources.forEach(item => primitives.push({ type: 'resource', value: item }));
           }).catch(error => {
-            console.warn('[StreamableHttpPlugin] Failed to list resources:', error);
+            logger.warn('[StreamableHttpPlugin] Failed to list resources:', error);
           }),
         );
       }
@@ -165,7 +169,7 @@ export class StreamableHttpPlugin implements ITransportPlugin {
           client.listTools().then(({ tools }) => {
             tools.forEach(item => primitives.push({ type: 'tool', value: item }));
           }).catch(error => {
-            console.warn('[StreamableHttpPlugin] Failed to list tools:', error);
+            logger.warn('[StreamableHttpPlugin] Failed to list tools:', error);
           }),
         );
       }
@@ -175,16 +179,16 @@ export class StreamableHttpPlugin implements ITransportPlugin {
           client.listPrompts().then(({ prompts }) => {
             prompts.forEach(item => primitives.push({ type: 'prompt', value: item }));
           }).catch(error => {
-            console.warn('[StreamableHttpPlugin] Failed to list prompts:', error);
+            logger.warn('[StreamableHttpPlugin] Failed to list prompts:', error);
           }),
         );
       }
 
       await Promise.all(promises);
-      console.log(`[StreamableHttpPlugin] Retrieved ${primitives.length} primitives`);
+      logger.debug(`Retrieved ${primitives.length} primitives`);
       return primitives;
     } catch (error) {
-      console.error('[StreamableHttpPlugin] Failed to get primitives:', error);
+      logger.error('[StreamableHttpPlugin] Failed to get primitives:', error);
       return [];
     }
   }

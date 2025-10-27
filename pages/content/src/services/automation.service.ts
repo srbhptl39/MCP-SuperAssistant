@@ -17,8 +17,12 @@
 import { useUserPreferences } from '../hooks/useStores';
 import { useCurrentAdapter } from '../hooks/useAdapter';
 import { eventBus } from '../events/event-bus';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Store references for accessing state outside React components
+
+const logger = createLogger('AutomationService');
+
 let storeRefs: {
   getUserPreferences: (() => Promise<any>) | null;
   getCurrentAdapterState: (() => Promise<any>) | null;
@@ -57,9 +61,9 @@ async function initializeStoreAccess() {
       };
     };
 
-    console.debug('[AutomationService] Store access functions initialized');
+    logger.debug('[AutomationService] Store access functions initialized');
   } catch (error) {
-    console.error('[AutomationService] Error initializing store access:', error);
+    logger.error('[AutomationService] Error initializing store access:', error);
   }
 }
 
@@ -112,11 +116,11 @@ export class AutomationService {
    */
   public async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.debug('[AutomationService] Already initialized, skipping');
+      logger.debug('[AutomationService] Already initialized, skipping');
       return;
     }
 
-    console.debug('[AutomationService] Initializing automation service');
+    logger.debug('[AutomationService] Initializing automation service');
 
     // Initialize store access functions
     await initializeStoreAccess();
@@ -131,7 +135,7 @@ export class AutomationService {
     await this.exposeAutomationStateToWindow();
 
     this.isInitialized = true;
-    console.debug('[AutomationService] Automation service initialized successfully');
+    logger.debug('[AutomationService] Automation service initialized successfully');
   }
 
   /**
@@ -143,7 +147,7 @@ export class AutomationService {
       return;
     }
 
-    console.debug('[AutomationService] Cleaning up automation service');
+    logger.debug('[AutomationService] Cleaning up automation service');
 
     // Remove DOM event listener
     if (this.eventListener) {
@@ -152,7 +156,7 @@ export class AutomationService {
     }
 
     this.isInitialized = false;
-    console.debug('[AutomationService] Automation service cleaned up');
+    logger.debug('[AutomationService] Automation service cleaned up');
   }
 
   /**
@@ -171,7 +175,7 @@ export class AutomationService {
 
     // Add event listener to document
     document.addEventListener('mcp:tool-execution-complete', this.eventListener);
-    console.debug('[AutomationService] Tool execution event listener registered');
+    logger.debug('[AutomationService] Tool execution event listener registered');
   }
 
   /**
@@ -180,7 +184,7 @@ export class AutomationService {
   private setupMCPStateListener(): void {
     // Listen for MCP connection state changes via the event bus
     eventBus.on('connection:status-changed', ({ status }) => {
-      console.debug('[AutomationService] MCP connection status changed:', status);
+      logger.debug('[AutomationService] MCP connection status changed:', status);
       // Could add logic here to disable automation when MCP is disconnected
     });
   }
@@ -190,26 +194,26 @@ export class AutomationService {
    */
   private async handleToolExecutionComplete(event: CustomEvent<ToolExecutionCompleteDetail>): Promise<void> {
     if (!event.detail) {
-      console.warn('[AutomationService] Tool execution complete event received without detail');
+      logger.warn('[AutomationService] Tool execution complete event received without detail');
       return;
     }
 
     const detail = event.detail;
-    console.debug('[AutomationService] Tool execution complete event received:', detail);
+    logger.debug('[AutomationService] Tool execution complete event received:', detail);
 
     try {
       // Get current automation state from user preferences
       const automationState = await this.getAutomationState();
       
       if (!automationState) {
-        console.debug('[AutomationService] Could not get automation state, skipping automation');
+        logger.debug('[AutomationService] Could not get automation state, skipping automation');
         return;
       }
 
       // Update automation state on window for render_prescript access
       await this.exposeAutomationStateToWindow();
 
-      console.debug('[AutomationService] Current automation state:', automationState);
+      logger.debug('[AutomationService] Current automation state:', automationState);
 
       // Handle Auto Execute (always run if enabled, independent of other actions)
       if (automationState.autoExecute) {
@@ -229,11 +233,11 @@ export class AutomationService {
           await this.handleAutoSubmit(detail);
         }
       } else {
-        console.debug('[AutomationService] Auto Insert disabled, skipping insert and submit actions');
+        logger.debug('[AutomationService] Auto Insert disabled, skipping insert and submit actions');
       }
 
     } catch (error) {
-      console.error('[AutomationService] Error handling tool execution complete:', error);
+      logger.error('[AutomationService] Error handling tool execution complete:', error);
     }
   }
 
@@ -244,7 +248,7 @@ export class AutomationService {
     try {
       // Access the user preferences using the store reference
       if (!storeRefs.getUserPreferences) {
-        console.error('[AutomationService] Store access not initialized');
+        logger.error('[AutomationService] Store access not initialized');
         return null;
       }
 
@@ -260,7 +264,7 @@ export class AutomationService {
         autoExecuteDelay: preferences.autoExecuteDelay || 0,
       };
     } catch (error) {
-      console.error('[AutomationService] Error getting automation state:', error);
+      logger.error('[AutomationService] Error getting automation state:', error);
       return null;
     }
   }
@@ -274,11 +278,11 @@ export class AutomationService {
     const delay = preferences?.autoExecuteDelay || 0;
 
     if (delay > 0) {
-      console.debug(`[AutomationService] Auto Execute: Waiting ${delay} seconds before execution`);
+      logger.debug(`Auto Execute: Waiting ${delay} seconds before execution`);
       await new Promise(resolve => setTimeout(resolve, delay * 1000));
     }
 
-    console.debug('[AutomationService] Auto Execute: Tool execution completed', {
+    logger.debug('[AutomationService] Auto Execute: Tool execution completed', {
       functionName: detail.functionName,
       callId: detail.callId,
       hasResult: !!detail.result,
@@ -303,65 +307,65 @@ export class AutomationService {
     const delay = preferences?.autoInsertDelay || 0;
 
     if (delay > 0) {
-      console.debug(`[AutomationService] Auto Insert: Waiting ${delay} seconds before insertion`);
+      logger.debug(`Auto Insert: Waiting ${delay} seconds before insertion`);
       await new Promise(resolve => setTimeout(resolve, delay * 1000));
     }
 
-    console.debug('[AutomationService] Handling auto insert', { appliedDelay: delay });
+    logger.debug('[AutomationService] Handling auto insert', { appliedDelay: delay });
 
     // Additional safety check: Don't auto-insert if skipAutoInsertCheck is true
     if (detail.skipAutoInsertCheck) {
-      console.debug('[AutomationService] Skipping auto insert due to skipAutoInsertCheck flag');
+      logger.debug('[AutomationService] Skipping auto insert due to skipAutoInsertCheck flag');
       return false;
     }
 
     try {
       // Get current adapter from the adapter hook
       if (!storeRefs.getCurrentAdapterState) {
-        console.error('[AutomationService] Adapter store access not initialized');
+        logger.error('[AutomationService] Adapter store access not initialized');
         return false;
       }
 
       const { plugin: activePlugin, insertText, attachFile, isReady } = await storeRefs.getCurrentAdapterState();
 
       if (!isReady || !activePlugin) {
-        console.warn('[AutomationService] No active adapter available for auto insert');
+        logger.warn('[AutomationService] No active adapter available for auto insert');
         return false;
       }
 
-      console.debug('[AutomationService] Using adapter for auto insert:', activePlugin.name);
+      logger.debug('[AutomationService] Using adapter for auto insert:', activePlugin.name);
 
       // Handle file attachment
       if (detail.isFileAttachment && detail.file && attachFile) {
-        console.debug('[AutomationService] Auto inserting file:', detail.file.name);
+        logger.debug('[AutomationService] Auto inserting file:', detail.file.name);
         
         try {
           const success = await attachFile(detail.file);
           
           if (success) {
-            console.debug('[AutomationService] File attached successfully via auto insert');
+            logger.debug('[AutomationService] File attached successfully via auto insert');
             
             // Optionally insert confirmation text if provided
             if (detail.confirmationText && insertText) {
-              console.debug('[AutomationService] Inserting file confirmation text');
+              logger.debug('[AutomationService] Inserting file confirmation text');
               // Small delay to ensure file attachment is processed
               setTimeout(async () => {
                 try {
                   await insertText(detail.confirmationText!);
                 } catch (error) {
-                  console.error('[AutomationService] Error inserting confirmation text:', error);
+                  logger.error('[AutomationService] Error inserting confirmation text:', error);
                 }
               }, 100);
             }
             
             return true;
           } else {
-            console.warn('[AutomationService] File attachment failed');
+            logger.warn('[AutomationService] File attachment failed');
             return false;
           }
         } catch (attachError) {
-          console.error('[AutomationService] Error calling attachFile method:', attachError);
-          console.error('[AutomationService] attachFile context info:', {
+          logger.error('[AutomationService] Error calling attachFile method:', attachError);
+          logger.error('[AutomationService] attachFile context info:', {
             hasAttachFile: !!attachFile,
             attachFileType: typeof attachFile,
             activePluginName: activePlugin?.name,
@@ -373,21 +377,21 @@ export class AutomationService {
       
       // Handle text insertion
       else if (detail.result && insertText) {
-        console.debug('[AutomationService] Auto inserting text result');
+        logger.debug('[AutomationService] Auto inserting text result');
         
         try {
           const success = await insertText(detail.result);
           
           if (success) {
-            console.debug('[AutomationService] Text inserted successfully via auto insert');
+            logger.debug('[AutomationService] Text inserted successfully via auto insert');
             return true;
           } else {
-            console.warn('[AutomationService] Text insertion failed');
+            logger.warn('[AutomationService] Text insertion failed');
             return false;
           }
         } catch (insertError) {
-          console.error('[AutomationService] Error calling insertText method:', insertError);
-          console.error('[AutomationService] insertText context info:', {
+          logger.error('[AutomationService] Error calling insertText method:', insertError);
+          logger.error('[AutomationService] insertText context info:', {
             hasInsertText: !!insertText,
             insertTextType: typeof insertText,
             activePluginName: activePlugin?.name
@@ -398,7 +402,7 @@ export class AutomationService {
       
       // No valid insertion method found
       else {
-        console.warn('[AutomationService] No valid insertion method found for auto insert', {
+        logger.warn('[AutomationService] No valid insertion method found for auto insert', {
           hasResult: !!detail.result,
           isFileAttachment: detail.isFileAttachment,
           hasFile: !!detail.file,
@@ -409,7 +413,7 @@ export class AutomationService {
       }
 
     } catch (error) {
-      console.error('[AutomationService] Error during auto insert:', error);
+      logger.error('[AutomationService] Error during auto insert:', error);
       return false;
     }
   }
@@ -423,27 +427,27 @@ export class AutomationService {
     const delay = preferences?.autoSubmitDelay || 0;
 
     if (delay > 0) {
-      console.debug(`[AutomationService] Auto Submit: Waiting ${delay} seconds before submission`);
+      logger.debug(`Auto Submit: Waiting ${delay} seconds before submission`);
       await new Promise(resolve => setTimeout(resolve, delay * 1000));
     }
 
-    console.debug('[AutomationService] Handling auto submit', { appliedDelay: delay });
+    logger.debug('[AutomationService] Handling auto submit', { appliedDelay: delay });
 
     try {
       // Get current adapter from the adapter hook
       if (!storeRefs.getCurrentAdapterState) {
-        console.error('[AutomationService] Adapter store access not initialized');
+        logger.error('[AutomationService] Adapter store access not initialized');
         return false;
       }
 
       const { plugin: activePlugin, submitForm, isReady } = await storeRefs.getCurrentAdapterState();
 
       if (!isReady || !activePlugin || !submitForm) {
-        console.warn('[AutomationService] No active adapter or submit capability available for auto submit');
+        logger.warn('[AutomationService] No active adapter or submit capability available for auto submit');
         return false;
       }
 
-      console.debug('[AutomationService] Using adapter for auto submit:', activePlugin.name);
+      logger.debug('[AutomationService] Using adapter for auto submit:', activePlugin.name);
 
       // Add a small delay to ensure any prior insertion/attachment has settled in the UI
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -452,15 +456,15 @@ export class AutomationService {
         const success = await submitForm();
         
         if (success) {
-          console.debug('[AutomationService] Form submitted successfully via auto submit');
+          logger.debug('[AutomationService] Form submitted successfully via auto submit');
           return true;
         } else {
-          console.warn('[AutomationService] Form submission failed');
+          logger.warn('[AutomationService] Form submission failed');
           return false;
         }
       } catch (submitError) {
-        console.error('[AutomationService] Error calling submitForm method:', submitError);
-        console.error('[AutomationService] submitForm context info:', {
+        logger.error('[AutomationService] Error calling submitForm method:', submitError);
+        logger.error('[AutomationService] submitForm context info:', {
           hasSubmitForm: !!submitForm,
           submitFormType: typeof submitForm,
           activePluginName: activePlugin?.name
@@ -469,7 +473,7 @@ export class AutomationService {
       }
 
     } catch (error) {
-      console.error('[AutomationService] Error during auto submit:', error);
+      logger.error('[AutomationService] Error during auto submit:', error);
       return false;
     }
   }
@@ -492,7 +496,7 @@ export class AutomationService {
    * Force trigger automation for testing/debugging purposes
    */
   public async triggerTestAutomation(detail: ToolExecutionCompleteDetail): Promise<void> {
-    console.debug('[AutomationService] Triggering test automation');
+    logger.debug('[AutomationService] Triggering test automation');
     await this.handleToolExecutionComplete(new CustomEvent('mcp:tool-execution-complete', { detail }));
   }
 
@@ -504,10 +508,10 @@ export class AutomationService {
       const automationState = await this.getAutomationState();
       if (automationState) {
         (window as any).__mcpAutomationState = automationState;
-        console.debug('[AutomationService] Exposed automation state to window:', automationState);
+        logger.debug('[AutomationService] Exposed automation state to window:', automationState);
       }
     } catch (error) {
-      console.error('[AutomationService] Error exposing automation state to window:', error);
+      logger.error('[AutomationService] Error exposing automation state to window:', error);
     }
   }
 
@@ -567,5 +571,5 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     }
   };
   
-  console.debug('[AutomationService] Debug utilities exposed on window.__automationService');
+  logger.debug('[AutomationService] Debug utilities exposed on window.__automationService');
 }

@@ -4,6 +4,9 @@ import { useToolStore } from './tool.store';
 import { useUIStore } from './ui.store';
 import { useAdapterStore } from './adapter.store';
 import { useConfigStore } from './config.store';
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('Stores');
 
 // Export all stores
 export { useAppStore } from './app.store';
@@ -47,7 +50,7 @@ export const useRootStoreState = () => {
 // Function to initialize all stores or trigger their internal initializers if needed.
 // This could be part of a larger application initialization sequence.
 export async function initializeAllStores(): Promise<void> {
-  console.debug('[Stores] Initializing all stores...');
+  logger.debug('Initializing all stores...');
   // Some stores might have internal async initialize methods or rely on being called.
   // Example: useAppStore.getState().initialize(); // If app.store has an initialize action
   
@@ -75,6 +78,6 @@ export async function initializeAllStores(): Promise<void> {
   if (!useAppStore.getState().isInitialized) {
     await useAppStore.getState().initialize();
   }
-  
-  console.debug('[Stores] All stores accessed/initialized.');
+
+  logger.debug('All stores accessed/initialized.');
 }

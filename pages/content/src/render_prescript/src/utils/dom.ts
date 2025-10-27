@@ -1,8 +1,12 @@
 import type { ParamValueElement } from '../core/types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Create a Trusted Type policy if available in the browser
  */
+
+const logger = createLogger('DOMUtils');
+
 let scriptSanitizerPolicy: any | null = null;
 if (typeof window !== 'undefined' && (window as any).trustedTypes && (window as any).trustedTypes.createPolicy) {
   try {
@@ -15,7 +19,7 @@ if (typeof window !== 'undefined' && (window as any).trustedTypes && (window as 
       scriptSanitizerPolicy = (window as any).trustedTypes.policies.get('scriptSanitizerPolicy') || null;
     }
     if (!scriptSanitizerPolicy && console) {
-      console.warn('Could not create or retrieve Trusted Types policy "scriptSanitizerPolicy".', e);
+      logger.warn('Could not create or retrieve Trusted Types policy "scriptSanitizerPolicy".', e);
     }
   }
 }
@@ -34,7 +38,7 @@ export const decodeHtml = (html: string): string => {
     txt.innerHTML = html;
   } else {
     // If Trusted Types exist but policy creation failed, avoid innerHTML and log error
-    console.error('Trusted Types are enforced, but the policy creation failed. Cannot set innerHTML for decoding.');
+    logger.error('Trusted Types are enforced, but the policy creation failed. Cannot set innerHTML for decoding.');
     // Return the original string or a sanitized version, depending on requirements
     return html;
   }
@@ -130,7 +134,7 @@ export const safelySetContent = (
       }
     }
   } catch (e) {
-    console.error('Error setting content:', e);
+    logger.error('Error setting content:', e);
     // Fallback: Ensure content is displayed even if an error occurs
     while (element.firstChild) {
       element.removeChild(element.firstChild);

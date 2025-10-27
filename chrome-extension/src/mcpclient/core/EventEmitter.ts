@@ -1,3 +1,7 @@
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('EventEmitter');
+
 export type EventListener<T = any> = (data: T) => void | Promise<void>;
 
 export class EventEmitter<TEvents = Record<string, any>> {
@@ -12,7 +16,7 @@ export class EventEmitter<TEvents = Record<string, any>> {
     const eventListeners = this.listeners.get(event)!;
     
     if (eventListeners.size >= this.maxListeners) {
-      console.warn(`EventEmitter: Maximum listeners (${this.maxListeners}) exceeded for event '${String(event)}'`);
+      logger.warn(`EventEmitter: Maximum listeners (${this.maxListeners}) exceeded for event '${String(event)}'`);
     }
 
     eventListeners.add(listener);
@@ -49,7 +53,7 @@ export class EventEmitter<TEvents = Record<string, any>> {
       try {
         await listener(data);
       } catch (error) {
-        console.error(`EventEmitter: Error in listener for event '${String(event)}':`, error);
+        logger.error(`EventEmitter: Error in listener for event '${String(event)}':`, error);
       }
     });
 

@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * ChatGPT Adapter for OpenAI ChatGPT (chatgpt.com)
@@ -10,6 +11,9 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('ChatGPTAdapter');
+
 export class ChatGPTAdapter extends BaseAdapterPlugin {
   readonly name = 'ChatGPTAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
@@ -69,7 +73,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     super();
     ChatGPTAdapter.instanceCount++;
     this.instanceId = ChatGPTAdapter.instanceCount;
-    console.debug(`[ChatGPTAdapter] Instance #${this.instanceId} created. Total instances: ${ChatGPTAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${ChatGPTAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {

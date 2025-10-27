@@ -2,8 +2,12 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { eventBus } from '../events/event-bus';
 import type { EventMap, EventCallback } from '../events/event-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Hook for listening to events
+
+const logger = createLogger('UseEventBus');
+
 export function useEventListener<K extends keyof EventMap>(
   event: K,
   callback: EventCallback<EventMap[K]>,
@@ -21,7 +25,7 @@ export function useEventListener<K extends keyof EventMap>(
       try {
         callbackRef.current(data);
       } catch (error) {
-        console.error(`[useEventListener] Error in event listener for ${String(event)}:`, error);
+        logger.error(`Error in event listener for ${String(event)}:`, error);
       }
     };
 
@@ -37,7 +41,7 @@ export function useEventEmitter() {
     try {
       eventBus.emit(event, data);
     } catch (error) {
-      console.error(`[useEventEmitter] Error emitting event ${String(event)}:`, error);
+      logger.error(`Error emitting event ${String(event)}:`, error);
     }
   }, []);
 }
@@ -66,7 +70,7 @@ export function useEventOnce<K extends keyof EventMap>(
       try {
         callbackRef.current(data);
       } catch (error) {
-        console.error(`[useEventOnce] Error in once listener for ${String(event)}:`, error);
+        logger.error(`Error in once listener for ${String(event)}:`, error);
       }
     };
 
@@ -89,7 +93,7 @@ export function useEventSync<T, K extends keyof EventMap>(
       const newValue = extractor(data);
       setValue(newValue);
     } catch (error) {
-      console.error(`[useEventSync] Error extracting value from event ${String(event)}:`, error);
+      logger.error(`Error extracting value from event ${String(event)}:`, error);
     }
   });
 
@@ -116,7 +120,7 @@ export function useConditionalEventListener<K extends keyof EventMap>(
       try {
         callbackRef.current(data);
       } catch (error) {
-        console.error(`[useConditionalEventListener] Error in conditional listener for ${String(event)}:`, error);
+        logger.error(`Error in conditional listener for ${String(event)}:`, error);
       }
     };
 
@@ -149,7 +153,7 @@ export function useMultipleEventListeners(
           try {
             typedCallback(data);
           } catch (error) {
-            console.error(`[useMultipleEventListeners] Error in listener for ${String(eventName)}:`, error);
+            logger.error(`Error in listener for ${String(eventName)}:`, error);
           }
         };
         unsubscribers.push(eventBus.on(eventName, wrappedCallback));

@@ -16,11 +16,14 @@ import {
   startStalledStreamDetection,
   stopStalledStreamDetection,
 } from './stalledStreamHandler';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // State for processing and observers
 let isProcessing = false;
 let functionCallObserver: MutationObserver | null = null;
 let updateThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+
+const logger = createLogger('MutationObserver');
 
 // Extend window type
 declare global {
@@ -51,7 +54,7 @@ export const processUpdateQueue = (): void => {
         if (stalledIndicator) stalledIndicator.remove();
       }
     } else {
-      if (CONFIG.debug) console.debug(`Node for block ${blockId} removed, skipping update and cleaning up.`);
+      if (CONFIG.debug) logger.debug(`Node for block ${blockId} removed, skipping update and cleaning up.`);
       const observer = streamingObservers.get(blockId);
       if (observer) {
         observer.disconnect();
@@ -96,7 +99,7 @@ export const processUpdateQueue = (): void => {
     // }
 
     updateQueue.forEach((node, blockId) => {
-      if (CONFIG.debug) console.debug(`Processing update for block: ${blockId}`);
+      if (CONFIG.debug) logger.debug(`Processing update for block: ${blockId}`);
       renderFunctionCall(node as HTMLPreElement, { current: isProcessing });
     });
 
@@ -110,7 +113,7 @@ export const processUpdateQueue = (): void => {
       startProgressiveUpdates();
     }
   } catch (e) {
-    console.error('Error processing update queue:', e);
+    logger.error('Error processing update queue:', e);
   } finally {
     // if (stabilizedBlocks.size > 0) {
     //     setTimeout(() => {
@@ -196,7 +199,7 @@ export const startDirectMonitoring = (): void => {
     if (!isProcessing) {
       const processedCount = checkForUnprocessedFunctionCalls();
       if (processedCount > 0 && CONFIG.debug) {
-        console.debug(`Processed ${processedCount} new function blocks`);
+        logger.debug(`Processed ${processedCount} new function blocks`);
       }
     }
   }, CONFIG.updateThrottle);
@@ -301,7 +304,7 @@ export const startDirectMonitoring = (): void => {
 
     if (shouldProcess) {
       if (potentialFunctionCall && CONFIG.debug) {
-        console.debug('Potential function call detected, processing DOM changes');
+        logger.debug('Potential function call detected, processing DOM changes');
       }
       handleDomChanges();
     }
@@ -315,7 +318,7 @@ export const startDirectMonitoring = (): void => {
     characterDataOldValue: true, // Keep old values for comparison
   });
 
-  if (CONFIG.debug) console.debug('Direct monitoring started for function calls');
+  if (CONFIG.debug) logger.debug('Direct monitoring started for function calls');
 };
 
 /**
@@ -341,7 +344,7 @@ export const stopDirectMonitoring = (): void => {
   // Stop stalled stream detection
   stopStalledStreamDetection();
 
-  if (CONFIG.debug) console.debug('Direct monitoring stopped for function calls');
+  if (CONFIG.debug) logger.debug('Direct monitoring stopped for function calls');
 };
 
 /**

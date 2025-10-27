@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * OpenRouter Adapter for OpenRouter (openrouter.ai)
@@ -9,6 +10,9 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  *
  * Built with the new plugin architecture and integrates with Zustand stores.
  */
+
+const logger = createLogger('OpenRouterAdapter');
+
 export class OpenRouterAdapter extends BaseAdapterPlugin {
   readonly name = 'OpenRouterAdapter';
   readonly version = '2.0.0';
@@ -68,8 +72,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     super();
     OpenRouterAdapter.instanceCount++;
     this.instanceId = OpenRouterAdapter.instanceCount;
-    console.debug(
-      `[OpenRouterAdapter] Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`,
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${OpenRouterAdapter.instanceCount}`,
     );
   }
 

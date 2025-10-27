@@ -2,6 +2,7 @@
 import { jsonSchemaToCsn } from './schema_converter';
 import { chatgptInstructions } from './website_specific_instruction/chatgpt';
 import { geminiInstructions } from './website_specific_instruction/gemini';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Generates markdown instructions for using MCP tools based on available tools
@@ -10,6 +11,9 @@ import { geminiInstructions } from './website_specific_instruction/gemini';
  * @param customInstructionsEnabled Whether custom instructions should be included
  * @returns Markdown formatted instructions
  */
+
+const logger = createLogger('InstructionGeneratorJSON');
+
 export const generateInstructionsJson = (
   tools: Array<{ name: string; schema: string; description: string }>,
   customInstructions?: string,
@@ -177,13 +181,13 @@ ClassName | Custom class | User
   //     try {
   //       compressedSchema = jsonSchemaToCsn(schema);
   //     } catch (error) {
-  //       console.error(`Error compressing schema for ${tool.name}:`, error);
+  //       logger.error(`Error compressing schema for ${tool.name}:`, error);
   //       compressedSchema = 'Schema conversion failed';
   //     }
 
   //     instructions += `${tool.name}: \`${compressedSchema}\`\n`;
   //   } catch (error) {
-  //     console.error(`Error parsing schema for ${tool.name}:`, error);
+  //     logger.error(`Error parsing schema for ${tool.name}:`, error);
   //     instructions += `${tool.name}: \`Schema parsing failed\`\n`;
   //   }
   // });
@@ -351,5 +355,5 @@ const testTools = [
   }
 ];
 
-console.debug(generateInstructions(testTools));
+logger.debug(generateInstructions(testTools));
 */

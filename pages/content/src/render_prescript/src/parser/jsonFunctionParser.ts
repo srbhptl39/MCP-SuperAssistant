@@ -1,9 +1,13 @@
 import type { FunctionInfo } from '../core/types';
 import { CONFIG } from '../core/config';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * JSON function call line types
  */
+
+const logger = createLogger('parseJSONLine');
+
 interface JSONFunctionLine {
   type: 'function_call_start' | 'description' | 'parameter' | 'function_call_end';
   name?: string;
@@ -155,9 +159,9 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
 
   // Always log for debugging (will add CONFIG check later)
   if (CONFIG.debug) {
-    console.debug('[JSON Parser] Checking element:', block.tagName, block.className);
-    console.debug('[JSON Parser] Content length:', content.length);
-    console.debug('[JSON Parser] First 200 chars:', content.substring(0, 200));
+    logger.debug('[JSON Parser] Checking element:', block.tagName, block.className);
+    logger.debug('[JSON Parser] Content length:', content.length);
+    logger.debug('[JSON Parser] First 200 chars:', content.substring(0, 200));
   }
 
   // Quick check: must contain JSON-like patterns (lenient for streaming)
@@ -174,7 +178,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
   const looksLikeJSONStart = content.includes('{"type"') || content.includes('{ "type"');
 
   if (CONFIG.debug) {
-    console.debug('[JSON Parser] Pattern check:', {
+    logger.debug('[JSON Parser] Pattern check:', {
       hasTypeField,
       hasFunctionCall,
       hasParameter,
@@ -186,13 +190,13 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
   // Accept if it looks like JSON function call structure (lenient for streaming)
   if (!(hasTypeField && (hasFunctionCall || hasParameter || looksLikeJSONStart))) {
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] Quick check failed - not JSON function call');
+      logger.debug('[JSON Parser] Quick check failed - not JSON function call');
     }
     return result;
   }
 
   if (CONFIG.debug) {
-    console.debug('[JSON Parser] Quick check passed - parsing JSON lines');
+    logger.debug('[JSON Parser] Quick check passed - parsing JSON lines');
   }
 
   const state: JSONFunctionState = {
@@ -225,7 +229,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
 
   if (isSingleLineFormat) {
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] Detected single-line multiple JSON objects format');
+      logger.debug('[JSON Parser] Detected single-line multiple JSON objects format');
     }
 
     // Split by "} {" pattern to separate individual JSON objects
@@ -242,20 +246,20 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
     });
 
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] Split into', lines.length, 'separate JSON objects');
+      logger.debug('[JSON Parser] Split into', lines.length, 'separate JSON objects');
     }
   } else if (isPrettyPrinted) {
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] Detected pretty-printed multi-line JSON format');
+      logger.debug('[JSON Parser] Detected pretty-printed multi-line JSON format');
     }
 
     // Reconstruct complete JSON objects from multi-line format
     lines = reconstructJSONObjects(lines);
 
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] Reconstructed into', lines.length, 'compact JSON objects');
+      logger.debug('[JSON Parser] Reconstructed into', lines.length, 'compact JSON objects');
       if (lines.length > 0) {
-        console.debug('[JSON Parser] First reconstructed object:', lines[0].substring(0, 100));
+        logger.debug('[JSON Parser] First reconstructed object:', lines[0].substring(0, 100));
       }
     }
   }
@@ -268,7 +272,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
       if (trimmed.startsWith('{') && !trimmed.endsWith('}')) {
         hasPartialJSON = true;
         if (CONFIG.debug) {
-          console.debug('[JSON Parser] Detected partial JSON line:', trimmed.substring(0, 50));
+          logger.debug('[JSON Parser] Detected partial JSON line:', trimmed.substring(0, 50));
         }
       }
       continue;
@@ -312,7 +316,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
   }
 
   if (typeof window !== 'undefined' && (window as any).__DEBUG_JSON_PARSER) {
-    console.debug('[JSON Parser] Final result:', {
+    logger.debug('[JSON Parser] Final result:', {
       hasFunctionCalls: result.hasFunctionCalls,
       detectedBlockType: result.detectedBlockType,
       isComplete: result.isComplete,
@@ -384,7 +388,7 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
 
   if (!content || typeof content !== 'string') {
     if (CONFIG.debug) {
-      console.debug('[JSON Parser] extractJSONParameters: Invalid content');
+      logger.debug('[JSON Parser] extractJSONParameters: Invalid content');
     }
     return parameters;
   }
@@ -427,13 +431,13 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
       parameters[key] = unescapedValue;
 
       if (CONFIG.debug) {
-        console.debug(`[JSON Parser] Extracted partial parameter via regex: ${key} (${unescapedValue.length} chars)`);
+        logger.debug(`Extracted partial parameter via regex: ${key} (${unescapedValue.length} chars)`);
       }
     }
   }
 
   if (CONFIG.debug && Object.keys(parameters).length > 0) {
-    console.debug('[JSON Parser] extractJSONParameters result:', Object.keys(parameters));
+    logger.debug('[JSON Parser] extractJSONParameters result:', Object.keys(parameters));
   }
 
   return parameters;

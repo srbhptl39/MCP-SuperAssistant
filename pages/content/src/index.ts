@@ -14,6 +14,7 @@ import { useConnectionStore } from './stores/connection.store';
 import { useUIStore } from './stores/ui.store';
 import { useConfigStore } from './stores/config.store';
 import { useAdapterStore } from './stores/adapter.store';
+import { initializeLogger } from '@extension/shared/lib/logger';
 
 // Import the new initialization system
 import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
@@ -32,8 +33,12 @@ import {
 
 // Import the automation service
 import { initializeAllServices, cleanupAllServices } from './services';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Add this as a global recovery mechanism for the sidebar
+
+const logger = createLogger('content_script');
+
 function setupSidebarRecovery(): void {
   // Watch for the case where push mode is enabled but sidebar isn't visible
   const recoveryInterval = setInterval(() => {
@@ -79,7 +84,7 @@ function setupSidebarRecovery(): void {
         }
       }
     } catch (error) {
-      console.error('[SidebarRecovery] Error:', error);
+      logger.error('[SidebarRecovery] Error:', error);
     }
   }, 1000); // Check every second
 
@@ -94,6 +99,12 @@ function setupSidebarRecovery(): void {
 /**
  * Content Script Entry Point - Session 10 Implementation
  */
+
+// Initialize the centralized logger system
+// Logs are automatically controlled by environment:
+// - Development (import.meta.env.DEV): All logs enabled (DEBUG level)
+// - Production (import.meta.env.PROD): Only errors enabled (ERROR level)
+initializeLogger();
 logMessage('Content script loaded - initializing with Session 10 architecture');
 
 // Initialize URL change tracking for demographic analytics
@@ -113,7 +124,7 @@ try {
   });
   logMessage('[Analytics] Initial page view tracked with demographic data');
 } catch (error) {
-  console.error(
+  logger.error(
     '[ContentScript] Error sending page view analytics:',
     error instanceof Error ? error.message : String(error),
   );
@@ -139,7 +150,7 @@ setInterval(() => {
       });
       lastUrl = currentUrl;
     } catch (error) {
-      console.error(
+      logger.error(
         '[ContentScript] Error sending URL change analytics:',
         error instanceof Error ? error.message : String(error),
       );
@@ -160,7 +171,7 @@ try {
 } catch (error) {
   // This catch block is primarily for the rare case where the background script context is invalidated
   // during the sendMessage call (e.g., extension update/reload). It won't catch errors in the background handler.
-  console.error(
+  logger.error(
     '[ContentScript] Error sending analytics tracking message:',
     error instanceof Error ? error.message : String(error),
   );
@@ -269,7 +280,7 @@ function collectDemographicData(): { [key: string]: any } {
       device_type: deviceType,
     };
   } catch (error) {
-    console.error('[Analytics] Error collecting demographic data:', error);
+    logger.error('[Analytics] Error collecting demographic data:', error);
     return {
       error: 'Failed to collect demographic data',
     };
@@ -284,7 +295,7 @@ function collectDemographicData(): { [key: string]: any } {
     initializeRenderer();
     logMessage('Function call renderer initialized immediately at script load');
   } catch (error) {
-    console.error('Error in immediate renderer initialization:', error);
+    logger.error('Error in immediate renderer initialization:', error);
     // If this fails, we'll try again with the standard approach
   }
 })();
@@ -309,7 +320,7 @@ function collectDemographicData(): { [key: string]: any } {
       (window as any).mcpClient = mcpClient;
       logMessage('MCP client exposed on window.mcpClient');
     } catch (mcpError) {
-      console.error('MCP client initialization warning:', mcpError);
+      logger.error('MCP client initialization warning:', mcpError);
       // Don't fail the entire initialization for MCP client issues
     }
 
@@ -327,7 +338,7 @@ function collectDemographicData(): { [key: string]: any } {
       (window as any).pluginRegistry = pluginRegistry;
       logMessage('Plugin registry exposed on window.pluginRegistry');
     } catch (pluginError) {
-      console.warn('Failed to expose plugin registry globally:', pluginError);
+      logger.warn('Failed to expose plugin registry globally:', pluginError);
     }
 
     // Expose initialization utilities for debugging
@@ -337,7 +348,7 @@ function collectDemographicData(): { [key: string]: any } {
     }
 
   } catch (error) {
-    console.error('Failed to initialize application with Session 10 architecture:', error);
+    logger.error('Failed to initialize application with Session 10 architecture:', error);
 
     // Fallback to basic functionality if available
     logMessage('Attempting fallback initialization...');
@@ -346,7 +357,7 @@ function collectDemographicData(): { [key: string]: any } {
       initializeRenderer();
       logMessage('Fallback renderer initialization completed');
     } catch (fallbackError) {
-      console.error('Fallback initialization also failed:', fallbackError);
+      logger.error('Fallback initialization also failed:', fallbackError);
     }
   }
 })();
@@ -390,7 +401,7 @@ const initRendererWithRetry = (retries = 3, delay = 300) => {
         }
       }, 500);
     } catch (error) {
-      console.error('Error initializing function call renderer:', error);
+      logger.error('Error initializing function call renderer:', error);
       if (retries > 0) {
         logMessage(`Retrying renderer initialization in ${delay}ms... (${retries} retries left)`);
         setTimeout(() => initRendererWithRetry(retries - 1, delay), delay);
@@ -421,13 +432,13 @@ if (document.readyState === 'loading') {
 
 // Remote Config message handler
 function handleRemoteConfigMessage(message: any, sendResponse: (response: any) => void): void {
-  console.debug(`[Content] Processing Remote Config message: ${message.type}`);
+  logger.debug(`Processing Remote Config message: ${message.type}`);
   
   try {
     switch (message.type) {
       case 'remote-config:feature-flags-updated': {
         const { flags, timestamp } = message.data;
-        console.debug(`[Content] Received feature flags update: ${Object.keys(flags).length} flags`);
+        logger.debug(`Received feature flags update: ${Object.keys(flags).length} flags`);
         
         // Update config store
         const configStore = useConfigStore.getState();
@@ -442,7 +453,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:notifications-received': {
         const { notifications, timestamp } = message.data;
-        console.debug(`[Content] Received notifications: ${notifications.length} notifications`);
+        logger.debug(`Received notifications: ${notifications.length} notifications`);
         
         // Process notifications through the UI store
         const uiStore = useUIStore.getState();
@@ -460,7 +471,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:version-config-updated': {
         const { config, timestamp } = message.data;
-        console.debug('[Content] Received version-specific config update');
+        logger.debug('[Content] Received version-specific config update');
         
         // Emit event for version config update
         eventBus.emit('remote-config:updated', { 
@@ -474,7 +485,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       
       case 'remote-config:adapter-configs-updated': {
         const { adapterConfigs, timestamp } = message.data;
-        console.debug(`[Content] Received adapter configs update: ${Object.keys(adapterConfigs).length} adapters`);
+        logger.debug(`Received adapter configs update: ${Object.keys(adapterConfigs).length} adapters`);
         
         // Emit event for adapter config updates
         eventBus.emit('remote-config:adapter-configs-updated', { 
@@ -493,12 +504,12 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
       }
       
       default:
-        console.warn(`[Content] Unknown remote config message type: ${message.type}`);
+        logger.warn(`Unknown remote config message type: ${message.type}`);
         sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[Content] Error handling remote config message:`, error);
+    logger.error(`Error handling remote config message:`, error);
     sendResponse({ success: false, error: errorMessage });
   }
 }
@@ -507,7 +518,7 @@ function handleRemoteConfigMessage(message: any, sendResponse: (response: any) =
 function handleVersionUpdate(message: any, sendResponse: (response: any) => void): void {
   try {
     const { oldVersion, newVersion, timestamp } = message.data;
-    console.debug(`[Content] Extension updated from ${oldVersion} to ${newVersion}`);
+    logger.debug(`Extension updated from ${oldVersion} to ${newVersion}`);
     
     // Update config store with new version
     const configStore = useConfigStore.getState();
@@ -522,7 +533,7 @@ function handleVersionUpdate(message: any, sendResponse: (response: any) => void
     sendResponse({ success: true, timestamp: Date.now() });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[Content] Error handling version update:`, error);
+    logger.error(`Error handling version update:`, error);
     sendResponse({ success: false, error: errorMessage });
   }
 }
@@ -645,20 +656,20 @@ window.addEventListener('beforeunload', async () => {
     
     logMessage('Comprehensive cleanup completed');
   } catch (error) {
-    console.error('Error during comprehensive cleanup:', error);
+    logger.error('Error during comprehensive cleanup:', error);
   }
 });
 
 // Expose mcpClient to the global window object for renderer or debugging access
 (window as any).mcpClient = mcpClient;
-console.debug('[Content Script] mcpClient exposed to window object for renderer use.');
+logger.debug('[Content Script] mcpClient exposed to window object for renderer use.');
 
 // Set the current adapter to global window object using the new plugin system
 const adapterStore = useAdapterStore.getState();
 const currentAdapterReg = adapterStore.getActiveAdapter();
 if (currentAdapterReg && currentAdapterReg.instance) {
   (window as any).mcpAdapter = currentAdapterReg.instance;
-  console.debug(`[Content Script] Current adapter (${currentAdapterReg.plugin.name}) exposed to window object as mcpAdapter.`);
+  logger.debug(`Current adapter (${currentAdapterReg.plugin.name}) exposed to window object as mcpAdapter.`);
 } else {
-  console.debug('[Content Script] No active adapter found to expose to window object.');
+  logger.debug('[Content Script] No active adapter found to expose to window object.');
 }

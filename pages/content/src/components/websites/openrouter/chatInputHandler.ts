@@ -5,8 +5,12 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Cache for the last found input element to improve reliability
+
+const logger = createLogger('OpenRouterChatInputHandler');
+
 let lastFoundInputElement: HTMLElement | null = null;
 
 /**
@@ -98,7 +102,7 @@ export const insertTextToChatInput = (text: string): boolean => {
 
     if (!chatInput) {
       logMessage('Could not find OpenRouter input element');
-      console.error('Could not find OpenRouter input element');
+      logger.error('Could not find OpenRouter input element');
       return false;
     }
 
@@ -206,7 +210,7 @@ export const insertTextToChatInput = (text: string): boolean => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error appending text to OpenRouter input: ${errorMessage}`);
-    console.error('Error appending text to OpenRouter input:', error);
+    logger.error('Error appending text to OpenRouter input:', error);
     return false;
   }
 };
@@ -230,7 +234,7 @@ export const insertToolResultToChatInput = (result: any): boolean => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error formatting tool result: ${errorMessage}`);
-    console.error('Error formatting tool result:', error);
+    logger.error('Error formatting tool result:', error);
     return false;
   }
 };
@@ -279,7 +283,7 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logMessage(`Error attaching file to OpenRouter input: ${errorMessage}`);
-    console.error('Error attaching file to OpenRouter input:', error);
+    logger.error('Error attaching file to OpenRouter input:', error);
     return false;
   }
 };
@@ -495,7 +499,7 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logMessage(`Error submitting chat input: ${errorMessage}`);
-      console.error('Error submitting chat input:', error);
+      logger.error('Error submitting chat input:', error);
       resolve(false);
     }
   });

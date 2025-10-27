@@ -2,14 +2,7 @@ import type { PluginContext as PluginContextType, PluginEventBus, PluginUtils } 
 import { eventBus } from '../events';
 import { useAppStore, useConnectionStore, useToolStore, useUIStore, useAdapterStore, useConfigStore } from '../stores';
 import { getUniqueId, createElement, waitForElement, injectCSS, observeChanges, debounce, throttle } from '../utils/index'; // Explicitly point to index
-
-// Basic logger implementation
-const consoleLogger = {
-  debug: (...args: any[]) => console.debug('[PluginContext]', ...args),
-  info: (...args: any[]) => console.debug('[PluginContext]', ...args),
-  warn: (...args: any[]) => console.warn('[PluginContext]', ...args),
-  error: (...args: any[]) => console.error('[PluginContext]', ...args),
-};
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Plugin Utilities Implementation
 const pluginUtils: PluginUtils = {
@@ -51,12 +44,7 @@ export function createPluginContext(pluginName: string): PluginContextType {
       storage: chrome.storage,
       tabs: chrome.tabs,
     },
-    logger: {
-      debug: (...args: any[]) => console.debug(`[${pluginName}]`, ...args),
-      info: (...args: any[]) => console.info(`[${pluginName}]`, ...args),
-      warn: (...args: any[]) => console.warn(`[${pluginName}]`, ...args),
-      error: (...args: any[]) => console.error(`[${pluginName}]`, ...args),
-    },
+    logger: createLogger(pluginName),
     getConfig: <T extends Record<string, any>>() => {
       const adapterStoreState = useAdapterStore.getState();
       return adapterStoreState.registeredPlugins[pluginName]?.config.settings as T | undefined;

@@ -2,8 +2,12 @@ import { create } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { eventBus, initializeEventBus } from '../events'; // Assuming initializeEventBus might be called here or in a main initializer
 import type { GlobalSettings } from '../types/stores';
+import { createLogger } from '@extension/shared/lib/logger';
 // Placeholder for initializePluginRegistry - will be properly imported when plugin system is built
-const initializePluginRegistry = async () => console.debug('Plugin registry initialized (placeholder)');
+
+const logger = createLogger('initializePluginRegistry');
+
+const initializePluginRegistry = async () => logger.debug('Plugin registry initialized (placeholder)');
 
 export interface AppState {
   isInitialized: boolean;
@@ -43,11 +47,11 @@ export const useAppStore = create<AppState>()(
         
         initialize: async () => {
           if (get().isInitialized) {
-            console.debug('[AppStore] Already initialized.');
+            logger.debug('[AppStore] Already initialized.');
             return;
           }
           
-          console.debug('[AppStore] Initializing...');
+          logger.debug('[AppStore] Initializing...');
           try {
             set({ initializationError: null });
             
@@ -57,12 +61,12 @@ export const useAppStore = create<AppState>()(
             await initializePluginRegistry(); // Placeholder for actual plugin system init
             
             set({ isInitialized: true, initializationError: null });
-            console.debug('[AppStore] Initialization complete.');
+            logger.debug('[AppStore] Initialization complete.');
             eventBus.emit('app:initialized', { version: '0.1.0', timestamp: Date.now() }); // Example version
             
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
-            console.error('[AppStore] Initialization failed:', errorMessage, error);
+            logger.error('[AppStore] Initialization failed:', errorMessage, error);
             set({ isInitialized: false, initializationError: errorMessage });
             // Optionally, re-throw or handle critical failure
           }
@@ -73,7 +77,7 @@ export const useAppStore = create<AppState>()(
             currentSite: siteInfo.site,
             currentHost: siteInfo.host,
           });
-          console.debug(`[AppStore] Site changed to: ${siteInfo.site}`);
+          logger.debug(`Site changed to: ${siteInfo.site}`);
           eventBus.emit('app:site-changed', { site: siteInfo.site, hostname: siteInfo.host });
         },
         
@@ -81,12 +85,12 @@ export const useAppStore = create<AppState>()(
           set(state => ({
             globalSettings: { ...state.globalSettings, ...settings }
           }));
-          console.debug('[AppStore] Settings updated:', settings);
+          logger.debug('[AppStore] Settings updated:', settings);
           eventBus.emit('app:settings-updated', { settings });
         },
         
         resetState: () => {
-          console.debug('[AppStore] Resetting state.');
+          logger.debug('[AppStore] Resetting state.');
           set(initialState); 
         },
       }),

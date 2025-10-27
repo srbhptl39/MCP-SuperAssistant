@@ -12,6 +12,10 @@ import { DEFAULT_CLIENT_CONFIG } from '../types/config.js';
 import type { TransportType, ITransportPlugin, PluginConfig } from '../types/plugin.js';
 import type { Primitive, NormalizedTool, PrimitivesResponse } from '../types/primitives.js';
 import type { AllEvents } from '../types/events.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('McpClient');
 
 export class McpClient extends EventEmitter<AllEvents> {
   private registry: PluginRegistry;
@@ -53,25 +57,25 @@ export class McpClient extends EventEmitter<AllEvents> {
       this.emit('registry:plugins-loaded', data);
     });
 
-    console.log('[McpClient] Initialized with config:', this.config);
+    logger.debug('[McpClient] Initialized with config:', this.config);
     this.emit('client:initialized', { config: this.config });
   }
 
   async initialize(): Promise<void> {
     try {
-      console.log('[McpClient] Loading default plugins...');
+      logger.debug('[McpClient] Loading default plugins...');
       await this.registry.loadDefaultPlugins();
-      console.log('[McpClient] Initialization complete');
+      logger.debug('[McpClient] Initialization complete');
     } catch (error) {
-      console.error('[McpClient] Initialization failed:', error);
-      console.log('[McpClient] Attempting manual plugin registration as fallback...');
+      logger.error('[McpClient] Initialization failed:', error);
+      logger.debug('[McpClient] Attempting manual plugin registration as fallback...');
 
       try {
         // Try manual registration as fallback for Service Worker environments
         await this.manualPluginRegistration();
-        console.log('[McpClient] Manual plugin registration successful');
+        logger.debug('[McpClient] Manual plugin registration successful');
       } catch (fallbackError) {
-        console.error('[McpClient] Manual plugin registration also failed:', fallbackError);
+        logger.error('[McpClient] Manual plugin registration also failed:', fallbackError);
         throw error; // Throw original error
       }
     }
@@ -83,28 +87,28 @@ export class McpClient extends EventEmitter<AllEvents> {
     await this.registry.register(new WebSocketPlugin());
     await this.registry.register(new StreamableHttpPlugin());
 
-    console.log('[McpClient] Manual plugin registration completed');
+    logger.debug('[McpClient] Manual plugin registration completed');
   }
 
   async connect(request: ConnectionRequest): Promise<void> {
     // If same connection type and already connected, skip
     if (this.isConnectedFlag && this.activePlugin?.metadata.transportType === request.type) {
-      console.log(`[McpClient] Already connected via ${request.type}, skipping`);
+      logger.debug(`Already connected via ${request.type}, skipping`);
       return;
     }
 
     // If there's a connection in progress, wait for it but check if it's for the same URI
     if (this.connectionPromise) {
-      console.log('[McpClient] Connection already in progress, waiting...');
+      logger.debug('[McpClient] Connection already in progress, waiting...');
       try {
         await this.connectionPromise;
         // Check if the completed connection is what we wanted
         if (this.isConnectedFlag && this.activePlugin?.metadata.transportType === request.type) {
-          console.log('[McpClient] Existing connection matches request');
+          logger.debug('[McpClient] Existing connection matches request');
           return;
         }
       } catch (error) {
-        console.log('[McpClient] Previous connection failed, starting new one');
+        logger.debug('[McpClient] Previous connection failed, starting new one');
         // Clear the failed promise to allow new connection
         this.connectionPromise = null;
       }
@@ -112,7 +116,7 @@ export class McpClient extends EventEmitter<AllEvents> {
 
     // Disconnect from current connection if switching types
     if (this.isConnectedFlag && this.activePlugin?.metadata.transportType !== request.type) {
-      console.log(`[McpClient] Switching from ${this.activePlugin?.metadata.transportType} to ${request.type}`);
+      logger.debug(`Switching from ${this.activePlugin?.metadata.transportType} to ${request.type}`);
       await this.disconnect();
     }
 
@@ -129,7 +133,7 @@ export class McpClient extends EventEmitter<AllEvents> {
     const { uri, type, config: pluginConfig } = request;
 
     try {
-      console.log(`[McpClient] Connecting to ${uri} via ${type}`);
+      logger.debug(`Connecting to ${uri} via ${type}`);
       this.emit('client:connecting', { uri, type });
 
       // Disconnect from current connection if exists
@@ -156,7 +160,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       // Set up disconnection callback for WebSocket plugin
       if (type === 'websocket' && 'setDisconnectionCallback' in plugin) {
         (plugin as any).setDisconnectionCallback((reason: string, code?: number, details?: string) => {
-          console.log(`[McpClient] WebSocket disconnection detected: ${reason} (code: ${code})`);
+          logger.debug(`WebSocket disconnection detected: ${reason} (code: ${code})`);
           
           // Mark as disconnected immediately
           this.isConnectedFlag = false;
@@ -170,7 +174,7 @@ export class McpClient extends EventEmitter<AllEvents> {
 
           // Clean up connection state
           this.cleanup().catch(error => {
-            console.error('[McpClient] Error during cleanup after WebSocket disconnection:', error);
+            logger.error('[McpClient] Error during cleanup after WebSocket disconnection:', error);
           });
         });
       }
@@ -186,11 +190,11 @@ export class McpClient extends EventEmitter<AllEvents> {
 
       // Set up logging notification handler
       this.client.setNotificationHandler(LoggingMessageNotificationSchema, notification => {
-        console.debug(`[McpClient] Server log:`, notification.params.data);
+        logger.debug(`Server log:`, notification.params.data);
       });
 
       // Connect client to transport (this will start the transport)
-      console.log(`[McpClient] Starting MCP client connection to transport...`);
+      logger.debug(`Starting MCP client connection to transport...`);
 
       // Add timeout to prevent hanging
       const connectionTimeout = 30000; // 30 seconds
@@ -202,7 +206,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       });
 
       await Promise.race([connectionPromise, timeoutPromise]);
-      console.log(`[McpClient] MCP client connected successfully`);
+      logger.debug(`MCP client connected successfully`);
 
       // Store connection state
       this.activePlugin = plugin;
@@ -215,7 +219,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       // Start health monitoring
       this.startHealthMonitoring();
 
-      console.log(`[McpClient] Successfully connected via ${type}`);
+      logger.debug(`Successfully connected via ${type}`);
       this.emit('client:connected', { uri, type });
       this.emit('connection:status-changed', {
         isConnected: true,
@@ -224,7 +228,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[McpClient] Connection failed:`, error);
+      logger.error(`Connection failed:`, error);
 
       // Clean up partial connection state
       await this.cleanup();
@@ -245,12 +249,12 @@ export class McpClient extends EventEmitter<AllEvents> {
 
   async disconnect(): Promise<void> {
     if (!this.isConnectedFlag) {
-      console.log('[McpClient] Already disconnected');
+      logger.debug('[McpClient] Already disconnected');
       return;
     }
 
     const currentType = this.activePlugin?.metadata.transportType;
-    console.log(`[McpClient] Disconnecting from ${currentType || 'unknown'}`);
+    logger.debug(`Disconnecting from ${currentType || 'unknown'}`);
 
     if (currentType) {
       this.emit('client:disconnecting', { type: currentType });
@@ -258,7 +262,7 @@ export class McpClient extends EventEmitter<AllEvents> {
 
     try {
       await this.cleanup();
-      console.log('[McpClient] Disconnected successfully');
+      logger.debug('[McpClient] Disconnected successfully');
 
       if (currentType) {
         this.emit('client:disconnected', { type: currentType });
@@ -268,7 +272,7 @@ export class McpClient extends EventEmitter<AllEvents> {
         type: currentType || null,
       });
     } catch (error) {
-      console.error('[McpClient] Error during disconnect:', error);
+      logger.error('[McpClient] Error during disconnect:', error);
       this.emit('client:error', {
         error: error instanceof Error ? error : new Error(String(error)),
         context: 'disconnect',
@@ -285,7 +289,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       try {
         await this.client.close();
       } catch (error) {
-        console.warn('[McpClient] Error closing client:', error);
+        logger.warn('[McpClient] Error closing client:', error);
       }
       this.client = null;
     }
@@ -295,7 +299,7 @@ export class McpClient extends EventEmitter<AllEvents> {
       try {
         await this.activePlugin.disconnect();
       } catch (error) {
-        console.warn('[McpClient] Error disconnecting plugin:', error);
+        logger.warn('[McpClient] Error disconnecting plugin:', error);
       }
       this.activePlugin = null;
     }
@@ -314,7 +318,7 @@ export class McpClient extends EventEmitter<AllEvents> {
     this.emit('tool:call-started', { toolName, args });
 
     try {
-      console.log(`[McpClient] Calling tool: ${toolName}`);
+      logger.debug(`Calling tool: ${toolName}`);
       const result = await this.activePlugin.callTool(this.client, toolName, args);
 
       const duration = Date.now() - startTime;
@@ -348,12 +352,12 @@ export class McpClient extends EventEmitter<AllEvents> {
 
     // Check cache first
     if (!forceRefresh && this.primitivesCache && this.isCacheValid()) {
-      console.log('[McpClient] Returning cached primitives');
+      logger.debug('[McpClient] Returning cached primitives');
       return this.primitivesCache;
     }
 
     try {
-      console.log('[McpClient] Fetching primitives from server...');
+      logger.debug('[McpClient] Fetching primitives from server...');
       const primitives = await this.activePlugin.getPrimitives(this.client);
 
       // Normalize tools
@@ -378,12 +382,11 @@ export class McpClient extends EventEmitter<AllEvents> {
         type: this.activePlugin.metadata.transportType,
       });
 
-      console.log(
-        `[McpClient] Retrieved ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
+      logger.debug(`Retrieved ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
       );
       return response;
     } catch (error) {
-      console.error('[McpClient] Failed to get primitives:', error);
+      logger.error('[McpClient] Failed to get primitives:', error);
 
       // Check if connection is still healthy after error
       if (!(await this.isHealthy())) {
@@ -434,7 +437,7 @@ export class McpClient extends EventEmitter<AllEvents> {
     try {
       return await this.activePlugin.isHealthy();
     } catch (error) {
-      console.warn('[McpClient] Health check failed:', error);
+      logger.warn('[McpClient] Health check failed:', error);
       return false;
     }
   }
@@ -465,9 +468,9 @@ export class McpClient extends EventEmitter<AllEvents> {
     const currentType = this.activePlugin?.metadata.transportType || null;
 
     if (currentType === request.type) {
-      console.log(`[McpClient] Already using ${request.type}, reconnecting...`);
+      logger.debug(`Already using ${request.type}, reconnecting...`);
     } else {
-      console.log(`[McpClient] Switching from ${currentType} to ${request.type}`);
+      logger.debug(`Switching from ${currentType} to ${request.type}`);
       this.emit('client:plugin-switched', { from: currentType, to: request.type });
     }
 
@@ -497,7 +500,7 @@ export class McpClient extends EventEmitter<AllEvents> {
         }
 
         if (!healthy) {
-          console.warn(`[McpClient] Health check failed for ${type}`);
+          logger.warn(`Health check failed for ${type}`);
           this.isConnectedFlag = false;
           this.emit('connection:status-changed', {
             isConnected: false,
@@ -506,7 +509,7 @@ export class McpClient extends EventEmitter<AllEvents> {
           });
         }
       } catch (error) {
-        console.error('[McpClient] Health check error:', error);
+        logger.error('[McpClient] Health check error:', error);
       }
     }, interval);
   }
@@ -536,6 +539,6 @@ export class McpClient extends EventEmitter<AllEvents> {
       },
     };
 
-    console.log('[McpClient] Configuration updated');
+    logger.debug('[McpClient] Configuration updated');
   }
 }

@@ -3,15 +3,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { useActiveAdapter, useRegisteredAdapters } from './useStores';
 import { useEventListener, useEventEmitter } from './useEventBus';
 import type { AdapterPlugin, AdapterCapability } from '../plugins/plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Hook for current adapter operations
+
+const logger = createLogger('UseAdapter');
+
 export function useCurrentAdapter() {
   const { activeAdapterName, plugin, status, currentCapabilities, error } = useActiveAdapter();
   const emit = useEventEmitter();
 
   const insertText = useCallback(async (text: string): Promise<boolean> => {
     if (!plugin || !plugin.insertText) {
-      console.warn('[useCurrentAdapter] No active plugin for insertText');
+      logger.warn('[useCurrentAdapter] No active plugin for insertText');
       return false;
     }
 
@@ -28,7 +32,7 @@ export function useCurrentAdapter() {
 
   const submitForm = useCallback(async (): Promise<boolean> => {
     if (!plugin || !plugin.submitForm) {
-      console.warn('[useCurrentAdapter] No active plugin for submitForm');
+      logger.warn('[useCurrentAdapter] No active plugin for submitForm');
       return false;
     }
 
@@ -45,12 +49,12 @@ export function useCurrentAdapter() {
 
   const attachFile = useCallback(async (file: File): Promise<boolean> => {
     if (!plugin) {
-      console.warn('[useCurrentAdapter] No active plugin for attachFile');
+      logger.warn('[useCurrentAdapter] No active plugin for attachFile');
       return false;
     }
 
     if (!plugin.capabilities.includes('file-attachment')) {
-      console.warn('[useCurrentAdapter] Active plugin does not support file attachment');
+      logger.warn('[useCurrentAdapter] Active plugin does not support file attachment');
       return false;
     }
 
@@ -95,7 +99,7 @@ export function useAdapterManagement() {
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[useAdapterManagement] Failed to activate adapter:', errorMessage);
+      logger.error('[useAdapterManagement] Failed to activate adapter:', errorMessage);
       return false;
     }
   }, [emit]);
@@ -111,7 +115,7 @@ export function useAdapterManagement() {
       return false;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[useAdapterManagement] Failed to deactivate adapter:', errorMessage);
+      logger.error('[useAdapterManagement] Failed to deactivate adapter:', errorMessage);
       return false;
     }
   }, [emit]);
@@ -238,7 +242,7 @@ export function useAutoAdapterSwitching(enabled = true) {
 
     const suitableAdapter = getAdapterForHostname(hostname);
     if (suitableAdapter && suitableAdapter.name !== activeAdapterName) {
-      console.debug(`[useAutoAdapterSwitching] Switching to ${suitableAdapter.name} for ${hostname}`);
+      logger.debug(`Switching to ${suitableAdapter.name} for ${hostname}`);
       await activateAdapter(suitableAdapter.name);
     }
   });

@@ -5,6 +5,10 @@ import { eventBus } from '../events';
 import type { UserPreferences, SidebarState, Notification, GlobalSettings } from '../types/stores';
 import type { RemoteNotification, NotificationAction } from './config.store';
 import { useAppStore, type AppState } from './app.store'; // Assuming AppState includes theme
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('useUIStore');
 
 export interface UIState {
   sidebar: SidebarState;
@@ -76,7 +80,7 @@ export const useUIStore = create<UIState>()(
         toggleSidebar: (reason?: string) => {
           const newVisibility = !get().sidebar.isVisible;
           set(state => ({ sidebar: { ...state.sidebar, isVisible: newVisibility } }));
-          console.debug(`[UIStore] Sidebar toggled to ${newVisibility ? 'visible' : 'hidden'}. Reason: ${reason || 'user action'}`);
+          logger.debug(`Sidebar toggled to ${newVisibility ? 'visible' : 'hidden'}. Reason: ${reason || 'user action'}`);
           eventBus.emit('ui:sidebar-toggle', { visible: newVisibility, reason: reason || 'user action' });
         },
 
@@ -86,19 +90,19 @@ export const useUIStore = create<UIState>()(
             sidebar: { ...state.sidebar, isMinimized: newMinimized },
             preferences: { ...state.preferences, isMinimized: newMinimized }
           }));
-          console.debug(`[UIStore] Sidebar ${newMinimized ? 'minimized' : 'expanded'}. Reason: ${reason || 'user action'}`);
+          logger.debug(`Sidebar ${newMinimized ? 'minimized' : 'expanded'}. Reason: ${reason || 'user action'}`);
           eventBus.emit('ui:sidebar-minimize', { minimized: newMinimized, reason: reason || 'user action' });
         },
 
         resizeSidebar: (width: number) => {
           set(state => ({ sidebar: { ...state.sidebar, width } }));
-          console.debug(`[UIStore] Sidebar resized to: ${width}px`);
+          logger.debug(`Sidebar resized to: ${width}px`);
           eventBus.emit('ui:sidebar-resize', { width });
         },
 
         setSidebarVisibility: (visible: boolean, reason?: string) => {
           set(state => ({ sidebar: { ...state.sidebar, isVisible: visible } }));
-          console.debug(`[UIStore] Sidebar visibility set to ${visible}. Reason: ${reason || 'programmatic'}`);
+          logger.debug(`Sidebar visibility set to ${visible}. Reason: ${reason || 'programmatic'}`);
           eventBus.emit('ui:sidebar-toggle', { visible, reason: reason || 'programmatic' });
         },
 
@@ -106,7 +110,7 @@ export const useUIStore = create<UIState>()(
           const oldPrefs = get().preferences;
           const newPrefs = { ...oldPrefs, ...prefs };
           set({ preferences: newPrefs });
-          console.debug('[UIStore] Preferences updated:', newPrefs);
+          logger.debug('[UIStore] Preferences updated:', newPrefs);
           eventBus.emit('ui:preferences-updated', { preferences: newPrefs });
           // If theme is part of preferences and changes, also update the global theme
           if (prefs.theme && prefs.theme !== oldPrefs.theme) {
@@ -121,7 +125,7 @@ export const useUIStore = create<UIState>()(
             timestamp: Date.now(),
           };
           set(state => ({ notifications: [...state.notifications, newNotification] }));
-          console.debug('[UIStore] Notification added:', newNotification);
+          logger.debug('[UIStore] Notification added:', newNotification);
           eventBus.emit('ui:notification-added', { notification: newNotification });
           return newNotification.id;
         },
@@ -133,7 +137,7 @@ export const useUIStore = create<UIState>()(
           
           // Check if notifications are enabled
           if (!configStore.notificationConfig.enabled) {
-            console.debug('[UIStore] Remote notifications disabled, ignoring:', notification.id);
+            logger.debug('[UIStore] Remote notifications disabled, ignoring:', notification.id);
             return '';
           }
           
@@ -145,7 +149,7 @@ export const useUIStore = create<UIState>()(
           ).length;
           
           if (todayNotifications >= configStore.notificationConfig.maxPerDay) {
-            console.debug('[UIStore] Daily notification limit reached, ignoring:', notification.id);
+            logger.debug('[UIStore] Daily notification limit reached, ignoring:', notification.id);
             eventBus.emit('notification:frequency-limited', {
               notificationId: notification.id,
               reason: 'Daily limit exceeded'
@@ -201,13 +205,13 @@ export const useUIStore = create<UIState>()(
             }
           });
           
-          console.debug('[UIStore] Remote notification added:', newNotification);
+          logger.debug('[UIStore] Remote notification added:', newNotification);
           return newNotification.id;
         },
 
         removeNotification: (id: string) => {
           set(state => ({ notifications: state.notifications.filter(n => n.id !== id) }));
-          console.debug(`[UIStore] Notification removed: ${id}`);
+          logger.debug(`Notification removed: ${id}`);
           eventBus.emit('ui:notification-removed', { id });
         },
 
@@ -242,27 +246,27 @@ export const useUIStore = create<UIState>()(
         clearNotifications: () => {
           get().notifications.forEach(n => eventBus.emit('ui:notification-removed', { id: n.id }));
           set({ notifications: [] });
-          console.debug('[UIStore] All notifications cleared.');
+          logger.debug('[UIStore] All notifications cleared.');
         },
 
         openModal: (modalName: string) => {
           set({ activeModal: modalName });
-          console.debug(`[UIStore] Modal opened: ${modalName}`);
+          logger.debug(`Modal opened: ${modalName}`);
         },
 
         closeModal: () => {
-          console.debug(`[UIStore] Modal closed: ${get().activeModal}`);
+          logger.debug(`Modal closed: ${get().activeModal}`);
           set({ activeModal: null });
         },
 
         setGlobalLoading: (loading: boolean) => {
           set({ isLoading: loading });
-          console.debug(`[UIStore] Global loading state: ${loading}`);
+          logger.debug(`Global loading state: ${loading}`);
         },
 
         setTheme: (theme: GlobalSettings['theme']) => {
           set({ theme });
-          console.debug(`[UIStore] Theme changed to: ${theme}`);
+          logger.debug(`Theme changed to: ${theme}`);
           eventBus.emit('ui:theme-changed', { theme });
           // Also update preferences if they should be kept in sync
           if (get().preferences.theme !== theme) {
@@ -275,7 +279,7 @@ export const useUIStore = create<UIState>()(
           const previousState = get().mcpEnabled;
           set({ mcpEnabled: enabled });
 
-          console.debug(`[UIStore] MCP toggle set to ${enabled}. Reason: ${reason || 'user action'}`);
+          logger.debug(`MCP toggle set to ${enabled}. Reason: ${reason || 'user action'}`);
 
           // When disabling MCP, hide sidebar (but don't change visibility state when enabling)
           // This allows sidebar visibility to be controlled independently when MCP is on
@@ -321,14 +325,14 @@ useAppStore.subscribe(
     if (newTheme && newTheme !== oldTheme) {
       // Check against current UIStore theme to prevent loops and unnecessary updates
       if (newTheme !== useUIStore.getState().theme) { 
-        console.debug('[UIStore] Theme changed in AppStore, syncing to UIStore:', newTheme);
+        logger.debug('[UIStore] Theme changed in AppStore, syncing to UIStore:', newTheme);
         useUIStore.getState().setTheme(newTheme); // Use the existing setTheme action
         // The setTheme action itself emits 'ui:theme-changed', so no need to emit here again.
       }
     }
     if (state.globalSettings.sidebarWidth !== prevState.globalSettings.sidebarWidth) {
       if (useUIStore.getState().sidebar.width !== state.globalSettings.sidebarWidth) {
-        console.debug('[UIStore] Syncing sidebar width from AppStore globalSettings:', state.globalSettings.sidebarWidth);
+        logger.debug('[UIStore] Syncing sidebar width from AppStore globalSettings:', state.globalSettings.sidebarWidth);
         useUIStore.getState().resizeSidebar(state.globalSettings.sidebarWidth);
       }
     }

@@ -8,6 +8,10 @@ import { eventBus } from '@src/events/event-bus';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('ServerStatus');
 
 interface ServerStatusProps {
   status: string;
@@ -51,7 +55,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
   // Debug logging to track status changes
   useEffect(() => {
-    console.debug(`[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
+    logger.debug(`Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
   }, [connectionStatus, initialStatus, status, isConnected]);
 
   // Destructure with fallbacks in case useBackgroundCommunication fails

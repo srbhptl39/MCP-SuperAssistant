@@ -1,4 +1,8 @@
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('WebSocketTransport');
 
 export interface WebSocketTransportOptions {
   protocols?: string[];
@@ -16,7 +20,7 @@ export class WebSocketTransport implements Transport {
 
   async start(): Promise<void> {
     // Required by Transport interface - delegate to connect method
-    console.log('[WebSocketTransport] Start method called - initiating connection');
+    logger.debug('[WebSocketTransport] Start method called - initiating connection');
     await this.connect();
   }
   private ws: WebSocket | null = null;
@@ -41,13 +45,13 @@ export class WebSocketTransport implements Transport {
 
   async connect(): Promise<void> {
     if (this.isConnected || (this.ws && this.ws.readyState === WebSocket.CONNECTING)) {
-      console.log('[WebSocketTransport] Already connected or connecting');
+      logger.debug('[WebSocketTransport] Already connected or connecting');
       return;
     }
 
     return new Promise((resolve, reject) => {
       try {
-        console.log(`[WebSocketTransport] Connecting to: ${this.url}`);
+        logger.debug(`Connecting to: ${this.url}`);
 
         this.ws = new WebSocket(this.url, this.options.protocols);
         this.ws.binaryType = this.options.binaryType || 'arraybuffer';
@@ -61,7 +65,7 @@ export class WebSocketTransport implements Transport {
 
         this.ws.onopen = () => {
           clearTimeout(connectionTimeout);
-          console.log('[WebSocketTransport] Connected');
+          logger.debug('[WebSocketTransport] Connected');
           this.isConnected = true;
           this.startPingPong();
           this.processMessageQueue();
@@ -70,7 +74,7 @@ export class WebSocketTransport implements Transport {
 
         this.ws.onclose = event => {
           clearTimeout(connectionTimeout);
-          console.log(`[WebSocketTransport] Disconnected: ${event.code} ${event.reason}`);
+          logger.debug(`Disconnected: ${event.code} ${event.reason}`);
           this.isConnected = false;
           this.stopPingPong();
           this.emit('close', { code: event.code, reason: event.reason });
@@ -82,7 +86,7 @@ export class WebSocketTransport implements Transport {
 
         this.ws.onerror = error => {
           clearTimeout(connectionTimeout);
-          console.error('[WebSocketTransport] Error:', error);
+          logger.error('[WebSocketTransport] Error:', error);
           this.isConnected = false;
           this.emit('error', error);
           // Call Transport interface callback
@@ -102,7 +106,7 @@ export class WebSocketTransport implements Transport {
               const text = new TextDecoder().decode(event.data);
               data = JSON.parse(text);
             } else {
-              console.warn('[WebSocketTransport] Received unknown data type:', typeof event.data);
+              logger.warn('[WebSocketTransport] Received unknown data type:', typeof event.data);
               return;
             }
 
@@ -117,7 +121,7 @@ export class WebSocketTransport implements Transport {
               this.onmessage(data);
             }
           } catch (error) {
-            console.error('[WebSocketTransport] Failed to parse message:', error);
+            logger.error('[WebSocketTransport] Failed to parse message:', error);
             const parseError = new Error('Failed to parse WebSocket message');
             this.emit('error', parseError);
             // Call Transport interface callback for errors
@@ -133,7 +137,7 @@ export class WebSocketTransport implements Transport {
   }
 
   async close(): Promise<void> {
-    console.log('[WebSocketTransport] Closing connection');
+    logger.debug('[WebSocketTransport] Closing connection');
     this.isConnected = false;
     this.stopPingPong();
 
@@ -147,7 +151,7 @@ export class WebSocketTransport implements Transport {
     const message = JSON.stringify(data);
 
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.log('[WebSocketTransport] Queuing message (not connected)');
+      logger.debug('[WebSocketTransport] Queuing message (not connected)');
       this.messageQueue.push(data);
       return;
     }
@@ -155,7 +159,7 @@ export class WebSocketTransport implements Transport {
     try {
       this.ws.send(message);
     } catch (error) {
-      console.error('[WebSocketTransport] Failed to send message:', error);
+      logger.error('[WebSocketTransport] Failed to send message:', error);
       this.messageQueue.push(data);
       throw error;
     }
@@ -164,7 +168,7 @@ export class WebSocketTransport implements Transport {
   private processMessageQueue(): void {
     if (this.messageQueue.length === 0) return;
 
-    console.log(`[WebSocketTransport] Processing ${this.messageQueue.length} queued messages`);
+    logger.debug(`Processing ${this.messageQueue.length} queued messages`);
 
     const queue = [...this.messageQueue];
     this.messageQueue = [];
@@ -173,7 +177,7 @@ export class WebSocketTransport implements Transport {
       try {
         this.send(message);
       } catch (error) {
-        console.error('[WebSocketTransport] Failed to send queued message:', error);
+        logger.error('[WebSocketTransport] Failed to send queued message:', error);
         // Re-queue the message
         this.messageQueue.push(message);
       }
@@ -183,7 +187,7 @@ export class WebSocketTransport implements Transport {
   private startPingPong(): void {
     // Disable custom ping/pong - MCP protocol and the server handle connection monitoring
     // The server logs show it's sending its own ping messages to the child process
-    console.log('[WebSocketTransport] Skipping custom ping/pong - relying on MCP protocol and server-side monitoring');
+    logger.debug('[WebSocketTransport] Skipping custom ping/pong - relying on MCP protocol and server-side monitoring');
     return;
   }
 
@@ -215,7 +219,7 @@ export class WebSocketTransport implements Transport {
         try {
           listener(data);
         } catch (error) {
-          console.error(`[WebSocketTransport] Error in ${event} listener:`, error);
+          logger.error(`Error in ${event} listener:`, error);
         }
       });
     }

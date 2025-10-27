@@ -5,6 +5,10 @@ import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/type
 
 import type { ITransportPlugin, PluginMetadata, PluginConfig } from '../../types/plugin.js';
 import type { SSEPluginConfig } from '../../types/config.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('SSEPlugin');
 
 export class SSEPlugin implements ITransportPlugin {
   readonly metadata: PluginMetadata = {
@@ -28,19 +32,19 @@ export class SSEPlugin implements ITransportPlugin {
       ...config,
     } as SSEPluginConfig;
 
-    console.log(`[SSEPlugin] Initialized with config:`, this.config);
+    logger.debug(`Initialized with config:`, this.config);
   }
 
   async connect(uri: string): Promise<Transport> {
-    console.log(`[SSEPlugin] Creating transport for: ${uri}`);
+    logger.debug(`Creating transport for: ${uri}`);
 
     try {
       const transport = await this.createConnection(uri);
       this.transport = transport;
-      console.log('[SSEPlugin] Transport created successfully');
+      logger.debug('[SSEPlugin] Transport created successfully');
       return transport;
     } catch (error) {
-      console.error('[SSEPlugin] Transport creation failed:', error);
+      logger.error('[SSEPlugin] Transport creation failed:', error);
       throw error;
     }
   }
@@ -49,14 +53,14 @@ export class SSEPlugin implements ITransportPlugin {
     try {
       // Validate and parse URI
       const url = new URL(uri);
-      console.log(`[SSEPlugin] Creating SSE transport for: ${url.toString()}`);
+      logger.debug(`Creating SSE transport for: ${url.toString()}`);
 
       // Create SSE transport
       const transport = new SSEClientTransport(url);
 
       // Return the transport without testing
       // The main client will handle the connection test
-      console.log('[SSEPlugin] SSE transport created successfully');
+      logger.debug('[SSEPlugin] SSE transport created successfully');
       return transport;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -76,7 +80,7 @@ export class SSEPlugin implements ITransportPlugin {
   }
 
   async disconnect(): Promise<void> {
-    console.log('[SSEPlugin] Disconnecting...');
+    logger.debug('[SSEPlugin] Disconnecting...');
 
     if (this.transport) {
       try {
@@ -85,7 +89,7 @@ export class SSEPlugin implements ITransportPlugin {
           await (this.transport as any).close();
         }
       } catch (error) {
-        console.warn('[SSEPlugin] Error during transport cleanup:', error);
+        logger.warn('[SSEPlugin] Error during transport cleanup:', error);
       }
     }
 
@@ -93,7 +97,7 @@ export class SSEPlugin implements ITransportPlugin {
     this.isConnectedFlag = false;
     this.connectionPromise = null;
 
-    console.log('[SSEPlugin] Disconnected');
+    logger.debug('[SSEPlugin] Disconnected');
   }
 
   isConnected(): boolean {
@@ -133,7 +137,7 @@ export class SSEPlugin implements ITransportPlugin {
       // In a real implementation, you might want to track last received event timestamp
       return true;
     } catch (error) {
-      console.warn('[SSEPlugin] Health check failed:', error);
+      logger.warn('[SSEPlugin] Health check failed:', error);
       return false;
     }
   }
@@ -143,14 +147,14 @@ export class SSEPlugin implements ITransportPlugin {
       throw new Error('SSE Plugin: Not connected');
     }
 
-    console.log(`[SSEPlugin] Calling tool: ${toolName}`);
+    logger.debug(`Calling tool: ${toolName}`);
 
     try {
       const result = await client.callTool({ name: toolName, arguments: args });
-      console.log(`[SSEPlugin] Tool call completed: ${toolName}`);
+      logger.debug(`Tool call completed: ${toolName}`);
       return result;
     } catch (error) {
-      console.error(`[SSEPlugin] Tool call failed: ${toolName}`, error);
+      logger.error(`Tool call failed: ${toolName}`, error);
       throw error;
     }
   }
@@ -160,7 +164,7 @@ export class SSEPlugin implements ITransportPlugin {
       throw new Error('SSE Plugin: Not connected');
     }
 
-    console.log('[SSEPlugin] Getting primitives...');
+    logger.debug('[SSEPlugin] Getting primitives...');
 
     try {
       const capabilities = client.getServerCapabilities();
@@ -192,10 +196,10 @@ export class SSEPlugin implements ITransportPlugin {
       }
 
       await Promise.all(promises);
-      console.log(`[SSEPlugin] Retrieved ${primitives.length} primitives`);
+      logger.debug(`Retrieved ${primitives.length} primitives`);
       return primitives;
     } catch (error) {
-      console.error('[SSEPlugin] Failed to get primitives:', error);
+      logger.error('[SSEPlugin] Failed to get primitives:', error);
       throw error;
     }
   }

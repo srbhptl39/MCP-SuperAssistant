@@ -6,12 +6,16 @@
 
 // Example: Log all events (for debugging purposes)
 /*
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('GlobalEventHandlers');
+
 function logAllEvents() {
   const allEvents = Object.keys(eventBus.getAllEventListeners()) as Array<keyof EventMap>; // Assuming getAllEventListeners exists or similar introspection
 
   allEvents.forEach(eventName => {
     eventBus.on(eventName, (data) => {
-      console.debug(`[GlobalEventHandler] Event: ${eventName}`, data);
+      logger.debug(`Event: ${eventName}`, data);
     });
   });
 }
@@ -21,7 +25,7 @@ function logAllEvents() {
 /*
 function handleGlobalErrorEvents() {
   eventBus.on('error:unhandled', (data) => {
-    console.error('[GlobalEventHandler] Unhandled error detected:', data.error, 'Context:', data.context);
+    logger.error('[GlobalEventHandler] Unhandled error detected:', data.error, 'Context:', data.context);
     // Potentially send to a global error tracking service
   });
 }
@@ -33,6 +37,10 @@ function handleGlobalErrorEvents() {
  */
 import { eventBus } from './event-bus';
 import type { EventMap, UnsubscribeFunction } from './event-types';
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('GlobalEventHandlers');
+
 
 class GlobalEventHandlers {
   private unsubscribeFunctions: UnsubscribeFunction[] = [];
@@ -45,14 +53,14 @@ class GlobalEventHandlers {
   private _logEvent<K extends keyof EventMap>(eventName: K) {
     return (data: EventMap[K]) => {
       if (process.env.NODE_ENV === 'development') {
-        console.debug(`[GlobalEventHandlers] Event "${String(eventName)}":`, data);
+        logger.debug(`Event "${String(eventName)}":`, data);
       }
     };
   }
 
   init(): void {
     this.destroy(); // Clear any existing listeners before re-initializing
-    console.debug('[GlobalEventHandlers] Initializing global event handlers...');
+    logger.debug('[GlobalEventHandlers] Initializing global event handlers...');
 
   
 
@@ -80,11 +88,11 @@ class GlobalEventHandlers {
   this.unsubscribeFunctions.push(
     eventBus.on('error:unhandled', (data) => {
       try {
-        console.error('[GlobalEventHandlers] Event "error:unhandled":', data.error, 'Context:', data.context, 'Stack:', data.error?.stack);
+        logger.error('[GlobalEventHandlers] Event "error:unhandled":', data.error, 'Context:', data.context, 'Stack:', data.error?.stack);
         // TODO: Integrate with a global error tracking service if available
       } catch (handlerError) {
         // Prevent recursive error handling by just logging to console without emitting events
-        console.error('[GlobalEventHandlers] Error in error:unhandled handler:', handlerError);
+        logger.error('[GlobalEventHandlers] Error in error:unhandled handler:', handlerError);
       }
     })
   );
@@ -100,14 +108,14 @@ class GlobalEventHandlers {
     // Performance events
     this.unsubscribeFunctions.push(eventBus.on('performance:measurement', this._logEvent('performance:measurement')));
 
-    console.debug('[GlobalEventHandlers] Global event handlers initialized.');
+    logger.debug('[GlobalEventHandlers] Global event handlers initialized.');
   }
 
   destroy(): void {
-    console.debug('[GlobalEventHandlers] Destroying global event handlers...');
+    logger.debug('[GlobalEventHandlers] Destroying global event handlers...');
     this.unsubscribeFunctions.forEach(unsub => unsub());
     this.unsubscribeFunctions = [];
-    console.debug('[GlobalEventHandlers] Global event handlers destroyed.');
+    logger.debug('[GlobalEventHandlers] Global event handlers destroyed.');
   }
 }
 

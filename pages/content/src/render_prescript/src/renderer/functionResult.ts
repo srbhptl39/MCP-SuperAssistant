@@ -1,7 +1,11 @@
 import { CONFIG } from '../core/config';
 import { applyThemeClass, isDarkTheme } from '../utils/themeDetector';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // State management for rendered elements
+
+const logger = createLogger('FunctionResultRenderer');
+
 export const processedResultElements = new WeakSet<HTMLElement>();
 export const renderedFunctionResults = new Map<string, HTMLDivElement>();
 
@@ -256,7 +260,7 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     // Replace the original block with our rendered version
     replaceBlockContent(block, systemContainer);
   } catch (e) {
-    console.error('[renderSystemMessageBox] Error rendering system message:', e);
+    logger.error('[renderSystemMessageBox] Error rendering system message:', e);
   }
 };
 
@@ -435,11 +439,11 @@ export const renderFunctionResult = (block: HTMLElement, isProcessingRef: { curr
 
       return true;
     } catch (e) {
-      console.error('Error parsing function result:', e);
+      logger.error('Error parsing function result:', e);
       return false;
     }
   } catch (e) {
-    console.error('Error rendering function result:', e);
+    logger.error('Error rendering function result:', e);
     return false;
   } finally {
     // Reset processing state

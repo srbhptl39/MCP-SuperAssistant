@@ -7,6 +7,10 @@
 
 import { eventBus } from '../events/event-bus';
 import type { CircuitBreaker } from './circuit-breaker';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('GlobalErrorHandler');
 
 export interface ErrorContext {
   component?: string;
@@ -39,7 +43,7 @@ class GlobalErrorHandler {
    */
   initialize(eventBusInstance: typeof eventBus, circuitBreakerInstance?: CircuitBreaker): void {
     if (this.initialized) {
-      console.warn('[GlobalErrorHandler] Already initialized');
+      logger.warn('[GlobalErrorHandler] Already initialized');
       return;
     }
 
@@ -52,7 +56,7 @@ class GlobalErrorHandler {
     this.setupEventBusIntegration();
 
     this.initialized = true;
-    console.debug('[GlobalErrorHandler] Initialized successfully');
+    logger.debug('[GlobalErrorHandler] Initialized successfully');
   }
 
   /**
@@ -105,7 +109,7 @@ class GlobalErrorHandler {
         this.handleError(error, contextWithMarker);
       } catch (handlerError) {
         // Prevent recursive error handling by just logging to console
-        console.error('[GlobalErrorHandler] Error in error:unhandled handler:', handlerError);
+        logger.error('[GlobalErrorHandler] Error in error:unhandled handler:', handlerError);
       }
     });
 
@@ -219,7 +223,7 @@ class GlobalErrorHandler {
   clearErrorReports(): void {
     this.errorReports = [];
     this.errorCounts.clear();
-    console.debug('[GlobalErrorHandler] Error reports cleared');
+    logger.debug('[GlobalErrorHandler] Error reports cleared');
   }
 
   /**
@@ -261,19 +265,19 @@ class GlobalErrorHandler {
     
     switch (strategy) {
       case 'reload-page':
-        console.warn('[GlobalErrorHandler] Attempting page reload recovery');
+        logger.warn('[GlobalErrorHandler] Attempting page reload recovery');
         setTimeout(() => window.location.reload(), 1000);
         break;
       case 'reset-component':
-        console.warn('[GlobalErrorHandler] Attempting component reset recovery');
+        logger.warn('[GlobalErrorHandler] Attempting component reset recovery');
         eventBus.emit('component:reset', { component: context.component });
         break;
       case 'fallback-mode':
-        console.warn('[GlobalErrorHandler] Switching to fallback mode');
+        logger.warn('[GlobalErrorHandler] Switching to fallback mode');
         eventBus.emit('app:fallback-mode', { reason: error.message });
         break;
       default:
-        console.warn('[GlobalErrorHandler] No recovery strategy available');
+        logger.warn('[GlobalErrorHandler] No recovery strategy available');
     }
   }
 
@@ -295,7 +299,7 @@ class GlobalErrorHandler {
     const errorData = this.errorCounts.get(key);
     
     if (errorData && errorData.count >= 5) {
-      console.warn(`[GlobalErrorHandler] Error pattern detected: ${key} occurred ${errorData.count} times`);
+      logger.warn(`Error pattern detected: ${key} occurred ${errorData.count} times`);
       eventBus.emit('error:pattern-detected', {
         pattern: key,
         count: errorData.count,
@@ -316,7 +320,7 @@ class GlobalErrorHandler {
     this.errorReports = [];
     this.errorCounts.clear();
     this.initialized = false;
-    console.debug('[GlobalErrorHandler] Cleaned up');
+    logger.debug('[GlobalErrorHandler] Cleaned up');
   }
 }
 

@@ -12,8 +12,12 @@ import {
   getPreviousExecution,
 } from '../mcpexecute/storage';
 import { displayResult } from './components';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Add type declaration for global mcpClient access
+
+const logger = createLogger('FunctionHistory');
+
 declare global {
   interface Window {
     mcpClient?: any;
@@ -149,7 +153,7 @@ export const updateHistoryPanel = (
         return;
       }
 
-      console.debug(`Re-executing function ${executionData.functionName} with arguments:`, executionData.params);
+      logger.debug(`Re-executing function ${executionData.functionName} with arguments:`, executionData.params);
 
       try {
         // Use async/await with the new mcpClient API
@@ -187,7 +191,7 @@ export const updateHistoryPanel = (
 
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Re-execute error:', error);
+      logger.error('Re-execute error:', error);
       
       displayResult(
         resultsPanel,
@@ -247,7 +251,7 @@ export const checkAndDisplayFunctionHistory = (
     updateHistoryPanel(historyPanel, latestExecution, mcpClient);
 
     // Log that we're showing only the latest execution
-    console.debug(
+    logger.debug(
       `Showing only the latest execution from ${matchingExecutions.length} matches for function ${functionName}`,
     );
   }

@@ -6,6 +6,7 @@ import {
   attachFileToChatInput, 
   submitChatInput 
 } from '../../components/websites/aistudio/chatInputHandler';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * AI Studio Adapter for Google AI Studio (aistudio.google.com)
@@ -16,6 +17,9 @@ import {
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('AIStudioAdapter');
+
 export class AIStudioAdapter extends BaseAdapterPlugin {
   readonly name = 'AIStudioAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
@@ -61,7 +65,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     super();
     AIStudioAdapter.instanceCount++;
     this.instanceId = AIStudioAdapter.instanceCount;
-    console.debug(`[AIStudioAdapter] Instance #${this.instanceId} created. Total instances: ${AIStudioAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${AIStudioAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {

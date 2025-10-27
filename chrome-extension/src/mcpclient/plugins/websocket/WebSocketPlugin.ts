@@ -5,6 +5,10 @@ import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/type
 import type { ITransportPlugin, PluginMetadata, PluginConfig } from '../../types/plugin.js';
 import type { WebSocketPluginConfig } from '../../types/config.js';
 import { WebSocketTransport } from './WebSocketTransport.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('WebSocketPlugin');
 
 export class WebSocketPlugin implements ITransportPlugin {
   readonly metadata: PluginMetadata = {
@@ -32,19 +36,19 @@ export class WebSocketPlugin implements ITransportPlugin {
       ...config,
     } as WebSocketPluginConfig;
 
-    console.log(`[WebSocketPlugin] Initialized with config:`, this.config);
+    logger.debug(`Initialized with config:`, this.config);
   }
 
   async connect(uri: string): Promise<Transport> {
-    console.log(`[WebSocketPlugin] Creating transport for: ${uri}`);
+    logger.debug(`Creating transport for: ${uri}`);
 
     try {
       const transport = await this.createConnection(uri);
       this.transport = transport as unknown as WebSocketTransport;
-      console.log('[WebSocketPlugin] Transport created successfully');
+      logger.debug('[WebSocketPlugin] Transport created successfully');
       return transport;
     } catch (error) {
-      console.error('[WebSocketPlugin] Transport creation failed:', error);
+      logger.error('[WebSocketPlugin] Transport creation failed:', error);
       throw error;
     }
   }
@@ -59,7 +63,7 @@ export class WebSocketPlugin implements ITransportPlugin {
         throw new Error(`Invalid WebSocket protocol: ${url.protocol}. Expected ws: or wss:`);
       }
 
-      console.log(`[WebSocketPlugin] Creating WebSocket transport for: ${url.toString()}`);
+      logger.debug(`Creating WebSocket transport for: ${url.toString()}`);
 
       // Create WebSocket transport with plugin config
       const transport = new WebSocketTransport(url.toString(), {
@@ -72,7 +76,7 @@ export class WebSocketPlugin implements ITransportPlugin {
 
       // Set up event listeners for monitoring
       transport.on('close', (event: any) => {
-        console.log(`[WebSocketPlugin] Transport closed: ${event.code} ${event.reason}`);
+        logger.debug(`Transport closed: ${event.code} ${event.reason}`);
         this.isConnectedFlag = false;
         
         // Notify the main client about disconnection
@@ -80,7 +84,7 @@ export class WebSocketPlugin implements ITransportPlugin {
       });
 
       transport.on('error', (error: any) => {
-        console.error('[WebSocketPlugin] Transport error:', error);
+        logger.error('[WebSocketPlugin] Transport error:', error);
         // Don't immediately mark as disconnected for ping/pong errors
         // Let MCP protocol handle connection management
         if (!error.message.includes('Pong timeout')) {
@@ -90,7 +94,7 @@ export class WebSocketPlugin implements ITransportPlugin {
       });
 
       // Return the transport without connecting - the main client will handle connection
-      console.log('[WebSocketPlugin] WebSocket transport created successfully');
+      logger.debug('[WebSocketPlugin] WebSocket transport created successfully');
       return transport as unknown as Transport;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -112,13 +116,13 @@ export class WebSocketPlugin implements ITransportPlugin {
   }
 
   async disconnect(): Promise<void> {
-    console.log('[WebSocketPlugin] Disconnecting...');
+    logger.debug('[WebSocketPlugin] Disconnecting...');
 
     if (this.transport) {
       try {
         await this.transport.close();
       } catch (error) {
-        console.warn('[WebSocketPlugin] Error during transport cleanup:', error);
+        logger.warn('[WebSocketPlugin] Error during transport cleanup:', error);
       }
     }
 
@@ -126,7 +130,7 @@ export class WebSocketPlugin implements ITransportPlugin {
     this.isConnectedFlag = false;
     this.connectionPromise = null;
 
-    console.log('[WebSocketPlugin] Disconnected');
+    logger.debug('[WebSocketPlugin] Disconnected');
   }
 
   isConnected(): boolean {
@@ -164,7 +168,7 @@ export class WebSocketPlugin implements ITransportPlugin {
       const isOpen = readyState === WebSocket.OPEN;
 
       if (!isOpen) {
-        console.warn(`[WebSocketPlugin] WebSocket not in OPEN state: ${readyState}`);
+        logger.warn(`WebSocket not in OPEN state: ${readyState}`);
         return false;
       }
 
@@ -179,7 +183,7 @@ export class WebSocketPlugin implements ITransportPlugin {
 
       return true;
     } catch (error) {
-      console.warn('[WebSocketPlugin] Health check failed:', error);
+      logger.warn('[WebSocketPlugin] Health check failed:', error);
       return false;
     }
   }
@@ -189,14 +193,14 @@ export class WebSocketPlugin implements ITransportPlugin {
       throw new Error('WebSocket Plugin: Not connected');
     }
 
-    console.log(`[WebSocketPlugin] Calling tool: ${toolName}`);
+    logger.debug(`Calling tool: ${toolName}`);
 
     try {
       const result = await client.callTool({ name: toolName, arguments: args });
-      console.log(`[WebSocketPlugin] Tool call completed: ${toolName}`);
+      logger.debug(`Tool call completed: ${toolName}`);
       return result;
     } catch (error) {
-      console.error(`[WebSocketPlugin] Tool call failed: ${toolName}`, error);
+      logger.error(`Tool call failed: ${toolName}`, error);
 
       // Check if this is a connection-related error
       if (!this.isConnected()) {
@@ -213,7 +217,7 @@ export class WebSocketPlugin implements ITransportPlugin {
       throw new Error('WebSocket Plugin: Not connected');
     }
 
-    console.log('[WebSocketPlugin] Getting primitives...');
+    logger.debug('[WebSocketPlugin] Getting primitives...');
 
     try {
       const capabilities = client.getServerCapabilities();
@@ -245,10 +249,10 @@ export class WebSocketPlugin implements ITransportPlugin {
       }
 
       await Promise.all(promises);
-      console.log(`[WebSocketPlugin] Retrieved ${primitives.length} primitives`);
+      logger.debug(`Retrieved ${primitives.length} primitives`);
       return primitives;
     } catch (error) {
-      console.error('[WebSocketPlugin] Failed to get primitives:', error);
+      logger.error('[WebSocketPlugin] Failed to get primitives:', error);
 
       // Check if this is a connection-related error
       if (!this.isConnected()) {
@@ -271,13 +275,13 @@ export class WebSocketPlugin implements ITransportPlugin {
    * Handle disconnection events by notifying the main client
    */
   private handleDisconnection(reason: string, code?: number, details?: string): void {
-    console.log(`[WebSocketPlugin] Handling disconnection: ${reason} (code: ${code}, details: ${details})`);
+    logger.debug(`Handling disconnection: ${reason} (code: ${code}, details: ${details})`);
     
     if (this.disconnectionCallback) {
       try {
         this.disconnectionCallback(reason, code, details);
       } catch (error) {
-        console.error('[WebSocketPlugin] Error in disconnection callback:', error);
+        logger.error('[WebSocketPlugin] Error in disconnection callback:', error);
       }
     }
   }

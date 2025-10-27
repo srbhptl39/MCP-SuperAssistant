@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { eventBus } from '../events';
 import type { ConnectionStatus, ServerConfig } from '../types/stores';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('useConnectionStore');
 
 export interface ConnectionState {
   status: ConnectionStatus;
@@ -48,7 +52,7 @@ export const useConnectionStore = create<ConnectionState>()(
       setStatus: (status: ConnectionStatus) => {
         const oldStatus = get().status;
         set({ status });
-        console.debug(`[ConnectionStore] Status changed from ${oldStatus} to: ${status}`);
+        logger.debug(`Status changed from ${oldStatus} to: ${status}`);
         eventBus.emit('connection:status-changed', { status, error: get().error || undefined });
       },
 
@@ -56,13 +60,13 @@ export const useConnectionStore = create<ConnectionState>()(
         set(state => ({ 
           serverConfig: { ...state.serverConfig, ...config }
         }));
-        console.debug('[ConnectionStore] Server config updated:', get().serverConfig);
+        logger.debug('[ConnectionStore] Server config updated:', get().serverConfig);
       },
 
       setLastError: (error: string | null) => {
         set({ error });
         if (error) {
-          console.error('[ConnectionStore] Error set:', error);
+          logger.error('[ConnectionStore] Error set:', error);
           eventBus.emit('connection:error', { error: error });
         }
       },
@@ -70,13 +74,13 @@ export const useConnectionStore = create<ConnectionState>()(
       incrementAttempts: () => {
         const newAttempts = get().connectionAttempts + 1;
         set({ connectionAttempts: newAttempts });
-        console.debug(`[ConnectionStore] Connection attempts: ${newAttempts}`);
+        logger.debug(`Connection attempts: ${newAttempts}`);
         eventBus.emit('connection:attempt', { attempt: newAttempts, maxAttempts: get().serverConfig.retryAttempts });
       },
 
       resetAttempts: () => {
         set({ connectionAttempts: 0 });
-        console.debug('[ConnectionStore] Connection attempts reset.');
+        logger.debug('[ConnectionStore] Connection attempts reset.');
       },
       
       setConnected: (timestamp: number) => {
@@ -87,7 +91,7 @@ export const useConnectionStore = create<ConnectionState>()(
           error: null,
           isReconnecting: false,
         });
-        console.debug(`[ConnectionStore] Connected at: ${new Date(timestamp).toISOString()}`);
+        logger.debug(`Connected at: ${new Date(timestamp).toISOString()}`);
         eventBus.emit('connection:status-changed', { status: 'connected' });
       },
 
@@ -97,14 +101,14 @@ export const useConnectionStore = create<ConnectionState>()(
           error: error || state.error, // Keep existing error if no new one provided
           isReconnecting: false, // Ensure reconnecting is false when explicitly disconnected
         }));
-        console.debug(`[ConnectionStore] Disconnected. ${error ? 'Error: ' + error : ''}`);
+        logger.debug(`Disconnected. ${error ? 'Error: ' + error : ''}`);
         eventBus.emit('connection:status-changed', { status: get().status, error: error || get().error || undefined });
       },
 
       startReconnecting: () => {
         if (get().status === 'connected') return; // Don't try to reconnect if already connected
         set({ isReconnecting: true, status: 'reconnecting' });
-        console.debug('[ConnectionStore] Reconnecting started...');
+        logger.debug('[ConnectionStore] Reconnecting started...');
         eventBus.emit('connection:status-changed', { status: 'reconnecting' });
       },
 
@@ -113,7 +117,7 @@ export const useConnectionStore = create<ConnectionState>()(
         if (get().isReconnecting) {
           const previousStatus = get().error ? 'error' : 'disconnected';
           set({ isReconnecting: false, status: previousStatus });
-          console.debug('[ConnectionStore] Reconnecting stopped.');
+          logger.debug('[ConnectionStore] Reconnecting stopped.');
         }
       },
     }),

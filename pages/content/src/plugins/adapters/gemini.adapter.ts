@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
 import { adapterConfigManager, type AdapterConfig } from './defaultConfigs';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Gemini Adapter for Google Gemini (gemini.google.com)
@@ -11,6 +12,9 @@ import { adapterConfigManager, type AdapterConfig } from './defaultConfigs';
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('GeminiAdapter');
+
 export class GeminiAdapter extends BaseAdapterPlugin {
   readonly name = 'GeminiAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
@@ -63,7 +67,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     super();
     GeminiAdapter.instanceCount++;
     this.instanceId = GeminiAdapter.instanceCount;
-    console.debug(`[GeminiAdapter] Instance #${this.instanceId} created. Total instances: ${GeminiAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${GeminiAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {

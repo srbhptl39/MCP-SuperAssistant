@@ -1,3 +1,7 @@
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('Index');
+
 export * from './plugin-types';
 export { pluginRegistry, initializePluginRegistry, cleanupPluginRegistry } from './plugin-registry';
 export { BaseAdapterPlugin } from './adapters/base.adapter';
@@ -20,9 +24,9 @@ export async function cleanupPluginSystem(): Promise<void> {
   try {
     const { pluginRegistry } = await import('./plugin-registry');
     await pluginRegistry.cleanup();
-    console.debug('[Plugin System] Cleaned up successfully');
+    logger.debug('[Plugin System] Cleaned up successfully');
   } catch (error) {
-    console.error('[Plugin System] Failed to cleanup:', error);
+    logger.error('[Plugin System] Failed to cleanup:', error);
   }
 }
 

@@ -5,8 +5,12 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Cache for the last found input element to improve reliability
+
+const logger = createLogger('T3ChatInputHandler');
+
 let lastFoundInputElement: HTMLElement | null = null;
 
 /**
@@ -85,7 +89,7 @@ export const insertTextToChatInput = (text: string): boolean => {
 
     if (!chatInput) {
       logMessage('Could not find T3 Chat input element');
-      console.error('Could not find T3 Chat input element');
+      logger.error('Could not find T3 Chat input element');
       return false;
     }
 
@@ -192,7 +196,7 @@ export const insertTextToChatInput = (text: string): boolean => {
     }
   } catch (error) {
     logMessage(`Error inserting text into T3 Chat input: ${error}`);
-    console.error('Error inserting text into T3 Chat input:', error);
+    logger.error('Error inserting text into T3 Chat input:', error);
     return false;
   }
 };
@@ -237,7 +241,7 @@ export const attachFileToChatInput = (file: File): boolean => {
     return true;
   } catch (error) {
     logMessage(`Error attaching file to T3 Chat: ${error}`);
-    console.error('Error attaching file to T3 Chat:', error);
+    logger.error('Error attaching file to T3 Chat:', error);
     return false;
   }
 };
@@ -343,7 +347,7 @@ export const submitChatInput = async (maxWaitTime = 5000): Promise<boolean> => {
     });
   } catch (error) {
     logMessage(`Error submitting T3 Chat input: ${error}`);
-    console.error('Error submitting T3 Chat input:', error);
+    logger.error('Error submitting T3 Chat input:', error);
     return false;
   }
 };

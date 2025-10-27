@@ -1,7 +1,11 @@
 // Import only the type, not the actual function
 import type { JsonSchema } from './schema_converter';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Reimplemented version of csnToJsonSchema
+
+const logger = createLogger('fixed_schema_test');
+
 function fixedCsnToJsonSchema(csn: string): JsonSchema {
   if (typeof csn !== 'string' || !csn.trim()) {
     throw new Error('Invalid CSN: must be a non-empty string');
@@ -59,7 +63,7 @@ function parseCsnType(typeStr: string): JsonSchema {
   // Object
   if (typeStr.startsWith('o {')) {
     const content = typeStr.slice(3, -1).trim();
-    console.debug(`Processing object: ${typeStr}`);
+    logger.debug(`Processing object: ${typeStr}`);
     // Extract the properties block with proper brace balancing
     let propertiesBlock = null;
     const pIndex = content.indexOf('p {');
@@ -80,7 +84,7 @@ function parseCsnType(typeStr: string): JsonSchema {
       }
     }
 
-    console.debug(`Properties block: ${propertiesBlock}`);
+    logger.debug(`Properties block: ${propertiesBlock}`);
 
     const hasAdditionalProps = content.includes('ap f');
     const schema: JsonSchema = { type: 'object', properties: {}, required: [] };
@@ -88,7 +92,7 @@ function parseCsnType(typeStr: string): JsonSchema {
 
     if (propertiesBlock) {
       const properties = splitTopLevel(propertiesBlock, ';').filter(Boolean);
-      console.debug(`Properties: ${JSON.stringify(properties)}`);
+      logger.debug(`Properties: ${JSON.stringify(properties)}`);
 
       for (const prop of properties) {
         const colonIndex = prop.indexOf(':');
@@ -97,7 +101,7 @@ function parseCsnType(typeStr: string): JsonSchema {
         const name = prop.substring(0, colonIndex).trim();
         const typeInfo = prop.substring(colonIndex + 1).trim();
 
-        console.debug(`Processing property: ${name} with type info: ${typeInfo}`);
+        logger.debug(`Processing property: ${name} with type info: ${typeInfo}`);
 
         // Process type info, handling nested objects and type modifiers
         let propTypeCore = '';
@@ -145,12 +149,12 @@ function parseCsnType(typeStr: string): JsonSchema {
         // Get the modifiers (r, d=..., etc.)
         propTypeModifiers = typeInfo.substring(i).trim();
 
-        console.debug(`Property ${name} core type: ${propTypeCore}, modifiers: ${propTypeModifiers}`);
+        logger.debug(`Property ${name} core type: ${propTypeCore}, modifiers: ${propTypeModifiers}`);
 
         // Parse the type
         const propSchema = parseCsnType(propTypeCore);
 
-        console.debug(`Property ${name} schema: ${JSON.stringify(propSchema)}`);
+        logger.debug(`Property ${name} schema: ${JSON.stringify(propSchema)}`);
 
         // Apply modifiers
         if (propTypeModifiers.includes('r')) {
@@ -172,7 +176,7 @@ function parseCsnType(typeStr: string): JsonSchema {
     }
 
     if (schema.required!.length === 0) delete schema.required;
-    console.debug(`Final schema: ${JSON.stringify(schema)}`);
+    logger.debug(`Final schema: ${JSON.stringify(schema)}`);
     return schema;
   }
 
@@ -236,4 +240,4 @@ const testCsn =
   'o {p {params:o {p {user_id:s; recipient_email:s r; cc:a[s]; bcc:a[s]; subject:s r; body:s r; is_html:b; attachment:u[o {p {name:s r; mimetype:s r; s3key:s r} ap f}, null]} ap f} r} ap f}';
 
 const result = fixedCsnToJsonSchema(testCsn);
-console.debug(JSON.stringify(result, null, 2));
+logger.debug(JSON.stringify(result, null, 2));

@@ -20,11 +20,15 @@ import {
   updateStalledStreamTimeoutConfig,
 } from './observer/index';
 import { renderFunctionCall, renderedFunctionBlocks } from './renderer/index';
+import { createLogger } from '@extension/shared/lib/logger';
 // Import the website-specific components
 // import { initPerplexityComponents } from './websites_components/perplexity';
 // import { initGrokComponents } from './websites_components/grok';
 
 // Ensure styles are injected only once
+
+const logger = createLogger('RenderPrescript');
+
 let stylesInjected = false;
 const injectStyles = () => {
   if (stylesInjected) return;
@@ -51,7 +55,7 @@ const injectCodeMirrorAccessor = () => {
       document.getElementById('codemirror-accessor-script-direct') ||
       document.getElementById('codemirror-accessor-page-context')) {
     if (CONFIG.debug) {
-      console.debug('CodeMirror accessor script already present in DOM, skipping injection');
+      logger.debug('CodeMirror accessor script already present in DOM, skipping injection');
     }
     codeMirrorScriptInjected = true;
     return;
@@ -60,7 +64,7 @@ const injectCodeMirrorAccessor = () => {
   // Check if window.CodeMirrorAccessor already exists
   if (typeof (window as any).CodeMirrorAccessor !== 'undefined') {
     if (CONFIG.debug) {
-      console.debug('CodeMirrorAccessor already exists on window, skipping injection');
+      logger.debug('CodeMirrorAccessor already exists on window, skipping injection');
     }
     codeMirrorScriptInjected = true;
     return;
@@ -78,7 +82,7 @@ const injectCodeMirrorAccessor = () => {
         if (document.getElementById('codemirror-accessor-script') || 
             typeof (window as any).CodeMirrorAccessor !== 'undefined') {
           if (CONFIG.debug) {
-            console.debug('CodeMirror accessor already present, aborting injection');
+            logger.debug('CodeMirror accessor already present, aborting injection');
           }
           codeMirrorScriptInjected = true;
           return;
@@ -94,17 +98,17 @@ const injectCodeMirrorAccessor = () => {
         codeMirrorScriptInjected = true;
         
         if (CONFIG.debug) {
-          console.debug('CodeMirror accessor script injected successfully');
+          logger.debug('CodeMirror accessor script injected successfully');
         }
         
         // Verify script is active after a short delay
         setTimeout(() => {
           if (typeof (window as any).CodeMirrorAccessor !== 'undefined') {
             if (CONFIG.debug) {
-              console.debug('CodeMirror accessor is active and accessible');
+              logger.debug('CodeMirror accessor is active and accessible');
             }
           } else {
-            console.debug('CodeMirror accessor script injected but not accessible - may be in wrong context');
+            logger.debug('CodeMirror accessor script injected but not accessible - may be in wrong context');
             // Try alternative injection method only if not already attempted
             if (!document.getElementById('codemirror-accessor-script-direct')) {
               injectCodeMirrorAccessorAlternative();
@@ -113,14 +117,14 @@ const injectCodeMirrorAccessor = () => {
         }, 100);
       })
       .catch(error => {
-        console.debug('Failed to fetch CodeMirror accessor script:', error);
+        logger.debug('Failed to fetch CodeMirror accessor script:', error);
         // Only try alternative if not already present
         if (!document.getElementById('codemirror-accessor-script-direct')) {
           injectCodeMirrorAccessorAlternative();
         }
       });
   } catch (error) {
-    console.debug('Error during CodeMirror script injection:', error);
+    logger.debug('Error during CodeMirror script injection:', error);
     // Only try alternative if not already present
     if (!document.getElementById('codemirror-accessor-script-direct')) {
       injectCodeMirrorAccessorAlternative();
@@ -134,7 +138,7 @@ const injectCodeMirrorAccessorAlternative = () => {
   if (document.getElementById('codemirror-accessor-script-direct') ||
       typeof (window as any).CodeMirrorAccessor !== 'undefined') {
     if (CONFIG.debug) {
-      console.debug('CodeMirror accessor already present, skipping alternative injection');
+      logger.debug('CodeMirror accessor already present, skipping alternative injection');
     }
     return;
   }
@@ -148,18 +152,18 @@ const injectCodeMirrorAccessorAlternative = () => {
     scriptElement.id = 'codemirror-accessor-script-direct';
     scriptElement.onload = () => {
       if (CONFIG.debug) {
-        console.debug('CodeMirror accessor script loaded via direct method');
+        logger.debug('CodeMirror accessor script loaded via direct method');
       }
       
       // Verify accessibility
       setTimeout(() => {
         if (typeof (window as any).CodeMirrorAccessor !== 'undefined') {
           if (CONFIG.debug) {
-            console.debug('CodeMirror accessor is now active via direct injection');
+            logger.debug('CodeMirror accessor is now active via direct injection');
           }
           codeMirrorScriptInjected = true;
         } else {
-          console.debug('CodeMirror accessor still not accessible - trying page context injection');
+          logger.debug('CodeMirror accessor still not accessible - trying page context injection');
           // Only try page context if not already present
           if (!document.getElementById('codemirror-accessor-page-context')) {
             injectCodeMirrorAccessorPageContext();
@@ -168,7 +172,7 @@ const injectCodeMirrorAccessorAlternative = () => {
       }, 50);
     };
     scriptElement.onerror = () => {
-      console.error('Failed to load CodeMirror accessor script via direct method');
+      logger.error('Failed to load CodeMirror accessor script via direct method');
       // Only try page context if not already present
       if (!document.getElementById('codemirror-accessor-page-context')) {
         injectCodeMirrorAccessorPageContext();
@@ -177,7 +181,7 @@ const injectCodeMirrorAccessorAlternative = () => {
     
     (document.head || document.documentElement).appendChild(scriptElement);
   } catch (error) {
-    console.debug('Alternative injection method failed:', error);
+    logger.debug('Alternative injection method failed:', error);
     // Only try page context if not already present
     if (!document.getElementById('codemirror-accessor-page-context')) {
       injectCodeMirrorAccessorPageContext();
@@ -192,7 +196,7 @@ const injectCodeMirrorAccessorPageContext = () => {
       document.querySelector('script[data-cm-accessor-injector]') ||
       typeof (window as any).CodeMirrorAccessor !== 'undefined') {
     if (CONFIG.debug) {
-      console.debug('CodeMirror accessor already present, skipping page context injection');
+      logger.debug('CodeMirror accessor already present, skipping page context injection');
     }
     return;
   }
@@ -208,7 +212,7 @@ const injectCodeMirrorAccessorPageContext = () => {
         // Check if already exists before injecting
         if (typeof window.CodeMirrorAccessor !== 'undefined' || 
             document.getElementById('codemirror-accessor-page-context')) {
-          console.debug('CodeMirror accessor already exists, skipping page context injection');
+          logger.debug('CodeMirror accessor already exists, skipping page context injection');
           return;
         }
         
@@ -219,10 +223,10 @@ const injectCodeMirrorAccessorPageContext = () => {
             script.textContent = scriptContent;
             script.id = 'codemirror-accessor-page-context';
             document.head.appendChild(script);
-            console.debug('CodeMirror accessor injected into page context');
+            logger.debug('CodeMirror accessor injected into page context');
           })
           .catch(error => {
-            console.error('Failed to inject CodeMirror accessor into page context:', error);
+            logger.error('Failed to inject CodeMirror accessor into page context:', error);
           });
       })();
     `;
@@ -237,10 +241,10 @@ const injectCodeMirrorAccessorPageContext = () => {
     }, 200);
     
     if (CONFIG.debug) {
-      console.debug('Attempted page context injection of CodeMirror accessor');
+      logger.debug('Attempted page context injection of CodeMirror accessor');
     }
   } catch (error) {
-    console.error('Page context injection failed:', error);
+    logger.error('Page context injection failed:', error);
   }
 };
 
@@ -251,7 +255,7 @@ updateStalledStreamTimeoutConfig();
 const initializeRenderer = () => {
   // Guard against running in non-browser environments
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    console.debug('Function Call Renderer: Not running in a browser environment.');
+    logger.debug('Function Call Renderer: Not running in a browser environment.');
     return;
   }
 
@@ -274,7 +278,7 @@ const initializeRenderer = () => {
   //     const customEvent = event as CustomEvent;
   //     if (customEvent.detail && customEvent.detail.element) {
   //         if (CONFIG.debug) {
-  //             console.debug('Custom render event triggered', customEvent.detail);
+  //             logger.debug('Custom render event triggered', customEvent.detail);
   //         }
 
   //         // Attempt to render this function call
@@ -297,16 +301,16 @@ const initializeRenderer = () => {
   // // Initialize website-specific components
   // // Check if we're on Perplexity website
   // if (window.location.href.includes('perplexity.ai')) {
-  //     console.debug("Initializing Perplexity-specific components");
+  //     logger.debug("Initializing Perplexity-specific components");
   //     initPerplexityComponents();
   // }
   // // Check if we're on Grok website
   // else if (window.location.href.includes('grok.x.ai') || window.location.href.includes('grok.ai')) {
-  //     console.debug("Initializing Grok-specific components");
+  //     logger.debug("Initializing Grok-specific components");
   //     initGrokComponents();
   // }
 
-  console.debug('Function call renderer initialized with improved parameter extraction and streaming support.');
+  logger.debug('Function call renderer initialized with improved parameter extraction and streaming support.');
 };
 
 // Configuration function
@@ -392,7 +396,7 @@ const configure = (options: Partial<FunctionCallRendererConfig>) => {
     }
   }
 
-  console.debug('Function call renderer configuration updated:', CONFIG);
+  logger.debug('Function call renderer configuration updated:', CONFIG);
 
   // Re-process immediately after config change might be needed
   processFunctionCalls();
@@ -423,11 +427,11 @@ const configure = (options: Partial<FunctionCallRendererConfig>) => {
 if (typeof window !== 'undefined') {
   (window as any).enableJSONDebug = () => {
     (window as any).__DEBUG_JSON_PARSER = true;
-    console.log('JSON parser debug logging enabled. Refresh or trigger a function call to see logs.');
+    logger.debug('JSON parser debug logging enabled. Refresh or trigger a function call to see logs.');
   };
   (window as any).disableJSONDebug = () => {
     (window as any).__DEBUG_JSON_PARSER = false;
-    console.log('JSON parser debug logging disabled.');
+    logger.debug('JSON parser debug logging disabled.');
   };
 }
 

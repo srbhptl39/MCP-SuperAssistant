@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Qwen Adapter for Qwen Chat (chat.qwen.ai)
@@ -10,6 +11,9 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('QwenAdapter');
+
 export class QwenAdapter extends BaseAdapterPlugin {
   readonly name = 'QwenAdapter';
   readonly version = '1.0.0'; // Incremented for new architecture
@@ -71,7 +75,7 @@ export class QwenAdapter extends BaseAdapterPlugin {
     super();
     QwenAdapter.instanceCount++;
     this.instanceId = QwenAdapter.instanceCount;
-    console.debug(`[QwenAdapter] Instance #${this.instanceId} created. Total instances: ${QwenAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${QwenAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {

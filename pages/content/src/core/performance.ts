@@ -6,6 +6,10 @@
  */
 
 import { eventBus } from '../events/event-bus';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('PerformanceMonitor');
 
 export interface PerformanceMeasurement {
   name: string;
@@ -43,7 +47,7 @@ class PerformanceMonitor {
    */
   initialize(eventBusInstance: typeof eventBus): void {
     if (this.initialized) {
-      console.warn('[PerformanceMonitor] Already initialized');
+      logger.warn('[PerformanceMonitor] Already initialized');
       return;
     }
 
@@ -57,7 +61,7 @@ class PerformanceMonitor {
     this.setupEventBusIntegration();
 
     this.initialized = true;
-    console.debug('[PerformanceMonitor] Initialized successfully');
+    logger.debug('[PerformanceMonitor] Initialized successfully');
   }
 
   /**
@@ -87,7 +91,7 @@ class PerformanceMonitor {
         // Observe different types of performance entries
         this.performanceObserver.observe({ entryTypes: ['measure', 'navigation', 'resource'] });
       } catch (error) {
-        console.warn('[PerformanceMonitor] Failed to set up PerformanceObserver:', error);
+        logger.warn('[PerformanceMonitor] Failed to set up PerformanceObserver:', error);
       }
     }
   }
@@ -182,7 +186,7 @@ class PerformanceMonitor {
     const startEntry = measurements.find(m => m.name === startMark);
     
     if (!startEntry) {
-      console.warn(`[PerformanceMonitor] Start mark '${startMark}' not found`);
+      logger.warn(`Start mark '${startMark}' not found`);
       return null;
     }
 
@@ -191,7 +195,7 @@ class PerformanceMonitor {
       { timestamp: Date.now() };
 
     if (!endEntry) {
-      console.warn(`[PerformanceMonitor] End mark '${endMark}' not found`);
+      logger.warn(`End mark '${endMark}' not found`);
       return null;
     }
 
@@ -261,7 +265,7 @@ class PerformanceMonitor {
     }
 
     if (increasing >= 4) {
-      console.warn('[PerformanceMonitor] Potential memory leak detected');
+      logger.warn('[PerformanceMonitor] Potential memory leak detected');
       eventBus.emit('performance:memory-leak-detected', {
         snapshots: recent,
         trend,
@@ -285,7 +289,7 @@ class PerformanceMonitor {
 
     // Check if this is a slow operation
     if (measurement.duration > this.slowThreshold) {
-      // console.warn(`[PerformanceMonitor] Slow operation detected: ${measurement.name} took ${measurement.duration}ms`);
+      // logger.warn(`Slow operation detected: ${measurement.name} took ${measurement.duration}ms`);
       eventBus.emit('performance:slow-operation', measurement);
     }
   }
@@ -324,7 +328,7 @@ class PerformanceMonitor {
   clear(): void {
     this.measurements = [];
     this.memorySnapshots = [];
-    console.debug('[PerformanceMonitor] Performance data cleared');
+    logger.debug('[PerformanceMonitor] Performance data cleared');
   }
 
   /**
@@ -369,7 +373,7 @@ class PerformanceMonitor {
     this.measurements = [];
     this.memorySnapshots = [];
     this.initialized = false;
-    console.debug('[PerformanceMonitor] Cleaned up');
+    logger.debug('[PerformanceMonitor] Cleaned up');
   }
 }
 

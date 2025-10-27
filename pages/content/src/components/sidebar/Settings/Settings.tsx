@@ -4,8 +4,12 @@ import { Card, CardContent } from '@src/components/ui/card';
 import { Typography } from '../ui';
 import { AutomationService } from '@src/services/automation.service';
 import { cn } from '@src/lib/utils';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Default delay values in seconds
+
+const logger = createLogger('Settings');
+
 const DEFAULT_DELAYS = {
   autoInsertDelay: 2,
   autoSubmitDelay: 2,
@@ -18,7 +22,7 @@ const Settings: React.FC = () => {
   // Handle delay input changes
   const handleDelayChange = (type: 'autoInsert' | 'autoSubmit' | 'autoExecute', value: string) => {
     const delay = Math.max(0, parseInt(value) || 0); // Ensure non-negative integer
-    console.debug(`[Settings] ${type} delay changed to: ${delay}`);
+    logger.debug(`${type} delay changed to: ${delay}`);
     
     // Update user preferences store with the new delay
     updatePreferences({ [`${type}Delay`]: delay });
@@ -31,7 +35,7 @@ const Settings: React.FC = () => {
         [`${type}Delay`]: delay
       }));
     } catch (error) {
-      console.error('[Settings] Error storing delay settings:', error);
+      logger.error('[Settings] Error storing delay settings:', error);
     }
 
     // Update automation state on window
@@ -51,7 +55,7 @@ const Settings: React.FC = () => {
         updatePreferences(storedDelays);
       }
     } catch (error) {
-      console.error('[Settings] Error loading stored delay settings:', error);
+      logger.error('[Settings] Error loading stored delay settings:', error);
       // Set defaults on error
       updatePreferences(DEFAULT_DELAYS);
       localStorage.setItem('mcpDelaySettings', JSON.stringify(DEFAULT_DELAYS));

@@ -1,3 +1,7 @@
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('useBackgroundCommunication');
+
 // // pages/content/src/utils/backgroundCommunication.ts
 
 // import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -845,7 +849,7 @@
 //           try {
 //             toolArgs = JSON.parse(tool.rawArguments);
 //           } catch (e) {
-//             console.error('Error parsing MCPTool arguments:', e);
+//             logger.error('Error parsing MCPTool arguments:', e);
 //             const errorMessage = e instanceof Error ? e.message : String(e);
 //             return `Error: Invalid JSON arguments: ${errorMessage}`;
 //           }
@@ -854,7 +858,7 @@
 //         const result = await callTool(toolName, toolArgs);
 //         return typeof result === 'string' ? result : JSON.stringify(result);
 //       } catch (error) {
-//         console.error('Error executing tool:', error);
+//         logger.error('Error executing tool:', error);
 //         // Safely handle error of unknown type
 //         const errorMessage = error instanceof Error ? error.message : String(error);
 //         return `Error: ${errorMessage}`;

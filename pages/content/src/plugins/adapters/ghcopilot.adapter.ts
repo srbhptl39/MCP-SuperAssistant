@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * GitHub Copilot Adapter for GitHub Copilot (github.com/copilot)
@@ -10,6 +11,9 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('GitHubCopilotAdapter');
+
 export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   readonly name = 'GitHubCopilotAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
@@ -68,7 +72,7 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
     super();
     GitHubCopilotAdapter.instanceCount++;
     this.instanceId = GitHubCopilotAdapter.instanceCount;
-    console.debug(`[GitHubCopilotAdapter] Instance #${this.instanceId} created. Total instances: ${GitHubCopilotAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${GitHubCopilotAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {

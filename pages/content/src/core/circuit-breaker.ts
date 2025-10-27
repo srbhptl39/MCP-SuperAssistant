@@ -6,6 +6,10 @@
  */
 
 import { eventBus } from '../events/event-bus';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('CircuitBreaker');
 
 export interface CircuitBreakerConfig {
   failureThreshold: number;
@@ -46,7 +50,7 @@ class CircuitBreaker {
     } else {
       this.eventBus = eventBus;
     }
-    console.debug('[CircuitBreaker] Initialized with config:', this.config);
+    logger.debug('[CircuitBreaker] Initialized with config:', this.config);
   }
 
   /**
@@ -211,7 +215,7 @@ class CircuitBreaker {
     this.successCount = 0;
     this.lastFailureTime = 0;
     this.nextAttemptTime = 0;
-    console.debug('[CircuitBreaker] Cleaned up');
+    logger.debug('[CircuitBreaker] Cleaned up');
   }
 }
 

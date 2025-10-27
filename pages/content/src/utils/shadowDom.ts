@@ -1,4 +1,5 @@
 import { logMessage } from './helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Injects CSS into a Shadow DOM with proper error handling
@@ -8,6 +9,9 @@ import { logMessage } from './helpers';
  * @param cssPath The path to the CSS file relative to the extension root
  * @returns Promise that resolves when the CSS is injected or rejects with an error
  */
+
+const logger = createLogger('ShadowDomUtils');
+
 export const injectShadowDomCSS = async (shadowRoot: ShadowRoot, cssPath: string): Promise<void> => {
   if (!shadowRoot) {
     throw new Error('Shadow root is not available for style injection');
@@ -350,32 +354,32 @@ function generateLightThemeVariables(): string {
 export const debugShadowDomStyling = (shadowRoot: ShadowRoot): void => {
   try {
     if (!shadowRoot) {
-      console.error('Cannot debug: Shadow DOM not available');
+      logger.error('Cannot debug: Shadow DOM not available');
       return;
     }
 
     // Log all style elements in the Shadow DOM
     const styles = shadowRoot.querySelectorAll('style');
-    console.debug(`[Debug] Found ${styles.length} style elements in Shadow DOM`);
+    logger.debug(`Found ${styles.length} style elements in Shadow DOM`);
 
     styles.forEach((style, index) => {
-      console.debug(`[Debug] Style #${index + 1}:`, style.textContent);
+      logger.debug(`Style #${index + 1}:`, style.textContent);
     });
 
     // Log computed styles for key elements
     const sidebarContainer = shadowRoot.querySelector('#sidebar-container');
     if (sidebarContainer) {
-      console.debug('[Debug] Sidebar container computed styles:', window.getComputedStyle(sidebarContainer));
+      logger.debug('[Debug] Sidebar container computed styles:', window.getComputedStyle(sidebarContainer));
     }
 
     // Check dark mode
     const host = shadowRoot.host;
-    console.debug('[Debug] Shadow host classes:', host.className);
-    console.debug('[Debug] Is dark mode active in host?', host.classList.contains('dark'));
+    logger.debug('[Debug] Shadow host classes:', host.className);
+    logger.debug('[Debug] Is dark mode active in host?', host.classList.contains('dark'));
 
     logMessage('[Debug] Shadow DOM styling debug complete - check console for details');
   } catch (error) {
-    console.error('Error debugging Shadow DOM styles:', error);
+    logger.error('Error debugging Shadow DOM styles:', error);
   }
 };
 

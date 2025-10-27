@@ -1,4 +1,8 @@
 // Declare global window properties for TypeScript
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('streamingObservers');
+
 declare global {
   interface Window {
     _isProcessing?: boolean;
@@ -167,7 +171,7 @@ const cacheParameterContent = (blockId: string, content: string): void => {
     parameterContentCache.set(blockId, blockCache);
 
     if (CONFIG.debug) {
-      console.debug(`Cached ${isJSON ? 'JSON' : 'XML'} parameter content for ${blockId}:`, Array.from(blockCache.entries()));
+      logger.debug(`Cached ${isJSON ? 'JSON' : 'XML'} parameter content for ${blockId}:`, Array.from(blockCache.entries()));
     }
   }
 };
@@ -262,7 +266,7 @@ const processChunkImmediate = (
   if (completedStreams.has(blockId) || resyncingBlocks.has(blockId)) return;
 
   if (CONFIG.debug) {
-    console.debug(
+    logger.debug(
       `Immediate chunk detected for ${blockId}: ${chunkInfo.chunkType}, content length: ${newContent.length}`,
     );
   }
@@ -431,8 +435,8 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
   const isJSON = content.includes('"type"');
 
   if (CONFIG.debug) {
-    console.debug(`[Monitor] Setting up monitoring for block: ${blockId}, element: ${node.tagName}, format: ${isJSON ? 'JSON' : 'XML'}`);
-    console.debug(`[Monitor] Content preview:`, content);
+    logger.debug(`Setting up monitoring for block: ${blockId}, element: ${node.tagName}, format: ${isJSON ? 'JSON' : 'XML'}`);
+    logger.debug(`Content preview:`, content);
   }
 
   // Initialize the last updated timestamp
@@ -494,7 +498,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
           document.dispatchEvent(event);
 
           if (CONFIG.debug) {
-            console.debug(`Detected abruptly ended stream for block ${blockId}`);
+            logger.debug(`Detected abruptly ended stream for block ${blockId}`);
           }
 
           // We can clear this interval now
@@ -520,7 +524,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     if (functionBlock?.hasAttribute('data-completing')) return;
 
     if (CONFIG.debug) {
-      console.debug(`[Monitor] Mutation detected for blockId: ${blockId}, mutations: ${mutations.length}`);
+      logger.debug(`Mutation detected for blockId: ${blockId}, mutations: ${mutations.length}`);
     }
 
     let contentChanged = false;
@@ -557,7 +561,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
           const chunkInfo = detectFunctionChunk(newValue, previousContent);
 
           if (CONFIG.debug && chunkInfo.hasNewChunk) {
-            console.debug(`[Monitor] Chunk detected - type: ${chunkInfo.chunkType}, significant: ${chunkInfo.isSignificant}`);
+            logger.debug(`Chunk detected - type: ${chunkInfo.chunkType}, significant: ${chunkInfo.isSignificant}`);
           }
 
           if (chunkInfo.hasNewChunk && chunkInfo.isSignificant) {
@@ -603,7 +607,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
       if (target) {
         // Log significant changes if debugging is enabled
         if (CONFIG.debug && (significantChange || functionCallPattern)) {
-          console.debug(`Significant content change detected in block ${blockId}`, {
+          logger.debug(`Significant content change detected in block ${blockId}`, {
             significantChange,
             functionCallPattern,
           });
@@ -636,7 +640,7 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
  */
 export const checkStreamingUpdates = (): void => {
   if (CONFIG.debug) {
-    console.debug('Checking streaming updates...');
+    logger.debug('Checking streaming updates...');
   }
   const targetContainers = [];
   for (const selector of CONFIG.streamingContainerSelectors) {
@@ -671,14 +675,14 @@ export let progressiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
  */
 const performSeamlessCompletion = (blockId: string, finalContent: string): void => {
   if (CONFIG.debug) {
-    console.debug(`Performing seamless completion for block ${blockId}`);
+    logger.debug(`Performing seamless completion for block ${blockId}`);
   }
 
   // Find the function block
   const functionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
   if (!functionBlock) {
     if (CONFIG.debug) {
-      console.debug(`Function block not found for completion: ${blockId}`);
+      logger.debug(`Function block not found for completion: ${blockId}`);
     }
     return;
   }
@@ -686,7 +690,7 @@ const performSeamlessCompletion = (blockId: string, finalContent: string): void 
   // Skip if already completed or currently transitioning
   if (functionBlock.classList.contains('function-complete') || functionBlock.hasAttribute('data-completing')) {
     if (CONFIG.debug) {
-      console.debug(`Block ${blockId} already completed or completing`);
+      logger.debug(`Block ${blockId} already completed or completing`);
     }
     return;
   }
@@ -724,13 +728,13 @@ const performSeamlessCompletion = (blockId: string, finalContent: string): void 
  */
 export const resyncWithOriginalContent = (blockId: string): void => {
   if (CONFIG.debug) {
-    console.debug(`Starting seamless content resync for block ${blockId}`);
+    logger.debug(`Starting seamless content resync for block ${blockId}`);
   }
 
   // Skip if already completed to prevent jitter
   if (completedStreams.has(blockId)) {
     if (CONFIG.debug) {
-      console.debug(`Skipping resync for already completed block ${blockId}`);
+      logger.debug(`Skipping resync for already completed block ${blockId}`);
     }
     resyncingBlocks.delete(blockId);
     return;
@@ -743,7 +747,7 @@ export const resyncWithOriginalContent = (blockId: string): void => {
   const originalPre = document.querySelector(`div[data-block-id="${blockId}"]`);
   if (!originalPre || !originalPre.textContent) {
     if (CONFIG.debug) {
-      console.debug(`Original pre element not found for block ${blockId}`);
+      logger.debug(`Original pre element not found for block ${blockId}`);
     }
     resyncingBlocks.delete(blockId);
     return;
@@ -753,7 +757,7 @@ export const resyncWithOriginalContent = (blockId: string): void => {
   const functionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
   if (!functionBlock) {
     if (CONFIG.debug) {
-      console.debug(`Rendered function block not found for block ${blockId}`);
+      logger.debug(`Rendered function block not found for block ${blockId}`);
     }
     resyncingBlocks.delete(blockId);
     return;
@@ -780,7 +784,7 @@ export const resyncWithOriginalContent = (blockId: string): void => {
   const originalFunctionName = invokeMatch && invokeMatch[1] ? invokeMatch[1] : null;
 
   if (CONFIG.debug) {
-    console.debug(`Resync found ${mergedParams.length} parameters and function name: ${originalFunctionName}`);
+    logger.debug(`Resync found ${mergedParams.length} parameters and function name: ${originalFunctionName}`);
   }
 
   // **CRITICAL**: Only update content seamlessly within existing elements

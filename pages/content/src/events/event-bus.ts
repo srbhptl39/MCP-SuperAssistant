@@ -1,4 +1,8 @@
 import type { EventMap, TypedEventCallback, WildcardEventCallback, UnsubscribeFunction } from './event-types';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('EventBus');
 
 class TypedEventBus {
   private wildcardListeners = new Set<WildcardEventCallback>();
@@ -35,7 +39,7 @@ class TypedEventBus {
         try {
           (callback as TypedEventCallback<K>)(data);
         } catch (error) {
-          console.error(`[EventBus] Error in listener for event "${String(event)}":`, error);
+          logger.error(`Error in listener for event "${String(event)}":`, error);
           // Emit a specific error event for unhandled listener errors, but prevent recursion
           if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
             this.isEmittingErrorEvent = true;
@@ -61,7 +65,7 @@ class TypedEventBus {
         try {
           (callback as TypedEventCallback<K>)(data);
         } catch (error) {
-          console.error(`[EventBus] Error in once listener for event "${String(event)}":`, error);
+          logger.error(`Error in once listener for event "${String(event)}":`, error);
           // Emit a specific error event for unhandled listener errors, but prevent recursion
           if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
             this.isEmittingErrorEvent = true;
@@ -85,7 +89,7 @@ class TypedEventBus {
         // For wildcard, pass an object with event name and data
         (callback as WildcardEventCallback)({ event, data });
       } catch (error) {
-        console.error(`[EventBus] Error in wildcard event listener:`, error);
+        logger.error(`Error in wildcard event listener:`, error);
         // Potentially emit 'error:unhandled' here too, if wildcard errors should be globally reported
         if (!this.isEmittingErrorEvent && event !== 'error:unhandled') {
           this.isEmittingErrorEvent = true;
@@ -103,7 +107,7 @@ class TypedEventBus {
 
     // Development logging
     if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
-      console.debug(`[EventBus] Emitted "${String(event)}":`, data);
+      logger.debug(`Emitted "${String(event)}":`, data);
     }
   }
 
@@ -117,8 +121,7 @@ class TypedEventBus {
     const eventListenersSet = this.listeners.get(event)!;
 
     if (eventListenersSet.size >= this.maxListeners) {
-      console.warn(
-        `[EventBus] Max listeners (${this.maxListeners}) reached for event "${String(event)}". ` +
+      logger.warn(`Max listeners (${this.maxListeners}) reached for event "${String(event)}". ` +
         `This might indicate a memory leak.`
       );
     }
@@ -136,8 +139,7 @@ class TypedEventBus {
     const eventListenersSet = this.onceListeners.get(event)!;
 
     if (eventListenersSet.size >= this.maxListeners) {
-      console.warn(
-        `[EventBus] Max listeners (${this.maxListeners}) reached for event (once) "${String(event)}". ` +
+      logger.warn(`Max listeners (${this.maxListeners}) reached for event (once) "${String(event)}". ` +
         `This might indicate a memory leak.`
       );
     }
@@ -196,7 +198,7 @@ class TypedEventBus {
     if (count > 0) {
       this.maxListeners = count;
     } else {
-      console.warn('[EventBus] Max listeners must be a positive number.');
+      logger.warn('[EventBus] Max listeners must be a positive number.');
     }
   }
 
@@ -220,12 +222,12 @@ class TypedEventBus {
 
   enable(): void {
     this.isEnabled = true;
-    console.debug('[EventBus] Enabled.');
+    logger.debug('[EventBus] Enabled.');
   }
 
   disable(): void {
     this.isEnabled = false;
-    console.debug('[EventBus] Disabled.');
+    logger.debug('[EventBus] Disabled.');
   }
 
   debugInfo(): object {
@@ -266,7 +268,7 @@ if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'd
 
 // Optional: Global initialization function (can be called from app initializer)
 export async function initializeEventBus(): Promise<void> {
-  console.debug('[MCPSuperAssistant] Event bus initialized.');
+  logger.debug('[MCPSuperAssistant] Event bus initialized.');
   // Example: eventBus.setMaxListeners(100);
   // Add any other global setup for the event bus here if needed.
 }

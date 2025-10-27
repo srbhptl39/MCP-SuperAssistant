@@ -10,8 +10,12 @@ import { WebSocketTransport } from './plugins/websocket/WebSocketTransport.js';
 
 // Configuration
 import { DEFAULT_CLIENT_CONFIG } from './types/config.js';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Export core classes
+
+const logger = createLogger('mcp_client');
+
 export { McpClient, PluginRegistry, EventEmitter };
 
 // Export plugins
@@ -61,7 +65,7 @@ async function getGlobalClient(): Promise<McpClient> {
       // Set up global event listeners for connection status changes
       setupGlobalClientEventListeners(globalClient);
     } catch (error) {
-      console.error('[getGlobalClient] Failed to initialize client:', error);
+      logger.error('[getGlobalClient] Failed to initialize client:', error);
       // Create a fallback client without plugin loading
       globalClient = new McpClient();
       // Don't initialize to avoid plugin loading issues
@@ -77,7 +81,7 @@ async function getGlobalClient(): Promise<McpClient> {
 function setupGlobalClientEventListeners(client: McpClient): void {
   // Listen for connection status changes and forward them to any registered listeners
   client.on('connection:status-changed', (event) => {
-    console.log('[Global Client] Connection status changed:', event);
+    logger.debug('[Global Client] Connection status changed:', event);
     
     // Emit a global event that can be caught by the background script
     if (typeof window !== 'undefined' && window.dispatchEvent) {
@@ -99,15 +103,15 @@ function setupGlobalClientEventListeners(client: McpClient): void {
   });
 
   client.on('client:connected', (event) => {
-    console.log('[Global Client] Client connected:', event);
+    logger.debug('[Global Client] Client connected:', event);
   });
 
   client.on('client:disconnected', (event) => {
-    console.log('[Global Client] Client disconnected:', event);
+    logger.debug('[Global Client] Client disconnected:', event);
   });
 
   client.on('client:error', (event) => {
-    console.error('[Global Client] Client error:', event);
+    logger.error('[Global Client] Client error:', event);
   });
 }
 
@@ -151,7 +155,7 @@ export async function checkMcpServerConnection(): Promise<boolean> {
     const client = await getGlobalClient();
     return await client.isHealthy();
   } catch (error) {
-    console.error('[Backward Compatibility] checkMcpServerConnection failed:', error);
+    logger.error('[Backward Compatibility] checkMcpServerConnection failed:', error);
     return false;
   }
 }
@@ -222,25 +226,25 @@ export async function runWithBackwardsCompatibility(uri: string, transportType?:
   await client.connect({ uri, type });
   
   const response = await client.getPrimitives();
-  console.log(`Connected, found ${response.tools.length} tools, ${response.resources.length} resources, ${response.prompts.length} prompts`);
+  logger.debug(`Connected, found ${response.tools.length} tools, ${response.resources.length} resources, ${response.prompts.length} prompts`);
 }
 
 export function resetMcpConnectionState(): void {
   if (globalClient && globalClient.isConnected()) {
     globalClient.disconnect().catch(error => {
-      console.error('[Backward Compatibility] resetMcpConnectionState failed:', error);
+      logger.error('[Backward Compatibility] resetMcpConnectionState failed:', error);
     });
   }
 }
 
 export function resetMcpConnectionStateForRecovery(): void {
-  console.log('[Backward Compatibility] resetMcpConnectionStateForRecovery - handled by plugin health monitoring');
+  logger.debug('[Backward Compatibility] resetMcpConnectionStateForRecovery - handled by plugin health monitoring');
 }
 
 export function abortMcpConnection(): void {
   if (globalClient) {
     globalClient.disconnect().catch(error => {
-      console.error('[Backward Compatibility] abortMcpConnection failed:', error);
+      logger.error('[Backward Compatibility] abortMcpConnection failed:', error);
     });
   }
 }

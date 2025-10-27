@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
 import type { AdapterCapability, PluginContext } from '../plugin-types';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Mistral Adapter for Mistral AI Chat (chat.mistral.ai)
@@ -10,6 +11,9 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
  * Migrated from the legacy adapter system to the new plugin architecture.
  * Maintains compatibility with existing functionality while integrating with Zustand stores.
  */
+
+const logger = createLogger('MistralAdapter');
+
 export class MistralAdapter extends BaseAdapterPlugin {
   readonly name = 'MistralAdapter';
   readonly version = '2.0.1'; // Updated for improved selectors
@@ -67,7 +71,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     super();
     MistralAdapter.instanceCount++;
     this.instanceId = MistralAdapter.instanceCount;
-    console.debug(`[MistralAdapter] Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`);
+    logger.debug(`Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`);
   }
 
   async initialize(context: PluginContext): Promise<void> {
@@ -451,7 +455,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async attachFileDirectly(file: File): Promise<boolean> {
     try {
-      console.debug('[system] Attempting direct file attachment via drag simulation');
+      logger.debug('[system] Attempting direct file attachment via drag simulation');
       
       // Find the drop zone - try ProseMirror first, then scroll area container
       let dropZone = document.querySelector('div.ProseMirror[contenteditable="true"]') as HTMLElement;
@@ -460,7 +464,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       }
       
       if (!dropZone) {
-        console.warn('[system] Drop zone not found');
+        logger.warn('[system] Drop zone not found');
         return false;
       }
 
@@ -492,22 +496,22 @@ export class MistralAdapter extends BaseAdapterPlugin {
       });
       dropZone.dispatchEvent(dropEvent);
 
-      console.debug(`[system] Direct drag simulation completed on ${dropZone.classList.contains('ProseMirror') ? 'ProseMirror' : 'scroll area'} drop zone`);
+      logger.debug(`Direct drag simulation completed on ${dropZone.classList.contains('ProseMirror') ? 'ProseMirror' : 'scroll area'} drop zone`);
       return true;
     } catch (error) {
-      console.error('[system] Direct drag simulation failed:', error);
+      logger.error('[system] Direct drag simulation failed:', error);
       return false;
     }
   }
 
   private async attachFileViaDragDrop(file: File): Promise<boolean> {
     try {
-      console.debug('[system] Attempting file attachment via drag-drop simulation');
+      logger.debug('[system] Attempting file attachment via drag-drop simulation');
       
       // Load drop listener script into page context
       const success = await this.injectFileDropListener();
       if (!success) {
-        console.warn('[system] Failed to inject file drop listener');
+        logger.warn('[system] Failed to inject file drop listener');
         return false;
       }
 
@@ -527,10 +531,10 @@ export class MistralAdapter extends BaseAdapterPlugin {
         '*'
       );
 
-      console.debug('[system] Drag-drop simulation message sent');
+      logger.debug('[system] Drag-drop simulation message sent');
       return true;
     } catch (error) {
-      console.error('[system] Drag-drop simulation failed:', error);
+      logger.error('[system] Drag-drop simulation failed:', error);
       return false;
     }
   }
@@ -1091,7 +1095,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       // First validate that the drop zone exists
       const dropZoneValid = await this.validateDropZone();
       if (!dropZoneValid) {
-        console.warn('[system] Drop zone validation failed, skipping file drop listener injection');
+        logger.warn('[system] Drop zone validation failed, skipping file drop listener injection');
         return false;
       }
 
@@ -1106,7 +1110,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       });
       
       scriptEl.remove();
-      console.debug('[system] File drop listener injected successfully for Mistral');
+      logger.debug('[system] File drop listener injected successfully for Mistral');
       return true;
     } catch (error) {
       this.context.logger.error('Failed to inject file drop listener:', error);
@@ -1140,7 +1144,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
                                 filePreview.querySelector('.text-sm.leading-6.font-medium');
           
           if (hasFileContent) {
-            console.debug(`[system] File preview found after ${checkAttempts[attemptCount]}ms:`, filePreview.textContent?.trim());
+            logger.debug(`File preview found after ${checkAttempts[attemptCount]}ms:`, filePreview.textContent?.trim());
             this.context.logger.debug('File preview element found after attachment');
             resolve(true);
             return;
@@ -1151,7 +1155,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         if (attemptCount < checkAttempts.length) {
           setTimeout(attemptCheck, checkAttempts[attemptCount]);
         } else {
-          console.warn('[system] File preview element not found after all attempts');
+          logger.warn('[system] File preview element not found after all attempts');
           this.context.logger.warn('File preview element not found after attachment');
           resolve(false);
         }
@@ -1288,7 +1292,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private async validateDropZone(): Promise<boolean> {
     try {
-      console.debug('[system] Validating drop zone availability before injection');
+      logger.debug('[system] Validating drop zone availability before injection');
       
       // Split the DROP_ZONE selectors and try each one
       const dropSelectors = this.selectors.DROP_ZONE.split(', ').map(s => s.trim());
@@ -1296,7 +1300,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       for (const selector of dropSelectors) {
         const element = document.querySelector(selector);
         if (element) {
-          console.debug(`[system] Drop zone validated with selector: ${selector}`);
+          logger.debug(`Drop zone validated with selector: ${selector}`);
           
           // Store the working selector in window for dragDropListener.js to use
           (window as any).mistralDropZoneSelector = selector;
@@ -1304,10 +1308,10 @@ export class MistralAdapter extends BaseAdapterPlugin {
         }
       }
       
-      console.warn('[system] No drop zone found during validation');
+      logger.warn('[system] No drop zone found during validation');
       return false;
     } catch (error) {
-      console.error('[system] Error validating drop zone:', error);
+      logger.error('[system] Error validating drop zone:', error);
       return false;
     }
   }

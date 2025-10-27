@@ -1,11 +1,15 @@
 import type { AdapterConfig, AdapterOverrides } from './types';
 import { GEMINI_DEFAULT_CONFIG } from './gemini.config';
 import { CHATGPT_DEFAULT_CONFIG } from './chatgpt.config';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Configuration manager for adapters
  * Handles loading configurations from Firebase Remote Config with fallbacks to defaults
  */
+
+const logger = createLogger('AdapterConfigManager');
+
 export class AdapterConfigManager {
   private static instance: AdapterConfigManager;
   private configCache = new Map<string, AdapterConfig>();
@@ -37,15 +41,15 @@ export class AdapterConfigManager {
 
     // Listen for adapter config updates from the existing remote config system
     this.context.eventBus.on('remote-config:adapter-configs-updated', (data: any) => {
-      console.debug('[AdapterConfigManager] Received adapter config updates from existing system');
-      console.debug(data);
+      logger.debug('[AdapterConfigManager] Received adapter config updates from existing system');
+      logger.debug(data);
       this.handleAdapterConfigUpdate(data.adapterConfigs);
     });
 
     // Also listen for general remote config updates as fallback
     this.context.eventBus.on('remote-config:updated', (data: any) => {
       if (data.changes.some((change: string) => change.includes('adapter'))) {
-        console.debug('[AdapterConfigManager] Detected adapter-related config changes, clearing cache');
+        logger.debug('[AdapterConfigManager] Detected adapter-related config changes, clearing cache');
         this.clearCache();
       }
     });
@@ -55,7 +59,7 @@ export class AdapterConfigManager {
    * Handle adapter configuration updates from the existing remote config system
    */
   private handleAdapterConfigUpdate(adapterConfigs: Record<string, any>) {
-    console.debug('[AdapterConfigManager] Processing adapter config update:', adapterConfigs);
+    logger.debug('[AdapterConfigManager] Processing adapter config update:', adapterConfigs);
     
     // Clear relevant cache entries
     this.clearCache();
@@ -63,12 +67,12 @@ export class AdapterConfigManager {
     // Update cache with new configurations
     Object.entries(adapterConfigs).forEach(([adapterName, config]) => {
       const cacheKey = `${adapterName}_adapter_config`;
-      console.debug(`[AdapterConfigManager] Caching config for ${adapterName}:`, config);
+      logger.debug(`Caching config for ${adapterName}:`, config);
       this.configCache.set(cacheKey, config as AdapterConfig);
     });
 
-    console.debug(`[AdapterConfigManager] Updated cache for ${Object.keys(adapterConfigs).length} adapters`);
-    console.debug('[AdapterConfigManager] Current cache keys:', Array.from(this.configCache.keys()));
+    logger.debug(`Updated cache for ${Object.keys(adapterConfigs).length} adapters`);
+    logger.debug('[AdapterConfigManager] Current cache keys:', Array.from(this.configCache.keys()));
   }
 
   /**
@@ -80,13 +84,13 @@ export class AdapterConfigManager {
   async getAdapterConfig(adapterName: string, variant?: string): Promise<AdapterConfig> {
     const cacheKey = `${adapterName}_adapter_config${variant ? `_${variant}` : ''}`;
     
-    console.debug(`[AdapterConfigManager] Getting adapter config for ${adapterName} (${variant || 'default'})`);
-    console.debug(`[AdapterConfigManager] Cache key: ${cacheKey}`);
-    console.debug(`[AdapterConfigManager] Current cache keys:`, Array.from(this.configCache.keys()));
+    logger.debug(`Getting adapter config for ${adapterName} (${variant || 'default'})`);
+    logger.debug(`Cache key: ${cacheKey}`);
+    logger.debug(`Current cache keys:`, Array.from(this.configCache.keys()));
     
     // Check cache first
     if (this.configCache.has(cacheKey)) {
-      console.debug(`[AdapterConfigManager] Using cached config for ${adapterName} (${variant || 'default'})`);
+      logger.debug(`Using cached config for ${adapterName} (${variant || 'default'})`);
       return this.configCache.get(cacheKey)!;
     }
 
@@ -98,23 +102,23 @@ export class AdapterConfigManager {
       const remoteConfig = await this.getRemoteConfig(cacheKey);
       
       if (!remoteConfig) {
-        console.debug(`[AdapterConfigManager] No remote config found for ${adapterName}, using defaults`);
+        logger.debug(`No remote config found for ${adapterName}, using defaults`);
         // Fallback to default config
         config = this.getDefaultConfig(adapterName);
       } else {
-        console.debug(`[AdapterConfigManager] Loaded remote config for ${adapterName} (${variant || 'default'}):`, remoteConfig);
+        logger.debug(`Loaded remote config for ${adapterName} (${variant || 'default'}):`, remoteConfig);
         // Merge remote config with defaults to ensure all properties exist
         config = this.mergeWithDefaults(remoteConfig, adapterName);
       }
     } catch (error) {
-      console.warn(`[AdapterConfigManager] Failed to load remote config for ${adapterName}:`, error);
+      logger.warn(`Failed to load remote config for ${adapterName}:`, error);
       config = this.getDefaultConfig(adapterName);
     }
 
     // Cache the resolved config
     this.configCache.set(cacheKey, config);
 
-    console.debug(`[AdapterConfigManager] Returning Final config for ${adapterName} (${variant || 'default'}): ${JSON.stringify(config)}`);
+    logger.debug(`Returning Final config for ${adapterName} (${variant || 'default'}): ${JSON.stringify(config)}`);
     
     return config;
   }
@@ -165,7 +169,7 @@ export class AdapterConfigManager {
    */
   private async getRemoteConfig(configKey: string): Promise<AdapterConfig | null> {
     try {
-      console.debug(`[AdapterConfigManager] Requesting remote config for key: ${configKey}`);
+      logger.debug(`Requesting remote config for key: ${configKey}`);
       
       // Use the existing Chrome runtime message to background script
       // This leverages the established Firebase Remote Config infrastructure
@@ -174,13 +178,13 @@ export class AdapterConfigManager {
         payload: { key: configKey }
       });
       
-      console.debug(`[AdapterConfigManager] Chrome runtime response for ${configKey}:`, response);
+      logger.debug(`Chrome runtime response for ${configKey}:`, response);
       
       if (response && response.success && response.data) {
         // The background script returns data in response.data in format { [key]: value }
         if (response.data[configKey]) {
           const configValue = response.data[configKey];
-          console.debug(`[AdapterConfigManager] Found remote config for ${configKey}:`, configValue);
+          logger.debug(`Found remote config for ${configKey}:`, configValue);
           
           // Validate that this looks like an adapter config
           if (configValue && typeof configValue === 'object' && 
@@ -188,10 +192,10 @@ export class AdapterConfigManager {
             return configValue as AdapterConfig;
           } else if (configValue === null) {
             // Explicitly null config from Firebase - this is expected when no config exists
-            console.debug(`[AdapterConfigManager] No remote config set for ${configKey}`);
+            logger.debug(`No remote config set for ${configKey}`);
             return null;
           } else {
-            console.warn(`[AdapterConfigManager] Invalid adapter config structure for ${configKey}:`, configValue);
+            logger.warn(`Invalid adapter config structure for ${configKey}:`, configValue);
             return null;
           }
         }
@@ -200,22 +204,22 @@ export class AdapterConfigManager {
           const adapterName = configKey.replace('_adapter_config', '');
           const unifiedConfigs = response.data.adapter_configs;
           if (unifiedConfigs[adapterName]) {
-            console.debug(`[AdapterConfigManager] Found unified remote config for ${adapterName}:`, unifiedConfigs[adapterName]);
+            logger.debug(`Found unified remote config for ${adapterName}:`, unifiedConfigs[adapterName]);
             return unifiedConfigs[adapterName] as AdapterConfig;
           }
         }
         // Handle case where response.data itself is the config object (unlikely but possible)
         else if (typeof response.data === 'object' && 
                  (response.data.selectors || response.data.ui || response.data.features)) {
-          console.debug(`[AdapterConfigManager] Found direct remote config object for ${configKey}:`, response.data);
+          logger.debug(`Found direct remote config object for ${configKey}:`, response.data);
           return response.data as AdapterConfig;
         }
       }
       
-      console.debug(`[AdapterConfigManager] No valid remote config found for ${configKey}`);
+      logger.debug(`No valid remote config found for ${configKey}`);
       return null;
     } catch (error) {
-      console.error(`[AdapterConfigManager] Error fetching remote config for ${configKey}:`, error);
+      logger.error(`Error fetching remote config for ${configKey}:`, error);
       return null;
     }
   }
@@ -230,7 +234,7 @@ export class AdapterConfigManager {
       case 'chatgpt':
         return { ...CHATGPT_DEFAULT_CONFIG };
       default:
-        console.warn(`[AdapterConfigManager] No default config found for ${adapterName}, using Gemini defaults`);
+        logger.warn(`No default config found for ${adapterName}, using Gemini defaults`);
         return { ...GEMINI_DEFAULT_CONFIG };
     }
   }
@@ -335,7 +339,7 @@ export class AdapterConfigManager {
       if (hasRequiredProperties) {
         return { ...defaultSection, ...remoteSection } as T;
       } else {
-        console.warn(`[AdapterConfigManager] Override failed for ${sectionName} - missing required properties, using merged config`);
+        logger.warn(`Override failed for ${sectionName} - missing required properties, using merged config`);
         return { ...defaultSection, ...remoteSection } as T;
       }
     }
@@ -361,12 +365,12 @@ export class AdapterConfigManager {
         const remoteValue = remoteConfig[key as keyof AdapterConfig];
         if (remoteValue !== null && remoteValue !== undefined) {
           (updatedResult as any)[key] = remoteValue;
-          console.debug(`[AdapterConfigManager] Applied key override for: ${key}`);
+          logger.debug(`Applied key override for: ${key}`);
         } else {
-          console.warn(`[AdapterConfigManager] Skipping key override for ${key} - remote value is null/undefined`);
+          logger.warn(`Skipping key override for ${key} - remote value is null/undefined`);
         }
       } else {
-        console.warn(`[AdapterConfigManager] Skipping key override for ${key} - not found in remote config`);
+        logger.warn(`Skipping key override for ${key} - not found in remote config`);
       }
     }
     
@@ -392,7 +396,7 @@ export class AdapterConfigManager {
     const isValid = presentKeyCount >= requiredKeyCount;
     
     if (!isValid) {
-      console.warn(`[AdapterConfigManager] UI section ${sectionName} validation failed: ${presentKeyCount}/${defaultKeys.length} keys present (required: ${requiredKeyCount})`);
+      logger.warn(`UI section ${sectionName} validation failed: ${presentKeyCount}/${defaultKeys.length} keys present (required: ${requiredKeyCount})`);
     }
     
     return isValid;
@@ -403,7 +407,7 @@ export class AdapterConfigManager {
    */
   private validateAndSanitizeSelectors(remoteSelectors: any, defaultSelectors: any): any {
     if (!remoteSelectors || typeof remoteSelectors !== 'object') {
-      console.warn('[AdapterConfigManager] Invalid remote selectors for override, using defaults');
+      logger.warn('[AdapterConfigManager] Invalid remote selectors for override, using defaults');
       return defaultSelectors;
     }
 
@@ -416,7 +420,7 @@ export class AdapterConfigManager {
     );
 
     if (!hasCore) {
-      console.warn('[AdapterConfigManager] Remote selectors missing core selectors, merging with defaults');
+      logger.warn('[AdapterConfigManager] Remote selectors missing core selectors, merging with defaults');
       return { ...defaultSelectors, ...remoteSelectors };
     }
 
@@ -428,7 +432,7 @@ export class AdapterConfigManager {
    */
   private validateAndSanitizeFeatures(remoteFeatures: any, defaultFeatures: any): any {
     if (!remoteFeatures || typeof remoteFeatures !== 'object') {
-      console.warn('[AdapterConfigManager] Invalid remote features for override, using defaults');
+      logger.warn('[AdapterConfigManager] Invalid remote features for override, using defaults');
       return defaultFeatures;
     }
 
@@ -439,7 +443,7 @@ export class AdapterConfigManager {
       if (typeof value === 'boolean') {
         sanitizedFeatures[key as keyof typeof defaultFeatures] = value;
       } else {
-        console.warn(`[AdapterConfigManager] Invalid feature value for ${key}: ${value}, keeping default`);
+        logger.warn(`Invalid feature value for ${key}: ${value}, keeping default`);
       }
     }
 
@@ -451,7 +455,7 @@ export class AdapterConfigManager {
    */
   private validateAndSanitizeUI(remoteUI: any, defaultUI: any): any {
     if (!remoteUI || typeof remoteUI !== 'object') {
-      console.warn('[AdapterConfigManager] Invalid remote UI config for override, using defaults');
+      logger.warn('[AdapterConfigManager] Invalid remote UI config for override, using defaults');
       return defaultUI;
     }
 

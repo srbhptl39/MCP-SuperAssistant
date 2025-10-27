@@ -6,6 +6,10 @@ import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardHeader, CardContent } from '@src/components/ui/card';
+import { createLogger } from '@extension/shared/lib/logger';
+
+
+const logger = createLogger('AvailableTools');
 
 interface ExtendedTool extends Tool {
   displayName?: string;
@@ -555,7 +559,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                                           const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
                                           return JSON.stringify(schemaObject, null, 2);
                                         } catch (error) {
-                                          console.error('Error processing tool schema:', error);
+                                          logger.error('Error processing tool schema:', error);
                                           const schema = (tool as any).schema || (tool as any).input_schema;
                                           return typeof schema === 'string' ? schema : 'Invalid schema format';
                                         }
@@ -680,7 +684,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                                       const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
                                       return JSON.stringify(schemaObject, null, 2);
                                     } catch (error) {
-                                      console.error('Error processing tool schema:', error);
+                                      logger.error('Error processing tool schema:', error);
                                       const schema = (tool as any).schema || (tool as any).input_schema;
                                       return typeof schema === 'string' ? schema : 'Invalid schema format';
                                     }

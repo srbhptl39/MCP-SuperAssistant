@@ -9,8 +9,12 @@
  * Example utility function
  * @param message The message to log
  */
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('logMessage');
+
 export const logMessage = (message: string): void => {
-  console.debug(`[Content Script]: ${message}`);
+  logger.debug(`: ${message}`);
 };
 
 /**

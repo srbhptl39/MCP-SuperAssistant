@@ -7,6 +7,10 @@
  * @param children - An array of child nodes or strings to append.
  * @returns The created HTML element.
  */
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('DOMUtils');
+
 export function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, any> = {},
@@ -25,7 +29,7 @@ export function createElement<K extends keyof HTMLElementTagNameMap>(
       element.appendChild(child);
     }
   });
-  console.debug(`[Utils.createElement] Created <${tag}> element.`);
+  logger.debug(`Created <${tag}> element.`);
   return element;
 }
 
@@ -41,20 +45,20 @@ export function waitForElement(
   timeout = 5000,
   root: Document | Element = document
 ): Promise<HTMLElement | null> {
-  console.debug(`[Utils.waitForElement] Waiting for selector: "${selector}" with timeout ${timeout}ms.`);
+  logger.debug(`Waiting for selector: "${selector}" with timeout ${timeout}ms.`);
   return new Promise((resolve) => {
     const startTime = Date.now();
     const observer = new MutationObserver((mutationsList, obs) => {
       const element = root.querySelector(selector) as HTMLElement | null;
       if (element) {
         obs.disconnect();
-        console.debug(`[Utils.waitForElement] Element "${selector}" found.`);
+        logger.debug(`Element "${selector}" found.`);
         resolve(element);
         return;
       }
       if (Date.now() - startTime > timeout) {
         obs.disconnect();
-        console.warn(`[Utils.waitForElement] Timeout waiting for element "${selector}".`);
+        logger.warn(`Timeout waiting for element "${selector}".`);
         resolve(null);
       }
     });
@@ -62,7 +66,7 @@ export function waitForElement(
     // Check if element already exists
     const existingElement = root.querySelector(selector) as HTMLElement | null;
     if (existingElement) {
-      console.debug(`[Utils.waitForElement] Element "${selector}" already exists.`);
+      logger.debug(`Element "${selector}" already exists.`);
       resolve(existingElement);
       return;
     }
@@ -87,7 +91,7 @@ export function injectCSS(css: string, id?: string): HTMLStyleElement {
   }
   styleElement.textContent = css;
   document.head.appendChild(styleElement);
-  console.debug(`[Utils.injectCSS] CSS injected${id ? ' with ID: ' + id : ''}.`);
+  logger.debug(`CSS injected${id ? ' with ID: ' + id : ''}.`);
   return styleElement;
 }
 
@@ -105,6 +109,6 @@ export function observeChanges(
 ): MutationObserver {
   const observer = new MutationObserver(callback);
   observer.observe(targetNode, options);
-  console.debug('[Utils.observeChanges] Mutation observer started.');
+  logger.debug('[Utils.observeChanges] Mutation observer started.');
   return observer;
 }

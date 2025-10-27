@@ -1,8 +1,12 @@
 import { CONFIG } from '../core/config';
 import { streamingLastUpdated, checkStreamingUpdates } from './streamObserver';
 import { renderedFunctionBlocks, renderFunctionCall } from '../renderer/index';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Extend Window interface to include our custom properties
+
+const logger = createLogger('StalledStreamHandler');
+
 declare global {
   interface Window {
     _isProcessing?: boolean;
@@ -256,7 +260,7 @@ export const checkStalledStreams = (): void => {
     }
 
     if (CONFIG.debug) {
-      console.debug(`Found potentially missed function block: ${blockId}`);
+      logger.debug(`Found potentially missed function block: ${blockId}`);
     }
 
     // Trigger a custom event to render this block
@@ -290,7 +294,7 @@ export const checkStalledStreams = (): void => {
     // Check if the block has stalled
     if (now - lastUpdate > stalledTimeout) {
       if (CONFIG.debug)
-        console.debug(`Stream stalled for block: ${blockId}. No updates for ${Math.round((now - lastUpdate) / 1000)}s`);
+        logger.debug(`Stream stalled for block: ${blockId}. No updates for ${Math.round((now - lastUpdate) / 1000)}s`);
 
       // Verify if the block content is actually incomplete
       const functionCallCompleteCheck = (block.textContent || '').includes('</function_calls>');
@@ -301,7 +305,7 @@ export const checkStalledStreams = (): void => {
       // If the function call or invoke tags are complete, don't mark as stalled
       if (functionCallCompleteCheck && invokeCompleteCheck) {
         if (CONFIG.debug)
-          console.debug(`Block ${blockId} appears complete despite loading status, skipping stalled indicator`);
+          logger.debug(`Block ${blockId} appears complete despite loading status, skipping stalled indicator`);
         streamingLastUpdated.delete(blockId);
         return;
       }
@@ -357,7 +361,7 @@ export const startStalledStreamDetection = (): void => {
       const detail = (event as CustomEvent).detail;
       if (detail && detail.element && detail.blockId) {
         if (CONFIG.debug) {
-          console.debug('Handling abruptly ended stream', detail);
+          logger.debug('Handling abruptly ended stream', detail);
         }
         // Create a stalled indicator with the abrupt message
         createStalledIndicator(detail.blockId, detail.element, true);

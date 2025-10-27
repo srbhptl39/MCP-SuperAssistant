@@ -18,8 +18,12 @@ import type {
   ResponseMessage,
   McpMessageType
 } from '../types/messages';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // Legacy compatibility interface
+
+const logger = createLogger('ContextBridge');
+
 export interface ContextMessage {
   type: string;
   payload?: any;
@@ -57,7 +61,7 @@ class ContextBridge {
    */
   initialize(): void {
     if (this.initialized) {
-      console.warn('[ContextBridge] Already initialized');
+      logger.warn('[ContextBridge] Already initialized');
       return;
     }
 
@@ -82,13 +86,13 @@ class ContextBridge {
       this.startHealthCheck();
 
       this.initialized = true;
-      console.debug('[ContextBridge] Initialized successfully');
+      logger.debug('[ContextBridge] Initialized successfully');
 
       // Emit initialization event
       eventBus.emit('context:bridge-initialized', { timestamp: Date.now() });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[ContextBridge] Initialization failed:', errorMessage);
+      logger.error('[ContextBridge] Initialization failed:', errorMessage);
       this.isExtensionContextValid = false;
       throw error;
     }
@@ -101,21 +105,21 @@ class ContextBridge {
     try {
       // Check if chrome APIs are available
       if (typeof chrome === 'undefined' || !chrome.runtime) {
-        console.error('[ContextBridge] Chrome runtime API not available');
+        logger.error('[ContextBridge] Chrome runtime API not available');
         this.isExtensionContextValid = false;
         return false;
       }
 
       // Check if we can access extension ID
       if (!chrome.runtime.id) {
-        console.error('[ContextBridge] Chrome extension ID not available');
+        logger.error('[ContextBridge] Chrome extension ID not available');
         this.isExtensionContextValid = false;
         return false;
       }
 
       // Test basic message sending capability
       if (typeof chrome.runtime.sendMessage !== 'function') {
-        console.error('[ContextBridge] Chrome runtime.sendMessage not available');
+        logger.error('[ContextBridge] Chrome runtime.sendMessage not available');
         this.isExtensionContextValid = false;
         return false;
       }
@@ -126,7 +130,7 @@ class ContextBridge {
       this.isExtensionContextValid = true;
       return true;
     } catch (error) {
-      console.error('[ContextBridge] Extension context validation failed:', error);
+      logger.error('[ContextBridge] Extension context validation failed:', error);
       this.isExtensionContextValid = false;
 
       // Emit event to notify other components
@@ -162,13 +166,13 @@ class ContextBridge {
         // If we were previously invalid, mark as valid again
         if (!this.isExtensionContextValid) {
           this.isExtensionContextValid = true;
-          console.debug('[ContextBridge] Extension context restored');
+          logger.debug('[ContextBridge] Extension context restored');
           eventBus.emit('context:bridge-restored', { timestamp: now });
         }
       } catch (error) {
         if (this.isExtensionContextValid) {
           this.isExtensionContextValid = false;
-          console.error('[ContextBridge] Extension context invalidated:', error);
+          logger.error('[ContextBridge] Extension context invalidated:', error);
           eventBus.emit('context:bridge-invalidated', {
             timestamp: now,
             error: error instanceof Error ? error.message : String(error)
@@ -194,12 +198,12 @@ class ContextBridge {
   ): boolean {
     try {
       if (this.config.enableLogging) {
-        console.debug('[ContextBridge] Received Chrome message:', message, 'from:', sender);
+        logger.debug('[ContextBridge] Received Chrome message:', message, 'from:', sender);
       }
 
       // Validate message structure
       if (!message || typeof message !== 'object') {
-        console.warn('[ContextBridge] Invalid message received:', message);
+        logger.warn('[ContextBridge] Invalid message received:', message);
         sendResponse({ error: 'Invalid message format' });
         return false;
       }
@@ -220,7 +224,7 @@ class ContextBridge {
         this.pendingRequests.delete(message.id);
 
         if (this.config.enableLogging) {
-          console.debug(`[ContextBridge] Resolving pending request ${message.id}`);
+          logger.debug(`Resolving pending request ${message.id}`);
         }
 
         if (message.error) {
@@ -234,7 +238,7 @@ class ContextBridge {
 
       // Log the processed message for debugging
       if (this.config.enableLogging) {
-        console.debug('[ContextBridge] Processed ContextMessage:', contextMessage);
+        logger.debug('[ContextBridge] Processed ContextMessage:', contextMessage);
       }
 
       // Emit to local event bus
@@ -250,7 +254,7 @@ class ContextBridge {
           try {
             listener(contextMessage);
           } catch (error) {
-            console.error('[ContextBridge] Error in message listener:', error);
+            logger.error('[ContextBridge] Error in message listener:', error);
           }
         });
       }
@@ -263,7 +267,7 @@ class ContextBridge {
 
       return true; // Keep channel open for async response
     } catch (error) {
-      console.error('[ContextBridge] Error handling Chrome message:', error);
+      logger.error('[ContextBridge] Error handling Chrome message:', error);
       sendResponse({ error: error instanceof Error ? error.message : String(error) });
       return false;
     }
@@ -353,7 +357,7 @@ class ContextBridge {
         if (attempt < maxRetries) {
           const delay = this.config.retryDelay! * Math.pow(2, attempt); // Exponential backoff
           if (this.config.enableLogging) {
-            console.debug(`[ContextBridge] Retry ${attempt + 1}/${maxRetries} for ${type} in ${delay}ms`);
+            logger.debug(`Retry ${attempt + 1}/${maxRetries} for ${type} in ${delay}ms`);
           }
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -383,7 +387,7 @@ class ContextBridge {
     };
 
     if (this.config.enableLogging) {
-      console.debug('[ContextBridge] Sending message:', message, 'to:', target);
+      logger.debug('[ContextBridge] Sending message:', message, 'to:', target);
     }
 
     return new Promise((resolve, reject) => {
@@ -411,7 +415,7 @@ class ContextBridge {
             if (chrome.runtime.lastError) {
               const errorMsg = `Chrome runtime error: ${chrome.runtime.lastError.message}`;
               if (this.config.enableLogging) {
-                console.error('[ContextBridge]', errorMsg);
+                logger.error(errorMsg);
               }
               reject(new Error(errorMsg));
               return;
@@ -439,7 +443,7 @@ class ContextBridge {
             if (chrome.runtime.lastError) {
               const errorMsg = `Chrome runtime error: ${chrome.runtime.lastError.message}`;
               if (this.config.enableLogging) {
-                console.error('[ContextBridge]', errorMsg);
+                logger.error(errorMsg);
               }
               reject(new Error(errorMsg));
               return;
@@ -470,7 +474,7 @@ class ContextBridge {
         }
 
         if (this.config.enableLogging) {
-          console.error('[ContextBridge] Error sending message:', error);
+          logger.error('[ContextBridge] Error sending message:', error);
         }
 
         reject(error);
@@ -498,7 +502,7 @@ class ContextBridge {
     // Check if extension context is valid before attempting to broadcast
     if (!this.isExtensionContextValid) {
       if (this.config.enableLogging) {
-        console.warn('[ContextBridge] Cannot broadcast - extension context is invalid');
+        logger.warn('[ContextBridge] Cannot broadcast - extension context is invalid');
       }
       return;
     }
@@ -511,7 +515,7 @@ class ContextBridge {
     };
 
     if (this.config.enableLogging) {
-      console.debug('[ContextBridge] Broadcasting message:', message);
+      logger.debug('[ContextBridge] Broadcasting message:', message);
     }
 
     try {
@@ -526,7 +530,7 @@ class ContextBridge {
         excludeOrigin,
       });
     } catch (error) {
-      console.error('[ContextBridge] Error broadcasting message:', error);
+      logger.error('[ContextBridge] Error broadcasting message:', error);
 
       // Check if this is an extension context invalidation
       if (error instanceof Error &&
@@ -617,7 +621,7 @@ class ContextBridge {
     this.messageListeners.clear();
 
     this.initialized = false;
-    console.debug('[ContextBridge] Cleaned up');
+    logger.debug('[ContextBridge] Cleaned up');
   }
 }
 

@@ -4,10 +4,14 @@
 
 import { CONFIG } from '../core/config';
 import { renderedFunctionBlocks } from '../renderer/functionBlock';
+import { createLogger } from '@extension/shared/lib/logger';
 
 /**
  * Theme detection result
  */
+
+const logger = createLogger('ThemeDetector');
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Store the detected theme to avoid recalculating
@@ -40,7 +44,7 @@ const THEME_CHANGE_DELAY = 100; // ms
  */
 function logThemeDetection(message: string, data?: any): void {
   if (CONFIG.debug) {
-    console.debug(`[ThemeDetector] ${message}`, data || '');
+    logger.debug(`${message}`, data || '');
   }
 }
 

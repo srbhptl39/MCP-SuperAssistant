@@ -5,8 +5,12 @@
  */
 
 import { logMessage } from '@src/utils/helpers';
+import { createLogger } from '@extension/shared/lib/logger';
 
 // CSS selectors for Gemini's UI elements
+
+const logger = createLogger('GeminiChatInputHandler');
+
 const SELECTORS = {
   CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p',
   SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button',
@@ -144,7 +148,7 @@ export async function attachFileToChatInput(file: File): Promise<boolean> {
       '*',
     );
   } catch (error) {
-    console.error('Error injecting file drop listener or sending data:', error);
+    logger.error('Error injecting file drop listener or sending data:', error);
     return false;
   }
   return await checkFilePreview('message-post');
