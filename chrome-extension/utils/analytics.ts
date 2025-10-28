@@ -1,4 +1,4 @@
-// import { logMessage } from './helpers'; // Assuming helpers exists in utils - Replaced with console.debug
+// import { logMessage } from './helpers'; // Assuming helpers exists in utils - Replaced with logger.debug
 
 // IMPORTANT: Load credentials via environment variables during build
 // It's strongly recommended to load these from a secure configuration or environment variables during build,
@@ -11,6 +11,10 @@
 // Ensure .env is in your .gitignore file!
 const MEASUREMENT_ID = import.meta.env.CEB_GA_MEASUREMENT_ID;
 const API_SECRET = import.meta.env.CEB_GA_API_SECRET;
+
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('AnalyticsService');
 
 const GA_ENDPOINT = 'https://www.google-analytics.com/mp/collect';
 const GA_DEBUG_ENDPOINT = 'https://www.google-analytics.com/debug/mp/collect';
@@ -39,11 +43,11 @@ async function getOrCreateClientId(): Promise<string> {
       clientId = self.crypto.randomUUID();
       await chrome.storage.local.set({ clientId });
       // logMessage('[GA4] Generated new clientId:', clientId);
-      console.debug('[GA4] Generated new clientId:', clientId);
+      logger.debug('[GA4] Generated new clientId:', clientId);
     }
     return clientId;
   } catch (error) {
-    console.error('[GA4] Error getting or creating clientId:', error);
+    logger.error('[GA4] Error getting or creating clientId:', error);
     // Fallback or rethrow depending on desired robustness
     return 'error-client-id';
   }
@@ -62,7 +66,7 @@ async function getOrCreateSessionId(): Promise<string> {
       if (durationInMin > SESSION_EXPIRATION_IN_MIN) {
         sessionData = null; // Expired, start a new session
         // logMessage('[GA4] Session expired, starting new one.');
-        console.debug('[GA4] Session expired, starting new one.');
+        logger.debug('[GA4] Session expired, starting new one.');
       } else {
         // Session valid, update timestamp
         sessionData.timestamp = currentTimeInMs;
@@ -78,11 +82,11 @@ async function getOrCreateSessionId(): Promise<string> {
       };
       await chrome.storage.session.set({ sessionData });
       // logMessage('[GA4] Created new session:', sessionData.session_id);
-      console.debug('[GA4] Created new session:', sessionData.session_id);
+      logger.debug('[GA4] Created new session:', sessionData.session_id);
     }
     return sessionData.session_id;
   } catch (error) {
-    console.error('[GA4] Error getting or creating session_id:', error);
+    logger.error('[GA4] Error getting or creating session_id:', error);
     return 'error-session-id';
   }
 }
@@ -108,7 +112,7 @@ export async function sendAnalyticsEvent(
     API_SECRET === 'YOUR_API_SECRET' /* Check for placeholder */
   ) {
     // Check if placeholders are still present or if env vars are missing
-    console.warn(
+    logger.warn(
       '[GA4] Analytics tracking is disabled. Ensure CEB_GA_MEASUREMENT_ID and CEB_GA_API_SECRET are set in your .env file and the build process is using them.',
     );
     return;
@@ -140,7 +144,7 @@ export async function sendAnalyticsEvent(
     }
 
     // logMessage(`[GA4] Sending event: ${name}`, params);
-    console.debug(`[GA4] Sending event: ${name}`, JSON.stringify(params)); // Stringify params for better logging
+    logger.debug(`[GA4] Sending event: ${name}`, JSON.stringify(params)); // Stringify params for better logging
 
     const response = await fetch(`${API_ENDPOINT}?measurement_id=${MEASUREMENT_ID}&api_secret=${API_SECRET}`, {
       method: 'POST',
@@ -153,31 +157,31 @@ export async function sendAnalyticsEvent(
     // Check status code before attempting to parse body
     if (response.ok) {
       // Response is OK (2xx status code)
-      console.debug('[GA4] Event sent successfully.');
+      logger.debug('[GA4] Event sent successfully.');
       // Only try to parse body if it's not 204 No Content and in debug mode
       if (IS_DEV_MODE && response.status !== 204) {
         try {
           const successBody = await response.json();
-          console.debug('[GA4] Debug endpoint success response:', JSON.stringify(successBody, null, 2));
+          logger.debug('[GA4] Debug endpoint success response:', JSON.stringify(successBody, null, 2));
         } catch (parseError) {
-          console.debug('[GA4] Debug endpoint success response likely had no body (e.g., 200 OK with empty body).');
+          logger.debug('[GA4] Debug endpoint success response likely had no body (e.g., 200 OK with empty body).');
         }
       }
     } else {
       // Response is NOT OK (e.g., 4xx, 5xx)
-      console.warn(`[GA4] Analytics request failed: ${response.status} ${response.statusText}`);
+      logger.warn(`[GA4] Analytics request failed: ${response.status} ${response.statusText}`);
       // If using debug endpoint, try to log the response body for detailed errors
       if (IS_DEV_MODE) {
         try {
           const errorBody = await response.json();
-          console.error('[GA4] Debug endpoint error response:', JSON.stringify(errorBody, null, 2));
+          logger.error('[GA4] Debug endpoint error response:', JSON.stringify(errorBody, null, 2));
         } catch (parseError) {
-          console.error('[GA4] Debug endpoint error response could not be parsed as JSON:', await response.text()); // Log as text if JSON fails
+          logger.error('[GA4] Debug endpoint error response could not be parsed as JSON:', await response.text()); // Log as text if JSON fails
         }
       }
     }
   } catch (error) {
-    console.error('[GA4] Error sending analytics event:', error);
+    logger.error('[GA4] Error sending analytics event:', error);
   }
 }
 
@@ -280,7 +284,7 @@ export function collectDemographicData(): { [key: string]: any } {
         timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         timezoneOffset = new Date().getTimezoneOffset() / -60; // Convert to hours, invert sign
       } catch (windowError) {
-        console.debug('[GA4] Window-dependent features not available:', windowError);
+        logger.debug('[GA4] Window-dependent features not available:', windowError);
       }
     }
 
@@ -300,7 +304,7 @@ export function collectDemographicData(): { [key: string]: any } {
       context: isWindowContext ? 'content_script' : 'background_service_worker',
     };
   } catch (error) {
-    console.error('[GA4] Error collecting demographic data:', error);
+    logger.error('[GA4] Error collecting demographic data:', error);
     return {
       browser: 'Unknown',
       browser_version: 'Unknown',
@@ -345,7 +349,7 @@ export async function trackUrlChange(url: string): Promise<void> {
 export async function trackPageView(): Promise<void> {
   // Only run in browser context
   if (!isWindowContext) {
-    console.debug('[GA4] Page view tracking skipped - not in browser context');
+    logger.debug('[GA4] Page view tracking skipped - not in browser context');
     return;
   }
 

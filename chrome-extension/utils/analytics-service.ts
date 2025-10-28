@@ -1,4 +1,7 @@
 import { sendAnalyticsEvent, collectDemographicData } from './analytics.js';
+import { createLogger } from '@extension/shared/lib/logger';
+
+const logger = createLogger('AnalyticsService');
 
 /**
  * Centralized Analytics Service
@@ -70,7 +73,7 @@ export class AnalyticsService {
         ...(stored.userProperties || {})
       };
 
-      console.debug('[AnalyticsService] Initialized with user properties:', this.userProperties);
+      logger.debug('[AnalyticsService] Initialized with user properties:', this.userProperties);
 
       // Set GA4 user properties on first launch
       if (!stored.ga4UserPropertiesSet) {
@@ -78,7 +81,7 @@ export class AnalyticsService {
         await chrome.storage.local.set({ ga4UserPropertiesSet: true });
       }
     } catch (error) {
-      console.error('[AnalyticsService] Initialization failed:', error);
+      logger.error('[AnalyticsService] Initialization failed:', error);
     }
   }
 
@@ -107,9 +110,9 @@ export class AnalyticsService {
       // Send a special event to set user properties in GA4
       await sendAnalyticsEvent('user_properties_initialized', {}, userProperties);
 
-      console.debug('[AnalyticsService] GA4 user properties set successfully');
+      logger.debug('[AnalyticsService] GA4 user properties set successfully');
     } catch (error) {
-      console.error('[AnalyticsService] Failed to set GA4 user properties:', error);
+      logger.error('[AnalyticsService] Failed to set GA4 user properties:', error);
     }
   }
 
@@ -180,7 +183,7 @@ export class AnalyticsService {
     const isFirstToolDiscovery = params.tools_discovered && params.tools_discovered > 0 && this.toolsAvailableCount === 0;
 
     if (!isFirstToolDiscovery && (now - this.lastConnectionTrackTime < this.CONNECTION_TRACK_DEBOUNCE)) {
-      console.debug('[AnalyticsService] Connection event debounced (too soon after last event)');
+      logger.debug('[AnalyticsService] Connection event debounced (too soon after last event)');
 
       // Still update internal state even if we don't track
       this.currentConnectionStatus = params.connection_status;
@@ -318,7 +321,7 @@ export class AnalyticsService {
     };
 
     await chrome.storage.local.set({ userProperties: this.userProperties });
-    console.debug('[AnalyticsService] User properties updated:', this.userProperties);
+    logger.debug('[AnalyticsService] User properties updated:', this.userProperties);
   }
 
   /**
@@ -333,7 +336,7 @@ export class AnalyticsService {
     this.sessionErrors = 0;
     this.lastUserAction = 'none';
 
-    console.debug('[AnalyticsService] Session reset');
+    logger.debug('[AnalyticsService] Session reset');
   }
 
   /**

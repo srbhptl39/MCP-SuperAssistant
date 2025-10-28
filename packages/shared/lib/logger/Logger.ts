@@ -33,8 +33,11 @@ export class Logger implements ILogger {
     this.defaultLevel = isProduction ? LogLevel.ERROR : LogLevel.DEBUG;
 
     // Initialize with default or provided level
-    this.level = config?.level ?? this.defaultLevel;
+    // this.level = config?.level ?? this.defaultLevel;
+
+    // Forcing the default log level to ERROR to reduce verbosity in current setup
     // this.level = LogLevel.DEBUG;
+    this.level = LogLevel.ERROR;
 
     // Set up component levels if provided
     if (config?.componentLevels) {

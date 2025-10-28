@@ -10,7 +10,7 @@ Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, K
 
 <!-- ![MCP SuperAssistant](chrome-extension/public/Cover3.jpg) -->
 <div align="center">
- <img src="chrome-extension/public/Cover3.jpg" alt="MCP SuperAssistant Cover" width="800">
+ <img src="chrome-extension/public/Cover5.jpg" alt="MCP SuperAssistant Cover" width="800">
 </div>
 
 ## Installation
@@ -33,7 +33,7 @@ Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, K
 
 ## Overview
 
-MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio, Grokand more. It allows users to execute MCP tools directly from these platforms and insert the results back into the conversation, enhancing the capabilities of web-based AI assistants.
+MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio, Grokand more. It allows users to execute MCP tools directly from these platforms enhancing the capabilities of web-based AI assistants.
 
 ## Currently Supported Platforms
 
@@ -54,6 +54,12 @@ MCP SuperAssistant is a Chrome extension that integrates the Model Context Proto
 
 ## Demo Video
 
+Kimi.com
+
+[![MCP SuperAssistant Demo](https://img.youtube.com/vi/jnBPh2jzunM/0.jpg)](https://www.youtube.com/watch?v=jnBPh2jzunM)
+
+ChatGPT
+
 [![MCP SuperAssistant Demo](https://img.youtube.com/vi/PY0SKjtmy4E/0.jpg)](https://www.youtube.com/watch?v=PY0SKjtmy4E)
 
 Watch the demo to see MCP SuperAssistant in action!
@@ -66,9 +72,7 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 
 ## Key Features
 
-- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat!
-- **Plugin Architecture**: Modular plugin system with site-specific adapters for tailored platform integration
-- **Sidebar UI**: Clean, unobtrusive interface that integrates with the AI platform
+- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat, GitHub Copilot, Mistral AI, Kimi, Qwen Chat, Z Chat and more
 - **Tool Detection**: Automatically detects MCP tool calls in AI responses
 - **Tool Execution**: Execute MCP tools with a single click
 - **Tool Result Integration**: Seamlessly insert tool execution results back into the AI conversation
@@ -78,27 +82,6 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 - **Push Content Mode**: Option to push page content instead of overlaying
 - **Preferences Persistence**: Remembers sidebar position, size, and settings
 - **Dark/Light Mode Support**: Adapts to the AI platform's theme
-- **React Hooks Integration**: Modern React patterns for state management and plugin interactions
-
-## Architecture
-
-MCP SuperAssistant uses a modern, modular architecture with the following key components:
-
-### Plugin System
-- **Plugin Registry**: Centralized management of all plugins and adapters
-- **Site-Specific Adapters**: Tailored integration for each AI platform
-- **Default Adapter**: Fallback implementation for universal functionality
-- **Plugin Hooks**: React hooks for managing plugin state and operations
-
-### State Management
-- **Zustand Stores**: Lightweight state management for different application domains
-- **Event Bus**: Typed event system for decoupled communication
-- **React Hooks**: Modern patterns for component state and side effects
-
-### Modular Structure
-- **Event System**: Centralized event handling with type safety
-- **Utilities**: Shared helper functions and DOM manipulation tools
-- **Types**: Comprehensive TypeScript definitions for type safety
 
 ```mermaid
 flowchart TD
@@ -117,20 +100,8 @@ To connect the Chrome extension to a local server for proxying connections:
 
 #### Run MCP SuperAssistant Proxy via npx:
 
-   ```bash
-   npx @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json
-   ```
-   
-   This is useful for:
-   - Proxying remote MCP servers
-   - Adding CORS support to remote servers
-   - Providing health endpoints for monitoring
+1. Create a `config.json` file with your MCP server details. For example, to use the [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommanderMCP):
 
-   Use existing MCP config file if available.
-   ```
-   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
-   Windows: %APPDATA%\Claude\claude_desktop_config.json
-   ```
 
    **Example config.json:**
    ```json
@@ -147,24 +118,61 @@ To connect the Chrome extension to a local server for proxying connections:
    }
    ```
 
+   **Or use existing config file location from Cursor or other tools:**
+   ```
+   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+   Windows: %APPDATA%\Claude\claude_desktop_config.json
+   ```
+
+2. Start the MCP SuperAssistant Proxy server using one of the following commands:
+
+   ```bash
+   npx -y @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json --outputTransport sse
+   ```
+   or 
+   ```bash
+   npx -y @srbhptl39/mcp-superassistant-proxy --config ./config.json --outputTransport streamableHttp
+   ```
+   or
+   ```bash
+   npx -y @srbhptl39/mcp-superassistant-proxy --config ./config.json --outputTransport ws
+   ```
+
+   **View all available options:**
+   ```bash
+   npx -y @srbhptl39/mcp-superassistant-proxy@latest --help
+   ```
+   
+   This is useful for:
+   - Proxying remote MCP servers
+   - Adding CORS support to remote servers
+   - Providing health endpoints for monitoring
+
 #### Connection Steps:
 
 1. Start the proxy server using one of the commands above
-2. Open the MCP SuperAssistant sidebar in your AI platform
+2. Open the MCP SuperAssistant sidebar in one of the supported AI platforms, this should show the sidebar UI
 3. Click on the server status indicator (usually showing as "Disconnected")
 4. Enter the local server URL (default: `http://localhost:3006/sse`)
+   URL format depends on the --outputTransport method used:
+   - For SSE: `http://localhost:3006/sse`
+   - For Streamable HTTP: `http://localhost:3006/streamableHttp`
+   - For WebSocket: `ws://localhost:3006/message`
+   - Choose the appropriate transport method (SSE or Streamable HTTP or WebSocket) 
 5. Click "Connect" to establish the connection
 6. The status indicator should change to "Connected" if successful
 
 ## Usage
-
-1. Navigate to a supported AI platform.
+Example Workflow:
+1. Navigate to a supported AI platform example chatgpt.
 2. The MCP SuperAssistant sidebar will appear on the right side of the page
-3. Configure your MCP server by clicking on the server status indicator
-4. Interact with the AI and use MCP tools by:
-   - Waiting for the AI to suggest a tool (auto-detected)
-   - Executing the tool via the sidebar
-   - Viewing the result and inserting it back into the conversation
+3. Configure your MCP Tools to enable and disable the tools you want to use.
+4. In the message prompt area, hover the 'MCP' button to see the available tools and their descriptions.
+5. MCP SuperAssistant requires to add an MCP working instructions prompt to the chat, to give details of its new capabilities and how to use the tools. Use the 'Insert' or attach button to add the instructions prompt.
+6. Once the instructions prompt is added, Now you can ask it to read files or any related MCP tool operations.
+7. When AI wants to use any tool it will show a custom tool call card with the tool name and parameters.
+8. User can manually execute the tool call by clicking on the "RUN" button on the tool call card, or if Auto-Execute mode is enabled, it will execute automatically.
+9. Automation can be achieved by enabling Auto-Execute and Auto-Submit modes, by clicking on the 'MCP' button and configuring the Auto modes.
 
 
 ## Tips & Tricks
@@ -202,6 +210,23 @@ This page covers the most common issues users encounter with MCP SuperAssistant 
 - Ensure that your firewall or antivirus software is not blocking the connection.
 - Make sure the server shows the proper connected status and exposes the `/sse` endpoint.
 
+### 4. Incorrect tool call format 
+
+- There are times model does not generate correct tool call format as requested, this makes the tool detection to fail.
+In such cases, use better models which are meant for tool calling or have better tool calling capabilities.
+- Use the custom instructions prompt, which can be found in the MCP SuperAssistant sidebar.
+- Ask explicitily to use the tools by mentioning them in the prompt.
+- This Below is an example of correct MCP function call format, which is rendered by MCP SuperAssistant extension:
+
+```
+```jsonl
+{"type": "function_call_start", "name": "function_name", "call_id": 1}
+{"type": "description", "text": "Short 1 line of what this function does"}
+{"type": "parameter", "key": "parameter_1", "value": "value_1"}
+{"type": "parameter", "key": "parameter_2", "value": "value_2"}
+{"type": "function_call_end", "call_id": 1}
+```
+```
 
 ### Manual Installation (Development)
 
