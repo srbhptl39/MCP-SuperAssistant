@@ -117,6 +117,8 @@ To connect the Chrome extension to a local server for proxying connections:
      }
    }
    ```
+   config.json also support other MCP server configurations like remote MCP server URLs.
+   Try composio mcp, zappier mcp, or smithery or any other remote MCP server.
 
    **Or use existing config file location from Cursor or other tools:**
    ```
@@ -156,9 +158,10 @@ To connect the Chrome extension to a local server for proxying connections:
 4. Enter the local server URL (default: `http://localhost:3006/sse`)
    URL format depends on the --outputTransport method used:
    - For SSE: `http://localhost:3006/sse`
-   - For Streamable HTTP: `http://localhost:3006/streamableHttp`
+   - For Streamable HTTP: `http://localhost:3006/mcp`
    - For WebSocket: `ws://localhost:3006/message`
    - Choose the appropriate transport method (SSE or Streamable HTTP or WebSocket) 
+   - You can add any remote MCP server URL here as well, if it supports CORS or is proxied via this local proxy server. Try [Composio mcp](https://mcp.composio.dev/), [Zappier mcp](https://zapier.com/mcp), or [smithery](https://smithery.ai/) or any other remote MCP server.
 5. Click "Connect" to establish the connection
 6. The status indicator should change to "Connected" if successful
 
