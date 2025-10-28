@@ -4,6 +4,7 @@ import { useToolStore } from '../stores/tool.store';
 import { eventBus } from '../events/event-bus';
 import type { ServerConfig, ConnectionStatus } from '../types/stores';
 import { logMessage } from '../utils/helpers';
+import { pluginRegistry } from '../plugins';
 
 /**
  * McpClient – Enhanced wrapper around ContextBridge for communicating with the
@@ -380,14 +381,18 @@ class McpClient {
 
     logMessage(`[McpClient] Calling tool: ${toolName} with args: ${JSON.stringify(args)}`);
 
+    // Get active adapter name for analytics
+    const activePlugin = pluginRegistry.getActivePlugin();
+    const adapterName = activePlugin?.name || window.location.hostname || 'unknown';
+
     // Generate execution ID for tracking
     const executionId = useToolStore.getState().startToolExecution(toolName, args);
-    
+
     try {
       const result = await contextBridge.sendMessage(
         'background',
         'mcp:call-tool',
-        { toolName, args },
+        { toolName, args, adapterName }, // Pass adapter name to background
         { timeout: 30_000 }
       );
 

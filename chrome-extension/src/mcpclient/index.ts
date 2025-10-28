@@ -164,16 +164,17 @@ export async function callToolWithBackwardsCompatibility(
   uri: string,
   toolName: string,
   args: { [key: string]: unknown },
+  adapterName?: string,
   transportType?: import('./types/plugin.js').TransportType
 ): Promise<any> {
   const client = await getGlobalClient();
   const type = transportType || detectTransportType(uri);
-  
+
   if (!client.isConnected()) {
     await client.connect({ uri, type });
   }
-  
-  return await client.callTool(toolName, args);
+
+  return await client.callTool(toolName, args, adapterName);
 }
 
 export async function getPrimitivesWithBackwardsCompatibility(

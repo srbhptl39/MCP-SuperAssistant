@@ -15,7 +15,8 @@ import {
   type TransportType,
   type ConnectionRequest
 } from '../mcpclient/index';
-import { sendAnalyticsEvent, trackError } from '../../utils/analytics';
+import { sendAnalyticsEvent, trackError, collectDemographicData } from '../../utils/analytics';
+import { analyticsService } from '../../utils/analytics-service';
 
 // Import message types for type safety
 import type {
@@ -483,20 +484,42 @@ self.addEventListener('error', event => {
 
 chrome.runtime.onInstalled.addListener(async details => {
   logger.debug('Extension installed or updated:', details.reason);
-  sendAnalyticsEvent('extension_installed', { reason: details.reason });
-  
+
   const currentVersion = chrome.runtime.getManifest().version;
+  const installDate = new Date().toISOString();
 
   // Perform initial setup on first install
   if (details.reason === 'install') {
     logger.debug('Performing first-time installation setup.');
-    
-    // Set install date for Remote Config targeting
-    await chrome.storage.local.set({ 
-      installDate: new Date().toISOString(),
-      version: currentVersion
+
+    // Collect demographic data for user properties
+    const demographicData = collectDemographicData();
+
+    // Set install date and user properties for Remote Config targeting
+    await chrome.storage.local.set({
+      installDate,
+      version: currentVersion,
+      userProperties: {
+        extension_version: currentVersion,
+        install_date: installDate,
+        ...demographicData,
+      }
     });
-    
+
+    // Initialize analytics user properties
+    await analyticsService.updateUserProperties({
+      extension_version: currentVersion,
+      install_date: installDate,
+      ...demographicData,
+    });
+
+    // Track installation with enhanced data
+    sendAnalyticsEvent('extension_installed', {
+      reason: details.reason,
+      extension_version: currentVersion,
+      ...demographicData,
+    });
+
     // Initialize Remote Config after installation
     if (remoteConfigManager && remoteConfigManager.initialized) {
       await remoteConfigManager.fetchConfig(true);
@@ -505,14 +528,31 @@ chrome.runtime.onInstalled.addListener(async details => {
   } else if (details.reason === 'update') {
     const previousVersion = details.previousVersion || 'unknown';
     logger.debug(`Extension updated from ${previousVersion} to ${currentVersion}`);
-    
+
+    const demographicData = collectDemographicData();
+
     // Store version information
-    await chrome.storage.local.set({ 
+    await chrome.storage.local.set({
       version: currentVersion,
       previousVersion: previousVersion,
       lastUpdateDate: new Date().toISOString()
     });
-    
+
+    // Update analytics user properties
+    await analyticsService.updateUserProperties({
+      extension_version: currentVersion,
+      previous_version: previousVersion,
+      ...demographicData,
+    });
+
+    // Track update with enhanced data
+    sendAnalyticsEvent('extension_installed', {
+      reason: details.reason,
+      extension_version: currentVersion,
+      previous_version: previousVersion,
+      ...demographicData,
+    });
+
     // Notify Remote Config about version update
     if (remoteConfigManager && remoteConfigManager.initialized) {
       await remoteConfigManager.fetchConfig(true);
@@ -654,13 +694,13 @@ async function handleMcpMessage(
 
     switch (messageType) {
       case 'mcp:call-tool': {
-        const { toolName, args } = payload as CallToolRequest;
+        const { toolName, args, adapterName } = payload as CallToolRequest & { adapterName?: string };
         if (!toolName) {
           throw new Error('Tool name is required');
         }
-        
-        logger.debug(`Calling tool: ${toolName}`);
-        result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {});
+
+        logger.debug(`Calling tool: ${toolName} from adapter: ${adapterName || 'unknown'}`);
+        result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {}, adapterName);
         logger.debug(`Tool call completed: ${toolName}`);
         break;
       }
