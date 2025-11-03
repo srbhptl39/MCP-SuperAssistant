@@ -1336,18 +1336,46 @@ export const displayResult = (
     // Process result data efficiently
     if (typeof result === 'object') {
       try {
-        rawResultText = JSON.stringify(result, null, 2);
-        const pre = createOptimizedElement('pre', {
-          textContent: rawResultText,
-          styles: {
-            fontFamily: 'inherit',
-            fontSize: '13px',
-            lineHeight: '1.5',
-            padding: '0',
-            margin: '0',
-          },
-        });
-        resultContent.appendChild(pre);
+        // Check if result has the new format with content array
+        if (result && result.content && Array.isArray(result.content)) {
+          // Extract text from content array
+          const textParts = result.content
+            .filter((item: any) => item.type === 'text' && item.text)
+            .map((item: any) => item.text);
+          
+          if (textParts.length > 0) {
+            rawResultText = textParts.join('\n');
+            resultContent.textContent = rawResultText;
+          } else {
+            // Fallback to full JSON if no text content found
+            rawResultText = JSON.stringify(result, null, 2);
+            const pre = createOptimizedElement('pre', {
+              textContent: rawResultText,
+              styles: {
+                fontFamily: 'inherit',
+                fontSize: '13px',
+                lineHeight: '1.5',
+                padding: '0',
+                margin: '0',
+              },
+            });
+            resultContent.appendChild(pre);
+          }
+        } else {
+          // Original object handling for backward compatibility
+          rawResultText = JSON.stringify(result, null, 2);
+          const pre = createOptimizedElement('pre', {
+            textContent: rawResultText,
+            styles: {
+              fontFamily: 'inherit',
+              fontSize: '13px',
+              lineHeight: '1.5',
+              padding: '0',
+              margin: '0',
+            },
+          });
+          resultContent.appendChild(pre);
+        }
       } catch (e) {
         rawResultText = String(result);
         resultContent.textContent = rawResultText;
