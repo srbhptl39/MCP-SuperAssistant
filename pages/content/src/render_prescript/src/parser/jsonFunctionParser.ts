@@ -69,14 +69,15 @@ export const stripLanguageTags = (line: string): string => {
   const trimmed = line.trim();
 
   // First, strip markdown code fence markers (```)
-  let cleaned = trimmed.replace(/^```\s*(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh|xml|html|css|sql|yaml|yml|toml|ini|markdown|md|go|rust|java|c|cpp|csharp|cs|php|ruby|rb|swift|kotlin|scala|r|perl|lua|shell)?\s*/i, '');
+  let cleaned = trimmed.replace(/^```\s*(javascript|typescript|markdown|csharp|kotlin|python|jsonl|bash|rust|java|scala|swift|shell|json|text|perl|yaml|toml|html|ruby|cpp|php|lua|css|sql|yml|ini|xml|ts|js|py|sh|md|cs|go|rb|c|r)?\s*/i, '');
 
   // Then strip language tags with optional "copy" or "copy code" suffix
-  // Supports: json, jsonCopy, json Copy, json copy code, jsonCopycode, etc.
-  cleaned = cleaned.replace(/^(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh|xml|html|css|sql|yaml|yml|toml|ini|markdown|md|go|rust|java|c|cpp|csharp|cs|php|ruby|rb|swift|kotlin|scala|r|perl|lua|shell)(\s*copy(\s*code)?)?\s*/i, '');
+  // Supports: json, jsonCopy, json Copy, json copy code, jsonCopycode, jsonlCopy code, etc.
+  // IMPORTANT: Order matters! Longer language names must come first (e.g., jsonl before json)
+  cleaned = cleaned.replace(/^(javascript|typescript|markdown|csharp|kotlin|python|jsonl|bash|rust|java|scala|swift|shell|json|text|perl|yaml|toml|html|ruby|cpp|php|lua|css|sql|yml|ini|xml|ts|js|py|sh|md|cs|go|rb|c|r)(\s*copy(\s*code)?)?\s*/i, '');
 
   // Strip standalone "copy" or "copy code" buttons that might remain
-  cleaned = cleaned.replace(/^copy(\s+code)?\s*/i, '');
+  cleaned = cleaned.replace(/^[cC]opy(\s+code)?\s*/i, '');
 
   return cleaned;
 };
@@ -348,7 +349,8 @@ export const extractJSONFunctionInfo = (content: string): {
       // Try to extract from partial JSON line
       let trimmed = line.trim();
       // Strip language tags and copy-code prefixes before checking
-      trimmed = trimmed.replace(/^(json|jsonl|text|javascript|js|typescript|ts|python|py|bash|sh)(\s*copy(\s+code)?)?\s*/i, '');
+      // IMPORTANT: Order matters! Longer language names must come first (e.g., jsonl before json)
+      trimmed = trimmed.replace(/^(javascript|typescript|markdown|csharp|kotlin|python|jsonl|bash|rust|java|scala|swift|shell|json|text|perl|yaml|toml|html|ruby|cpp|php|lua|css|sql|yml|ini|xml|ts|js|py|sh|md|cs|go|rb|c|r)(\s*copy(\s*code)?)?\s*/i, '');
 
       if (trimmed.startsWith('{') && trimmed.includes('"type"') && trimmed.includes('function_call_start')) {
         // Try to extract name from partial JSON
