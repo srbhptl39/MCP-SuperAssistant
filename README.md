@@ -8,28 +8,34 @@
 Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, Kimi, Github Copilot, Mistral and more...
 </p>
 
+<p align="center">
+   <a href="https://mcpsuperassistant.ai/" target="_blank"><strong>🌐 Visit Official Website</strong></a>
+</p>
+
 <!-- ![MCP SuperAssistant](chrome-extension/public/Cover3.jpg) -->
 <div align="center">
  <img src="chrome-extension/public/Cover5.jpg" alt="MCP SuperAssistant Cover" width="800">
 </div>
 
+<div align="center">
+   
+   ![Latest Release](https://img.shields.io/github/v/release/srbhptl39/MCP-SuperAssistant?style=flat-square&label=Latest%20Release&color=brightgreen)
+   ![GitHub Stars](https://img.shields.io/github/stars/srbhptl39/MCP-SuperAssistant?style=flat-square&label=Stars)
+   ![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+   ![Chrome Users](https://img.shields.io/chrome-web-store/users/kngiafgkdnlkgmefdafaibkibegkcaef?style=flat-square&label=Chrome%20Users)
+   ![Firefox Users](https://img.shields.io/amo/users/mcp-superassistant?style=flat-square&label=Firefox%20Users)
+   ![Build Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)
+
+</div>
+
 ## Installation
 
-<div align="center">
-   <a href="https://chromewebstore.google.com/detail/mcp-superassistant/kngiafgkdnlkgmefdafaibkibegkcaef?hl=en">
-      <img src="https://img.shields.io/badge/Chrome%20Web%20Store-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Chrome Web Store" />
-   </a>
-   <a href="https://addons.mozilla.org/en-US/firefox/addon/mcp-superassistant/">
-      <img src="https://img.shields.io/badge/Firefox%20Add--ons-FF7139?style=for-the-badge&logo=firefox&logoColor=white" alt="Firefox Add-ons" />
-   </a>
+<div align="center" style="display: flex; justify-content: center; gap: 20px; align-items: center;">
+   <a href="https://chromewebstore.google.com/detail/mcp-superassistant/kngiafgkdnlkgmefdafaibkibegkcaef?hl=en"><img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" width="200" height="auto" style="vertical-align: middle;" /></a>
+   <a href="https://addons.mozilla.org/en-US/firefox/addon/mcp-superassistant/"><img src="https://blog.mozilla.org/addons/files/2015/11/get-the-addon.png" alt="Firefox Add-ons" width="200" height="auto" style="vertical-align: middle;" /></a>
 </div>
 
 <br>
-
-<div align="center">
-   <h3>🚀 Quick Install</h3>
-   <p>Get MCP SuperAssistant for your browser:</p>
-</div>
 
 ## Overview
 
@@ -65,6 +71,14 @@ ChatGPT
 Watch the demo to see MCP SuperAssistant in action!
 
 [MCP SuperAssistant Demo Playlist](https://www.youtube.com/playlist?list=PLOK1DBnkeaJFzxC4M-z7TU7_j04SShX_w)
+
+## Setup Tutorial
+
+[![Setup Tutorial](https://img.youtube.com/vi/h9f_GX1Ef20/0.jpg)](https://www.youtube.com/watch?v=h9f_GX1Ef20&pp=ygUTbWNwIHN1cGVyIGFzc2lzdGFudA%3D%3D)
+
+**New to MCP SuperAssistant?** Watch this complete setup guide to get started in minutes!
+
+[View Setup Tutorial](https://www.youtube.com/watch?v=h9f_GX1Ef20&pp=ygUTbWNwIHN1cGVyIGFzc2lzdGFudA%3D%3D)
 
 ## What is MCP?
 
@@ -273,6 +287,29 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Author
+
+### [Saurabh Patel](https://github.com/srbhptl39)
+
+## Sponsor & Support
+
+This project is developed entirely in my spare time, driven by a passion for AI and the Model Context Protocol (MCP). As a full-time professional, balancing work commitments with open-source development makes it challenging to contribute regularly and maintain the pace of updates.
+
+Your support helps me dedicate more time to:
+- 🐛 Fixing bugs and addressing issues
+- ✨ Adding new features and platform support
+- 📚 Improving documentation and tutorials
+- 🔄 Keeping dependencies up-to-date
+- 💬 Responding to community requests
+
+**Support this project:**
+- ⭐ Star the repository to show your appreciation
+- 💖 [Sponsor on GitHub](https://github.com/sponsors/srbhptl39) to help sustain development
+- 🐦 Follow me on [Twitter](https://twitter.com/srbhptl39) (@srbhptl39) for updates
+- 📧 For private support or custom implementations, reach out via [Twitter](https://twitter.com/srbhptl39)
+
+Every contribution, big or small, helps keep this project alive and thriving! 🙏
 
 ## License
 
