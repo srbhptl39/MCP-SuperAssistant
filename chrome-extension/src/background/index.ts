@@ -331,22 +331,23 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
     console.log('MCP client connected successfully');
     updateConnectionStatus(true);
     broadcastConnectionStatusToContentScripts(true);
-    
+
     // Also broadcast available tools after successful connection
     try {
       console.log('[Background] Connection successful, fetching and broadcasting tools...');
       const primitives = await getPrimitivesWithBackwardsCompatibility(uri, true, type);
       console.log(`[Background] Retrieved ${primitives.length} primitives after connection`);
-      
+
       const tools = normalizeTools(primitives);
       console.log(`[Background] Broadcasting ${tools.length} normalized tools after successful connection`);
-      
+
       broadcastToolsUpdateToContentScripts(tools);
     } catch (toolsError) {
       console.warn('[Background] Error broadcasting tools after connection:', toolsError);
     }
-    
+
     connectionAttemptCount = 0; // Reset counter on success
+    isConnecting = false; // CRITICAL: Reset flag on success to allow future reconnections
   } catch (error: any) {
     const errorCategory = categorizeToolError(error instanceof Error ? error : new Error(String(error)));
 
