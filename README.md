@@ -1,3 +1,4 @@
+This fork enhances the MCP image workflow by enabling inline Base64 previews, one-click batch uploading, and ensuring context preservation in mixed responses by interleaving text with position-aware `[Image]` placeholders.
 
 <div align="center">
    <!-- <img src="chrome-extension/public/icon-34.png" alt="MCP SuperAssistant Logo" width="100" height="100"> -->
