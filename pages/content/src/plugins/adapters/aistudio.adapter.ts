@@ -48,12 +48,12 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private mcpPopoverContainer: HTMLElement | null = null;
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
-  
+
   // Setup state tracking
   private storeEventListenersSetup: boolean = false;
   private domObserversSetup: boolean = false;
   private uiIntegrationSetup: boolean = false;
-  
+
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
@@ -169,7 +169,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -328,17 +328,17 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    */
   private injectAIStudioButtonStyles(): void {
     if (this.adapterStylesInjected) return;
-    
+
     try {
       const styleId = 'mcp-aistudio-button-styles';
       const existingStyles = document.getElementById(styleId);
       if (existingStyles) existingStyles.remove();
-      
+
       const styleElement = document.createElement('style');
       styleElement.id = styleId;
       styleElement.textContent = this.getAIStudioButtonStyles();
       document.head.appendChild(styleElement);
-      
+
       this.adapterStylesInjected = true;
       this.context.logger.debug('AI Studio button styles injected successfully');
     } catch (error) {
@@ -356,7 +356,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     try {
       // Use the proven chatInputHandler method
       const success = insertTextToChatInput(text);
-      
+
       if (success) {
         // Emit success event to the new event system
         this.emitExecutionCompleted('insertText', { text }, {
@@ -390,7 +390,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     try {
       // Use the proven chatInputHandler method
       const success = await submitChatInput();
-      
+
       if (success) {
         // Emit success event to the new event system
         this.emitExecutionCompleted('submitForm', {
@@ -486,7 +486,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
       // Use the proven chatInputHandler method
       const success = await attachFileToChatInput(file);
-      
+
       if (success) {
         this.emitExecutionCompleted('attachFile', {
           fileName: file.name,
@@ -749,7 +749,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       childList: true,
       subtree: true
     });
-    
+
     this.domObserversSetup = true;
   }
 
@@ -779,7 +779,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const maxAttempts = 5; // Maximum 10 seconds (20 * 500ms)
-      
+
       const checkReady = () => {
         attempts++;
         const insertionPoint = this.findButtonInsertionPoint();
@@ -884,32 +884,196 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     }
   }
 
+  /**
+   * Find the Run button using multiple strategies for resilience against UI changes.
+   * Returns the Run button element if found, null otherwise.
+   */
+  private findRunButton(): Element | null {
+    // Strategy 1: Find by custom element tag name (most reliable for Angular components)
+    const msRunButton = document.querySelector('ms-run-button');
+    if (msRunButton) {
+      this.context.logger.debug('Found Run button via ms-run-button element');
+      return msRunButton;
+    }
+
+    // Strategy 2: Find by aria-label attribute (accessibility-based, very stable)
+    const ariaLabelButton = document.querySelector('button[aria-label="Run"]');
+    if (ariaLabelButton) {
+      this.context.logger.debug('Found Run button via aria-label');
+      return ariaLabelButton;
+    }
+
+    // Strategy 3: Find by type="submit" (Run buttons are typically submit buttons)
+    const submitButton = document.querySelector('button[type="submit"]');
+    if (submitButton) {
+      const text = submitButton.textContent?.trim().toLowerCase();
+      if (text?.includes('run')) {
+        this.context.logger.debug('Found Run button via type="submit" with Run text');
+        return submitButton;
+      }
+    }
+
+    // Strategy 4: Find by jslog attribute pattern (Google's internal logging)
+    const jslogButton = document.querySelector('button[jslog*="225921"]');
+    if (jslogButton) {
+      this.context.logger.debug('Found Run button via jslog attribute');
+      return jslogButton;
+    }
+
+    // Strategy 5: Find by text content - look for buttons containing "Run"
+    const allButtons = Array.from(document.querySelectorAll('button'));
+    for (const button of allButtons) {
+      const text = button.textContent?.trim();
+      // Match buttons that have "Run" as primary text (not just containing it)
+      if (text && /^Run\b/i.test(text)) {
+        this.context.logger.debug('Found Run button via text content match');
+        return button;
+      }
+    }
+
+    this.context.logger.debug('Could not find Run button with any strategy');
+    return null;
+  }
+
+  /**
+   * Find the Add Media button using multiple strategies.
+   * Returns the Add Media button element if found, null otherwise.
+   */
+  private findAddMediaButton(): Element | null {
+    // Strategy 1: Find by custom element tag name
+    const msAddMediaButton = document.querySelector('ms-add-media-button');
+    if (msAddMediaButton) {
+      this.context.logger.debug('Found Add Media button via ms-add-media-button element');
+      return msAddMediaButton;
+    }
+
+    // Strategy 2: Find by data-test-id attribute
+    const dataTestButton = document.querySelector('[data-test-id="add-media-button"]');
+    if (dataTestButton) {
+      this.context.logger.debug('Found Add Media button via data-test-id');
+      return dataTestButton;
+    }
+
+    // Strategy 3: Find by aria-label
+    const ariaLabelButton = document.querySelector('button[aria-label*="Insert images"], button[aria-label*="add media"]');
+    if (ariaLabelButton) {
+      this.context.logger.debug('Found Add Media button via aria-label');
+      return ariaLabelButton;
+    }
+
+    // Strategy 4: Find by icon name (note_add icon)
+    const noteAddIcon = document.querySelector('[iconname="note_add"], .material-symbols-outlined');
+    if (noteAddIcon) {
+      const iconText = noteAddIcon.textContent?.trim();
+      if (iconText === 'note_add') {
+        // Get the parent button
+        const button = noteAddIcon.closest('button');
+        if (button) {
+          this.context.logger.debug('Found Add Media button via note_add icon');
+          return button.closest('ms-add-media-button') || button;
+        }
+      }
+    }
+
+    this.context.logger.debug('Could not find Add Media button with any strategy');
+    return null;
+  }
+
+  /**
+   * Find a suitable container for the MCP button near the input area.
+   * Uses the Run button's location as an anchor point.
+   */
+  private findButtonContainer(runButton: Element): Element | null {
+    // Try to find container by walking up from Run button
+    // Look for common container patterns
+
+    // Pattern 1: Direct parent with class containing "button" or "wrapper"
+    let parent = runButton.parentElement;
+    while (parent && parent !== document.body) {
+      const className = parent.className.toLowerCase();
+      if (className.includes('button-wrapper') ||
+        className.includes('buttons-row') ||
+        className.includes('button-row') ||
+        className.includes('actions')) {
+        this.context.logger.debug(`Found container via parent traversal: ${parent.className}`);
+        return parent;
+      }
+      parent = parent.parentElement;
+    }
+
+    // Pattern 2: Sibling of Run button's parent that contains buttons
+    const runButtonParent = runButton.parentElement;
+    if (runButtonParent) {
+      this.context.logger.debug(`Using Run button's parent as container: ${runButtonParent.className}`);
+      return runButtonParent;
+    }
+
+    return null;
+  }
+
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Look for the prompt input wrapper container that holds the button wrappers
+    // PRIMARY STRATEGY: Locate the Run button first, then find appropriate container
+    const runButton = this.findRunButton();
+    if (runButton) {
+      this.context.logger.debug('Using Run button as anchor for insertion point');
+
+      // Find the container that holds the Run button
+      const container = this.findButtonContainer(runButton);
+      if (container) {
+        // Try to find Add Media button to insert after it
+        const addMediaButton = this.findAddMediaButton();
+        if (addMediaButton && container.contains(addMediaButton)) {
+          this.context.logger.debug('Inserting MCP button after Add Media button');
+          return { container, insertAfter: addMediaButton };
+        }
+
+        // If Run button is a custom element (ms-run-button), insert before it within same container
+        if (runButton.tagName.toLowerCase() === 'ms-run-button') {
+          // Find the previous sibling to insert after
+          const prevSibling = runButton.previousElementSibling;
+          if (prevSibling) {
+            this.context.logger.debug('Inserting MCP button before Run button (after previous sibling)');
+            return { container, insertAfter: prevSibling };
+          }
+        }
+
+        // Default: Insert at beginning of container (before Run button)
+        this.context.logger.debug('Inserting MCP button at beginning of container');
+        return { container, insertAfter: null };
+      }
+    }
+
+    // FALLBACK 1: Look for .buttons-row container directly
+    const buttonsRow = document.querySelector('.buttons-row');
+    if (buttonsRow) {
+      this.context.logger.debug('Found buttons-row container (fallback 1)');
+      const buttonWrapper = buttonsRow.querySelector('.button-wrapper');
+      if (buttonWrapper) {
+        return { container: buttonWrapper, insertAfter: null };
+      }
+      return { container: buttonsRow, insertAfter: null };
+    }
+
+    // FALLBACK 2: Legacy prompt-input-wrapper-container
     const promptInputWrapperContainer = document.querySelector('.prompt-input-wrapper-container');
     if (promptInputWrapperContainer) {
-      this.context.logger.debug('Found prompt input wrapper container');
-      
-      // Find all .button-wrapper elements inside the container - these contain the Add and Run buttons
+      this.context.logger.debug('Found prompt input wrapper container (fallback 2 - legacy UI)');
       const buttonWrappers = promptInputWrapperContainer.querySelectorAll('.button-wrapper');
       if (buttonWrappers.length > 0) {
-        // Find the parent container that holds all button wrappers
         const buttonContainer = buttonWrappers[0].parentElement;
         if (buttonContainer) {
-          // Insert after the last button wrapper (Run button) but within the same container
           const lastButtonWrapper = buttonWrappers[buttonWrappers.length - 1];
-          this.context.logger.debug('Found button container, placing MCP button after the Run button');
           return { container: buttonContainer, insertAfter: lastButtonWrapper };
         }
       }
     }
 
-    // Fallback: Try to find the prompt input wrapper directly
+    // FALLBACK 3: prompt-input-wrapper
     const promptInputWrapper = document.querySelector('.prompt-input-wrapper');
     if (promptInputWrapper) {
-      this.context.logger.debug('Found prompt input wrapper (fallback)');
+      this.context.logger.debug('Found prompt input wrapper (fallback 3)');
       const buttonWrappers = promptInputWrapper.querySelectorAll('.button-wrapper');
       if (buttonWrappers.length > 0) {
         const lastButtonWrapper = buttonWrappers[buttonWrappers.length - 1];
@@ -918,11 +1082,21 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       return { container: promptInputWrapper, insertAfter: null };
     }
 
-    // Final fallback: Look for actions container
+    // FALLBACK 4: actions-container
     const actionsContainer = document.querySelector('footer .actions-container, .actions-container');
     if (actionsContainer) {
-      this.context.logger.debug('Found actions container (final fallback)');
+      this.context.logger.debug('Found actions container (fallback 4)');
       return { container: actionsContainer, insertAfter: null };
+    }
+
+    // FALLBACK 5: Near any textarea (chat input)
+    const chatTextarea = document.querySelector('textarea[aria-label], textarea.chat-input, textarea');
+    if (chatTextarea) {
+      const inputContainer = chatTextarea.closest('form') || chatTextarea.closest('div[class*="input"]');
+      if (inputContainer) {
+        this.context.logger.debug('Found container near textarea (fallback 5)');
+        return { container: inputContainer, insertAfter: null };
+      }
     }
 
     this.context.logger.debug('Could not find suitable insertion point for MCP popover');
@@ -948,7 +1122,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       const reactContainer = document.createElement('div');
       reactContainer.id = 'mcp-popover-container';
       reactContainer.style.display = 'contents'; // Use contents to not interfere with layout
-      
+
       // Add the React container to the button wrapper
       buttonWrapper.appendChild(reactContainer);
 
@@ -985,11 +1159,11 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
           import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
             // Create state manager with new architecture integration
             const stateManager = this.createToggleStateManager();
-            
+
             // Create adapter button configuration for AI Studio styling
             const adapterButtonConfig = {
               className: 'mcp-aistudio-button-base',
-              contentClassName: 'mcp-aistudio-button-content', 
+              contentClassName: 'mcp-aistudio-button-content',
               textClassName: 'mcp-aistudio-button-text',
               activeClassName: 'active'
             };
@@ -1029,7 +1203,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
         try {
           // Get state from UI store - MCP enabled state should be the persistent MCP toggle state
           const uiState = context.stores.ui;
-          
+
           // Get the persistent MCP enabled state and other preferences
           const mcpEnabled = uiState?.mcpEnabled ?? false;
           const autoSubmitEnabled = uiState?.preferences?.autoSubmit ?? false;
@@ -1064,7 +1238,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
             context.logger.debug(`MCP state set to: ${enabled} via UI store`);
           } else {
             context.logger.warn('UI store setMCPEnabled method not available');
-            
+
             // Fallback: Control sidebar visibility directly if MCP state setter not available
             if (context.stores.ui?.setSidebarVisibility) {
               context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle-fallback');
@@ -1193,7 +1367,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     try {
       // Check if there's an active sidebar manager
       const activeSidebarManager = (window as any).activeSidebarManager;
-      
+
       if (!activeSidebarManager) {
         this.context.logger.warn('No active sidebar manager found after navigation');
         return;
@@ -1201,7 +1375,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
       // Sidebar manager exists, just ensure MCP popover connection is working
       this.ensureMCPPopoverConnection();
-      
+
     } catch (error) {
       this.context.logger.error('Error checking sidebar state after navigation:', error);
     }
@@ -1212,7 +1386,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    */
   private ensureMCPPopoverConnection(): void {
     this.context.logger.debug('Ensuring MCP popover connection after navigation');
-    
+
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
