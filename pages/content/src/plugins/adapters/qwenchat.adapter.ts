@@ -26,28 +26,27 @@ export class QwenAdapter extends BaseAdapterPlugin {
   ];
 
   // CSS selectors for Qwen's UI elements
-  // Updated selectors based on current Qwen interface
+  // Updated selectors based on current Qwen interface (December 2024)
   private readonly selectors = {
     // Primary chat input selectors
-    CHAT_INPUT: '#chat-input',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: '#send-message-button, button._sendMessageButton_71e98_48',
+    CHAT_INPUT: '#chat-input, textarea.chat-input',
+    // Submit button selectors (multiple fallbacks) - updated for new UI
+    SUBMIT_BUTTON: 'button.send-button, div.chat-prompt-send-button button, #send-message-button',
     // File upload related selectors
-    FILE_UPLOAD_BUTTON: 'button[aria-controls*="upload"], input[type="file"]',
-    FILE_INPUT:
-      'input[type="file"][multiple], input#filesUpload',
+    FILE_UPLOAD_BUTTON: 'button.chat-prompt-upload-group-btn, div.upload-group button, input[type="file"]',
+    FILE_INPUT: 'input#filesUpload, input[type="file"][multiple]',
     // Main panel and container selectors
-    MAIN_PANEL: 'form.flex.w-full.gap-1\.5',
+    MAIN_PANEL: 'div.prompt-input-container',
     // Drop zones for file attachment
-    DROP_ZONE: 'textarea#chat-input',
+    DROP_ZONE: 'textarea#chat-input, textarea.chat-input',
     // File preview elements
-    FILE_PREVIEW:
-      'div._fileListBox_71e98_10',
-    // Button insertion points (for MCP popover) - looking for features area
-    BUTTON_INSERTION_CONTAINER:
-      'div.scrollbar-none.flex.items-center.left-content.operationBtn, div.flex.items-center.pr-2',
+    FILE_PREVIEW: 'div.prompt-input-file-list',
+    // Button insertion points (for MCP popover) - action bar left buttons area
+    BUTTON_INSERTION_CONTAINER: 'div.action-bar-left-btns, div.action-bar-left',
+    // Action bar container
+    ACTION_BAR: 'div.prompt-input-action-bar',
     // Alternative insertion points
-    FALLBACK_INSERTION: '#chat-input',
+    FALLBACK_INSERTION: 'div.prompt-input-action-bar, #chat-input',
   };
 
   // URL patterns for navigation tracking
@@ -949,43 +948,57 @@ export class QwenAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null; insertBefore?: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Primary strategy: Find the submit button and insert MCP button as sibling to its left
+    // Primary strategy: Find the action-bar-left-btns container and insert MCP button alongside Thinking/Search buttons
+    const actionBarLeftBtns = document.querySelector('div.action-bar-left-btns');
+    if (actionBarLeftBtns) {
+      this.context.logger.debug('Found action-bar-left-btns container, placing MCP button inside');
+      // Get the last child to insert after it
+      const lastChild = actionBarLeftBtns.lastElementChild;
+      return { container: actionBarLeftBtns, insertAfter: lastChild };
+    }
+
+    // Fallback 1: Find the action-bar-left container
+    const actionBarLeft = document.querySelector('div.action-bar-left');
+    if (actionBarLeft) {
+      this.context.logger.debug('Found action-bar-left container');
+      const btnsContainer = actionBarLeft.querySelector('div.action-bar-left-btns');
+      if (btnsContainer) {
+        const lastChild = btnsContainer.lastElementChild;
+        return { container: btnsContainer, insertAfter: lastChild };
+      }
+      // Insert at the end of action-bar-left if no btns container
+      return { container: actionBarLeft, insertAfter: actionBarLeft.lastElementChild };
+    }
+
+    // Fallback 2: Find the prompt-input-action-bar and insert before send button
+    const actionBar = document.querySelector('div.prompt-input-action-bar');
+    if (actionBar) {
+      this.context.logger.debug('Found prompt-input-action-bar container');
+      const sendButtonContainer = actionBar.querySelector('div.chat-prompt-send-button');
+      if (sendButtonContainer) {
+        return { container: actionBar, insertAfter: null, insertBefore: sendButtonContainer };
+      }
+      return { container: actionBar, insertAfter: actionBar.lastElementChild };
+    }
+
+    // Fallback 3: Find submit button and insert before it
     const submitButton = document.querySelector(this.selectors.SUBMIT_BUTTON);
     if (submitButton) {
       const container = submitButton.parentElement;
       if (container) {
         this.context.logger.debug('Found submit button container, placing MCP button to its left');
-        // Insert before the submit button (to the left)
         return { container, insertAfter: null, insertBefore: submitButton };
       }
     }
 
-    // Fallback 1: Look for the absolute positioned container with submit button
-    const absoluteContainer = document.querySelector('div.flex.items-end.absolute.right-3');
-    if (absoluteContainer) {
-      this.context.logger.debug('Found absolute positioned container');
-      const submitBtn = absoluteContainer.querySelector('#send-message-button');
-      if (submitBtn) {
-        return { container: absoluteContainer, insertAfter: null, insertBefore: submitBtn };
+    // Fallback 4: Look for the chat input container
+    const promptInputContainer = document.querySelector('div.prompt-input-container');
+    if (promptInputContainer) {
+      const actionBarEl = promptInputContainer.querySelector('div.prompt-input-action-bar');
+      if (actionBarEl) {
+        this.context.logger.debug('Found action bar in prompt input container');
+        return { container: actionBarEl, insertAfter: null };
       }
-    }
-
-    // Fallback 2: Try to find the search/research toggle area
-    const radioGroup = document.querySelector(this.selectors.BUTTON_INSERTION_CONTAINER);
-    if (radioGroup) {
-      const container = radioGroup.closest('div.flex');
-      if (container) {
-        this.context.logger.debug('Found Tools container, placing MCP button next to it');
-        const wrapperDiv = radioGroup.parentElement;
-        return { container, insertAfter: wrapperDiv };
-      }
-    }
-
-    // Fallback 3: Look for the main input area's action buttons container
-    const actionsContainer = document.querySelector('div.flex.items-end');
-    if (actionsContainer) {
-      this.context.logger.debug('Found actions container (fallback)');
-      return { container: actionsContainer, insertAfter: null };
     }
 
     this.context.logger.debug('Could not find suitable insertion point for MCP popover');
@@ -1010,7 +1023,7 @@ export class QwenAdapter extends BaseAdapterPlugin {
 
       // Insert at appropriate location
       const { container, insertAfter, insertBefore } = insertionPoint;
-      
+
       if (insertBefore && insertBefore.parentNode === container) {
         // Insert before the specified element (e.g., submit button)
         container.insertBefore(reactContainer, insertBefore);
@@ -1365,8 +1378,15 @@ export class QwenAdapter extends BaseAdapterPlugin {
    */
   private getQwenButtonStyles(): string {
     return `
-      .mcp-qwen-button-base {
-        /* Base button styling matching Qwen's design */
+      /* MCP button styling to match Qwen's chat-input-feature-btn styling */
+      #mcp-popover-container {
+        display: inline-flex;
+        align-items: center;
+      }
+      
+      .mcp-qwen-button-base,
+      #mcp-popover-container .chat-input-feature-btn {
+        /* Match Qwen's chat-input-feature-btn styling */
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1376,141 +1396,88 @@ export class QwenAdapter extends BaseAdapterPlugin {
         white-space: nowrap;
         user-select: none;
         border-radius: 8px;
-        height: 32px;
-        min-width: 36px;
-        padding: 0 8px;
-        gap: 6px;
+        height: auto;
+        padding: 4px 8px;
+        gap: 4px;
         font-size: 14px;
-        font-weight: 500;
+        font-weight: 400;
         border: none;
         background: transparent;
-        transition: all 300ms ease-out;
-        
-        /* Default colors - using Qwen's theme colors */
-        color: #666;
-        
-        /* Focus states */
-        &:focus {
-          outline: none;
-        }
-        
-        /* Hover states */
-        &:hover {
-          color: #333;
-          background-color: rgba(0, 0, 0, 0.05);
-        }
-        
-        /* Active/selected state */
-        &.mcp-button-active {
-          color: #1890ff;
-          background-color: rgba(24, 144, 255, 0.1);
-        }
-        
-        /* Active button border styling */
-        &.mcp-button-active::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          border-radius: 8px;
-          border: 1px solid #1890ff;
-          transition: all 300ms ease-out;
-          opacity: 1;
-        }
-      }
-      
-      /* Dark mode support */
-      @media (prefers-color-scheme: dark) {
-        .mcp-qwen-button-base {
-          color: #ccc;
-          
-          &:hover {
-            color: #fff;
-            background-color: rgba(255, 255, 255, 0.1);
-          }
-          
-          &.mcp-button-active {
-            color: #40a9ff;
-            background-color: rgba(64, 169, 255, 0.15);
-          }
-          
-          &.mcp-button-active::before {
-            border-color: #40a9ff;
-          }
-        }
-      }
-      
-      .mcp-qwen-button-content {
-        /* Content container styling */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        min-width: 0;
-        font-weight: 500;
-        position: relative;
-        z-index: 10;
-        height: 32px;
-        min-width: 36px;
-        padding: 4px 8px;
-      }
-      
-      .mcp-qwen-button-text {
-        font-size: 14px;
-        font-weight: 500;
-        line-height: 1.2;
+        transition: all 0.2s ease;
         color: inherit;
       }
       
-      /* Icon styling within button */
+      .mcp-qwen-button-base:hover,
+      #mcp-popover-container .chat-input-feature-btn:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+      
+      .mcp-qwen-button-base.mcp-button-active,
+      #mcp-popover-container .chat-input-feature-btn.mcp-button-active {
+        color: #1890ff;
+        background-color: rgba(24, 144, 255, 0.08);
+      }
+      
+      .mcp-qwen-button-base .anticon,
       .mcp-qwen-button-base svg,
+      #mcp-popover-container .chat-input-feature-btn-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
       .mcp-qwen-button-base img {
         width: 16px;
         height: 16px;
-        transition: all 300ms ease-out;
-        flex-shrink: 0;
+        border-radius: 4px;
       }
       
-      .mcp-qwen-button-base img {
-        border-radius: 50%;
-        margin-right: 1px;
+      .mcp-qwen-button-text,
+      #mcp-popover-container .chat-input-feature-btn-text {
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 1.4;
       }
       
-      /* Integration with Qwen's button group layout */
-      .flex.items-center .mcp-qwen-button-base {
-        margin: 0 2px;
+      /* Dark mode support - Qwen uses dark theme by default */
+      .mcp-qwen-button-base:hover {
+        background-color: rgba(255, 255, 255, 0.08);
       }
       
-      /* Focus-visible styling for accessibility */
+      .mcp-qwen-button-base.mcp-button-active {
+        color: #40a9ff;
+        background-color: rgba(64, 169, 255, 0.12);
+      }
+      
+      /* Integration with action-bar-left-btns layout */
+      .action-bar-left-btns #mcp-popover-container,
+      .action-bar-left #mcp-popover-container {
+        margin-left: 0;
+      }
+      
+      /* Focus states for accessibility */
       .mcp-qwen-button-base:focus-visible {
         outline: 2px solid #1890ff;
         outline-offset: 2px;
-        outline-style: dashed;
-      }
-      
-      .mcp-qwen-button-base:focus-visible::before {
-        border-style: dashed !important;
       }
       
       /* Responsive adjustments */
       @media (max-width: 640px) {
-        .mcp-qwen-button-base {
-          height: 28px;
-          min-width: 32px;
-          padding: 0 6px;
+        .mcp-qwen-button-base,
+        #mcp-popover-container .chat-input-feature-btn {
+          padding: 2px 6px;
           font-size: 13px;
         }
         
-        .mcp-qwen-button-content {
-          height: 28px;
-          min-width: 32px;
-          padding: 2px 6px;
-        }
-        
         .mcp-qwen-button-base svg,
+        .mcp-qwen-button-base .anticon,
         .mcp-qwen-button-base img {
           width: 14px;
           height: 14px;
+          font-size: 14px;
         }
       }
     `;

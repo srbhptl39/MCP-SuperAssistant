@@ -31,13 +31,15 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     'dom-manipulation'
   ];
 
-  // CSS selectors for AI Studio's UI elements
+  // CSS selectors for AI Studio's UI elements (Updated Jan 2026)
   // Simplified since we're using chatInputHandler for most operations
   private readonly selectors = {
-    // Button insertion points (for MCP popover) - looking for prompt input wrapper
-    BUTTON_INSERTION_CONTAINER: '.prompt-input-wrapper, .actions-container, footer .actions-container',
+    // Primary chat input selector (Jan 2026)
+    CHAT_INPUT: 'textarea.textarea[placeholder="Start typing a prompt"], textarea.textarea[aria-label="Enter a prompt"], .prompt-box-container textarea.textarea',
+    // Button insertion points (for MCP popover) - looking for buttons-row and button-wrapper
+    BUTTON_INSERTION_CONTAINER: '.buttons-row .button-wrapper, .buttons-row, .prompt-box-container .buttons-row, .prompt-input-wrapper, .actions-container',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.input-area, .chat-input-container, .conversation-input'
+    FALLBACK_INSERTION: '.prompt-box-container, .input-area, .chat-input-container, .conversation-input'
   };
 
   // URL patterns for navigation tracking
@@ -903,7 +905,14 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       return ariaLabelButton;
     }
 
-    // Strategy 3: Find by type="submit" (Run buttons are typically submit buttons)
+    // Strategy 3: Find by type="submit" with aria-label (Jan 2026 structure)
+    const submitButtonWithAria = document.querySelector('button[type="submit"][aria-label="Run"]');
+    if (submitButtonWithAria) {
+      this.context.logger.debug('Found Run button via type="submit" with aria-label="Run"');
+      return submitButtonWithAria;
+    }
+
+    // Strategy 4: Find by type="submit" (Run buttons are typically submit buttons)
     const submitButton = document.querySelector('button[type="submit"]');
     if (submitButton) {
       const text = submitButton.textContent?.trim().toLowerCase();
@@ -913,14 +922,14 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // Strategy 4: Find by jslog attribute pattern (Google's internal logging)
+    // Strategy 5: Find by jslog attribute pattern (Google's internal logging)
     const jslogButton = document.querySelector('button[jslog*="225921"]');
     if (jslogButton) {
       this.context.logger.debug('Found Run button via jslog attribute');
       return jslogButton;
     }
 
-    // Strategy 5: Find by text content - look for buttons containing "Run"
+    // Strategy 6: Find by text content - look for buttons containing "Run"
     const allButtons = Array.from(document.querySelectorAll('button'));
     for (const button of allButtons) {
       const text = button.textContent?.trim();
@@ -947,29 +956,38 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       return msAddMediaButton;
     }
 
-    // Strategy 2: Find by data-test-id attribute
+    // Strategy 2: Find by data-test-id attribute (Jan 2026 structure)
     const dataTestButton = document.querySelector('[data-test-id="add-media-button"]');
     if (dataTestButton) {
       this.context.logger.debug('Found Add Media button via data-test-id');
       return dataTestButton;
     }
 
-    // Strategy 3: Find by aria-label
-    const ariaLabelButton = document.querySelector('button[aria-label*="Insert images"], button[aria-label*="add media"]');
+    // Strategy 3: Find by aria-label (Jan 2026: "Insert images, videos, audio, or files")
+    const ariaLabelButton = document.querySelector(
+      'button[aria-label="Insert images, videos, audio, or files"], button[aria-label*="Insert images"], button[aria-label*="add media"]'
+    );
     if (ariaLabelButton) {
       this.context.logger.debug('Found Add Media button via aria-label');
       return ariaLabelButton;
     }
 
-    // Strategy 4: Find by icon name (note_add icon)
+    // Strategy 4: Find by iconname="add_circle" (Jan 2026 structure)
+    const addCircleButton = document.querySelector('button[iconname="add_circle"]');
+    if (addCircleButton) {
+      this.context.logger.debug('Found Add Media button via iconname="add_circle"');
+      return addCircleButton.closest('ms-add-media-button') || addCircleButton;
+    }
+
+    // Strategy 5: Find by icon name (note_add icon for legacy)
     const noteAddIcon = document.querySelector('[iconname="note_add"], .material-symbols-outlined');
     if (noteAddIcon) {
       const iconText = noteAddIcon.textContent?.trim();
-      if (iconText === 'note_add') {
+      if (iconText === 'note_add' || iconText === 'add_circle') {
         // Get the parent button
         const button = noteAddIcon.closest('button');
         if (button) {
-          this.context.logger.debug('Found Add Media button via note_add icon');
+          this.context.logger.debug('Found Add Media button via icon');
           return button.closest('ms-add-media-button') || button;
         }
       }
@@ -1014,6 +1032,52 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
+    // Jan 2026 STRATEGY: Look for .buttons-row > .button-wrapper structure first
+    const buttonsRow = document.querySelector('.buttons-row');
+    if (buttonsRow) {
+      this.context.logger.debug('Found .buttons-row container (Jan 2026 structure)');
+
+      // Find the .button-wrapper that contains ms-add-media-button and ms-run-button
+      const buttonWrapper = buttonsRow.querySelector('.button-wrapper');
+      if (buttonWrapper) {
+        // Find ms-add-media-button to insert after it
+        const addMediaButton = buttonWrapper.querySelector('ms-add-media-button');
+        if (addMediaButton) {
+          this.context.logger.debug('Inserting MCP button after ms-add-media-button');
+          return { container: buttonWrapper, insertAfter: addMediaButton };
+        }
+
+        // Find ms-run-button and insert before it
+        const runButton = buttonWrapper.querySelector('ms-run-button');
+        if (runButton && runButton.previousElementSibling) {
+          this.context.logger.debug('Inserting MCP button before ms-run-button');
+          return { container: buttonWrapper, insertAfter: runButton.previousElementSibling };
+        }
+
+        return { container: buttonWrapper, insertAfter: null };
+      }
+
+      return { container: buttonsRow, insertAfter: null };
+    }
+
+    // Jan 2026: Look inside .prompt-box-container
+    const promptBoxContainer = document.querySelector('.prompt-box-container');
+    if (promptBoxContainer) {
+      const buttonsRowInside = promptBoxContainer.querySelector('.buttons-row');
+      if (buttonsRowInside) {
+        this.context.logger.debug('Found .buttons-row inside .prompt-box-container');
+        const buttonWrapper = buttonsRowInside.querySelector('.button-wrapper');
+        if (buttonWrapper) {
+          const addMediaButton = buttonWrapper.querySelector('ms-add-media-button');
+          if (addMediaButton) {
+            return { container: buttonWrapper, insertAfter: addMediaButton };
+          }
+          return { container: buttonWrapper, insertAfter: null };
+        }
+        return { container: buttonsRowInside, insertAfter: null };
+      }
+    }
+
     // PRIMARY STRATEGY: Locate the Run button first, then find appropriate container
     const runButton = this.findRunButton();
     if (runButton) {
@@ -1045,21 +1109,10 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // FALLBACK 1: Look for .buttons-row container directly
-    const buttonsRow = document.querySelector('.buttons-row');
-    if (buttonsRow) {
-      this.context.logger.debug('Found buttons-row container (fallback 1)');
-      const buttonWrapper = buttonsRow.querySelector('.button-wrapper');
-      if (buttonWrapper) {
-        return { container: buttonWrapper, insertAfter: null };
-      }
-      return { container: buttonsRow, insertAfter: null };
-    }
-
-    // FALLBACK 2: Legacy prompt-input-wrapper-container
+    // FALLBACK 1: Legacy prompt-input-wrapper-container
     const promptInputWrapperContainer = document.querySelector('.prompt-input-wrapper-container');
     if (promptInputWrapperContainer) {
-      this.context.logger.debug('Found prompt input wrapper container (fallback 2 - legacy UI)');
+      this.context.logger.debug('Found prompt input wrapper container (fallback 1 - legacy UI)');
       const buttonWrappers = promptInputWrapperContainer.querySelectorAll('.button-wrapper');
       if (buttonWrappers.length > 0) {
         const buttonContainer = buttonWrappers[0].parentElement;
@@ -1070,10 +1123,10 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       }
     }
 
-    // FALLBACK 3: prompt-input-wrapper
+    // FALLBACK 2: prompt-input-wrapper
     const promptInputWrapper = document.querySelector('.prompt-input-wrapper');
     if (promptInputWrapper) {
-      this.context.logger.debug('Found prompt input wrapper (fallback 3)');
+      this.context.logger.debug('Found prompt input wrapper (fallback 2)');
       const buttonWrappers = promptInputWrapper.querySelectorAll('.button-wrapper');
       if (buttonWrappers.length > 0) {
         const lastButtonWrapper = buttonWrappers[buttonWrappers.length - 1];
@@ -1082,19 +1135,19 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
       return { container: promptInputWrapper, insertAfter: null };
     }
 
-    // FALLBACK 4: actions-container
+    // FALLBACK 3: actions-container
     const actionsContainer = document.querySelector('footer .actions-container, .actions-container');
     if (actionsContainer) {
-      this.context.logger.debug('Found actions container (fallback 4)');
+      this.context.logger.debug('Found actions container (fallback 3)');
       return { container: actionsContainer, insertAfter: null };
     }
 
-    // FALLBACK 5: Near any textarea (chat input)
-    const chatTextarea = document.querySelector('textarea[aria-label], textarea.chat-input, textarea');
+    // FALLBACK 4: Near any textarea (chat input)
+    const chatTextarea = document.querySelector('textarea[aria-label="Enter a prompt"], textarea.textarea, textarea[aria-label], textarea.chat-input, textarea');
     if (chatTextarea) {
-      const inputContainer = chatTextarea.closest('form') || chatTextarea.closest('div[class*="input"]');
+      const inputContainer = chatTextarea.closest('.prompt-box-container') || chatTextarea.closest('form') || chatTextarea.closest('div[class*="input"]');
       if (inputContainer) {
-        this.context.logger.debug('Found container near textarea (fallback 5)');
+        this.context.logger.debug('Found container near textarea (fallback 4)');
         return { container: inputContainer, insertAfter: null };
       }
     }
@@ -1464,18 +1517,43 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
 
 export const findChatInputElement = (): HTMLTextAreaElement | null => {
-  // Try to find the main "Ask anything..." input first
-  let chatInput = document.querySelector('textarea.textarea[placeholder="Type something"]');
+  // Jan 2026 structure: Primary selector - "Start typing a prompt" placeholder with "Enter a prompt" aria-label
+  let chatInput = document.querySelector('textarea.textarea[placeholder="Start typing a prompt"]');
+
+  if (chatInput) {
+    logger.debug('Found AiStudio main input with "Start typing a prompt" placeholder');
+    return chatInput as HTMLTextAreaElement;
+  }
+
+  // Jan 2026: Try by aria-label "Enter a prompt"
+  chatInput = document.querySelector('textarea.textarea[aria-label="Enter a prompt"]');
+
+  if (chatInput) {
+    logger.debug('Found AiStudio input with "Enter a prompt" aria-label');
+    return chatInput as HTMLTextAreaElement;
+  }
+
+  // Jan 2026: Look inside .prompt-box-container
+  chatInput = document.querySelector('.prompt-box-container textarea.textarea');
+
+  if (chatInput) {
+    logger.debug('Found AiStudio input inside .prompt-box-container');
+    return chatInput as HTMLTextAreaElement;
+  }
+
+  // Legacy: Try to find the main "Type something" input
+  chatInput = document.querySelector('textarea.textarea[placeholder="Type something"]');
 
   if (chatInput) {
     logger.debug('Found AiStudio main input with "Type something" placeholder');
     return chatInput as HTMLTextAreaElement;
   }
-  // Try to find the main "Ask anything..." input first
+
+  // Legacy: Try to find the main "Ask anything..." input
   chatInput = document.querySelector('textarea.textarea[aria-label="Type something or pick one from prompt gallery"]');
 
   if (chatInput) {
-    logger.debug('Found AiStudio main input with "Type something or pick one from prompt gallery" placeholder');
+    logger.debug('Found AiStudio main input with "Type something or pick one from prompt gallery" aria-label');
     return chatInput as HTMLTextAreaElement;
   }
 
@@ -1497,7 +1575,7 @@ export const findChatInputElement = (): HTMLTextAreaElement | null => {
     return chatInput as HTMLTextAreaElement;
   }
 
-  // Try to find the input with "Start typing a prompt" aria-label
+  // Legacy: Try to find the input with "Start typing a prompt" aria-label (older format)
   chatInput = document.querySelector("textarea.textarea[aria-label='Start typing a prompt']");
 
   if (chatInput) {
@@ -1512,6 +1590,14 @@ export const findChatInputElement = (): HTMLTextAreaElement | null => {
     logger.debug(
       `Found AiStudio input with generic "Ask" in placeholder: ${(chatInput as HTMLTextAreaElement).placeholder}`,
     );
+    return chatInput as HTMLTextAreaElement;
+  }
+
+  // Final fallback: any textarea with .textarea class
+  chatInput = document.querySelector('textarea.textarea');
+
+  if (chatInput) {
+    logger.debug('Found AiStudio input with generic textarea.textarea selector');
     return chatInput as HTMLTextAreaElement;
   }
 

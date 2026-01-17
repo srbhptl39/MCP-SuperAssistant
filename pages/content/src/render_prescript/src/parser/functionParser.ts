@@ -29,7 +29,7 @@ export const containsFunctionCalls = (block: HTMLElement): FunctionInfo => {
     const { description } = extractJSONFunctionInfo(content);
     return {
       ...jsonResult,
-      description,
+      description: description ?? undefined,
     };
   }
 

@@ -26,28 +26,31 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
   // CSS selectors for OpenRouter's UI elements
   private readonly selectors = {
-    // Primary chat input selector - updated for new structure
+    // Primary chat input selector - updated for new structure (Jan 2026)
     CHAT_INPUT:
-      'textarea[placeholder="Start a new message..."], textarea[placeholder="Start a new message..."].w-full, div[contenteditable="true"]',
+      'textarea[data-testid="composer-input"], textarea[placeholder="Start a new message..."], div[contenteditable="true"]',
     // Submit button selectors - updated for new structure
     SUBMIT_BUTTON:
-      'button[data-state="closed"] svg[stroke="currentColor"] path[d*="M4.5 10.5"], button[aria-label="Send message"], button[data-testid="send-button"], button[aria-label="Send prompt"]',
+      'button[data-testid="send-button"], button[aria-label="Send message"], button[aria-label="Send prompt"]',
     // File upload related selectors - updated for new attachment button
     FILE_UPLOAD_BUTTON:
-      'button svg[fill="currentColor"] path[fill-rule="evenodd"][d*="M18.97 3.659"], button[aria-label="Attach file"], button[aria-label*="attach"], input[type="file"]',
+      'button[aria-label="Add attachment"], button[aria-label="Attach file"], button[aria-label*="attach"], input[type="file"]',
     FILE_INPUT: 'input[type="file"]',
     // Main panel and container selectors - updated for new structure
     MAIN_PANEL:
-      '.rounded-xl.overflow-hidden.p-2.border.border-slate-4, .chat-container, .main-content, .conversation-container',
-    // Drop zones for file attachment - updated for new structure with proper escaping
-    DROP_ZONE: '.rounded-xl.overflow-hidden.p-2.border.border-slate-4, .rounded-lg.w-full.focus-within\\:bg-accent, textarea[placeholder="Start a new message..."], .chat-input-area, .input-container',
+      '.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl, .rounded-xl.overflow-hidden.p-2.border.border-slate-4, .chat-container, .main-content',
+    // Drop zones for file attachment - updated for new structure
+    DROP_ZONE:
+      '.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl, .rounded-lg.w-full.focus-within\\:bg-accent, textarea[data-testid="composer-input"], textarea[placeholder="Start a new message..."]',
     // File preview elements - updated for OpenRouter structure
-    FILE_PREVIEW: '.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2, .bg-background.relative.h-32.w-48, .group.relative.flex.shrink-0, .file-preview, .attachment-preview, .file-attachment',
-    // Button insertion points (for MCP popover) - updated for new button container
+    FILE_PREVIEW:
+      '.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2, .bg-background.relative.h-32.w-48, .group.relative.flex.shrink-0, .file-preview, .attachment-preview, .file-attachment',
+    // Button insertion points (for MCP popover) - updated for new button container (Jan 2026)
     BUTTON_INSERTION_CONTAINER:
-      '.relative.flex.w-full.min-w-0.items-center.gap-1, .flex.gap-1, .input-actions, .chat-input-actions',
+      '.flex.items-center.gap-1.pl-2, .flex.gap-1.mt-2.items-center.justify-between, .relative.flex.min-w-0.items-center',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.flex.gap-1, .input-area, .chat-input-container, .conversation-input',
+    FALLBACK_INSERTION:
+      '.flex.gap-1.mt-2.items-center.justify-between, .flex.items-center.gap-1, .input-area, .chat-input-container',
   };
 
   // URL patterns for navigation tracking
@@ -305,17 +308,18 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         }
       }
 
-      // Additional check for the new send button structure
+      // Additional check for the new send button structure (Jan 2026)
       if (!submitButton) {
-        // Look for the send button by its specific characteristics
+        // Look for the send button by its specific characteristics - arrow up icon
         const sendButtons = document.querySelectorAll('button');
         for (let i = 0; i < sendButtons.length; i++) {
           const button = sendButtons[i];
           const svg = button.querySelector('svg[stroke="currentColor"]');
+          // Check for the arrow-up path: "M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"
           const path = svg?.querySelector('path[d*="M4.5 10.5"]');
           if (path && svg) {
             submitButton = button as HTMLButtonElement;
-            this.context.logger.debug('Found submit button by SVG path structure');
+            this.context.logger.debug('Found submit button by SVG arrow-up path structure');
             break;
           }
         }
@@ -463,10 +467,17 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   }
 
   /**
-   * Find the attachment button in the new OpenRouter interface
+   * Find the attachment button in the new OpenRouter interface (Jan 2026)
    */
   private findAttachmentButton(): HTMLButtonElement | null {
-    // Look for the attachment button using the new structure
+    // Primary selector: button with aria-label="Add attachment"
+    const primaryButton = document.querySelector('button[aria-label="Add attachment"]') as HTMLButtonElement;
+    if (primaryButton) {
+      this.context.logger.debug('Found attachment button by aria-label="Add attachment"');
+      return primaryButton;
+    }
+
+    // Look for the attachment button using SVG path structure (paperclip icon)
     const buttons = document.querySelectorAll('button');
     for (let i = 0; i < buttons.length; i++) {
       const button = buttons[i];
@@ -511,8 +522,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     try {
       this.context.logger.debug(`Attempting copy-paste attachment for file: ${file.name}`);
 
-      // Find the chat input textarea
-      const chatInput = document.querySelector('textarea[placeholder="Start a new message..."]') as HTMLTextAreaElement;
+      // Find the chat input textarea using new selectors (Jan 2026)
+      const chatInput = (document.querySelector('textarea[data-testid="composer-input"]') ||
+        document.querySelector('textarea[placeholder="Start a new message..."]')) as HTMLTextAreaElement;
       if (!chatInput) {
         this.context.logger.debug('Chat input textarea not found');
         return false;
@@ -576,11 +588,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         configurable: true,
       });
 
-      // Dispatch paste event on multiple targets for better compatibility
+      // Dispatch paste event on multiple targets for better compatibility (Jan 2026)
       const targets = [
         chatInput,
         chatInput.parentElement,
-        chatInput.closest('.rounded-lg.w-full'),
+        chatInput.closest('.rounded-lg.w-full.focus-within\\:bg-accent'),
+        chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl'),
         chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
         document.activeElement,
       ].filter(Boolean);
@@ -785,10 +798,11 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
             configurable: true,
           });
 
-          // Try dispatching on multiple targets
+          // Try dispatching on multiple targets (Jan 2026)
           const targets = [
             chatInput,
             chatInput.parentElement,
+            chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl'),
             chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
             document.activeElement,
           ].filter(Boolean);
@@ -872,11 +886,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
         configurable: true,
       });
 
-      // Try the sequence on multiple targets
+      // Try the sequence on multiple targets (Jan 2026)
       const targets = [
         chatInput,
         chatInput.parentElement,
-        chatInput.closest('.rounded-lg.w-full'),
+        chatInput.closest('.rounded-lg.w-full.focus-within\\:bg-accent'),
+        chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl'),
         chatInput.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4'),
       ].filter(Boolean);
 
@@ -1241,6 +1256,15 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
+    // Jan 2026: Look for the container with send button (div.flex.items-center.gap-1.pl-2)
+    const sendButtonContainer = document.querySelector('.flex.items-center.gap-1.pl-2');
+    if (sendButtonContainer) {
+      this.context.logger.debug('Found send button container for insertion');
+      // Insert after the send button
+      const sendButton = sendButtonContainer.querySelector('button[data-testid="send-button"]');
+      return { container: sendButtonContainer, insertAfter: sendButton };
+    }
+
     // Try primary selector first - using the configured selectors
     const primarySelectors = this.selectors.BUTTON_INSERTION_CONTAINER.split(', ');
 
@@ -1248,28 +1272,31 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
       const wrapper = document.querySelector(selector.trim());
       if (wrapper) {
         this.context.logger.debug(`Found insertion point: ${selector.trim()}`);
-        // Look for Web Search button/div to insert after
-        let webSearchContainer: Element | null = null;
+        // Look for Web Search button to insert after (Jan 2026 structure)
+        let webSearchButton: Element | null = null;
 
-        // Find the web search container by looking for the text content
-        const flexElements = wrapper.querySelectorAll('div.inline-flex.items-center');
-        for (let i = 0; i < flexElements.length; i++) {
-          const element = flexElements[i];
-          if (element.textContent?.includes('Web search')) {
-            webSearchContainer = element;
-            break;
+        // Find the web search button by aria-label
+        webSearchButton = wrapper.querySelector('button[aria-label="Enable Web Search"]');
+
+        // Fallback: look for the web search icon by SVG path
+        if (!webSearchButton) {
+          const globePath = wrapper.querySelector('svg path[d*="M12 21a9.004"]');
+          webSearchButton = globePath?.closest('button') || null;
+        }
+
+        // Second fallback: Find by text content
+        if (!webSearchButton) {
+          const flexElements = wrapper.querySelectorAll('div.inline-flex.items-center');
+          for (let i = 0; i < flexElements.length; i++) {
+            const element = flexElements[i];
+            if (element.textContent?.includes('Web search')) {
+              webSearchButton = element;
+              break;
+            }
           }
         }
 
-        // Fallback: look for the web search icon
-        if (!webSearchContainer) {
-          webSearchContainer =
-            wrapper
-              .querySelector('div.inline-flex.items-center svg[stroke="currentColor"] path[d*="M12 21a9.004"]')
-              ?.closest('div.inline-flex.items-center') || null;
-        }
-
-        return { container: wrapper, insertAfter: webSearchContainer };
+        return { container: wrapper, insertAfter: webSearchButton };
       }
     }
 
@@ -1489,8 +1516,10 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private async checkFilePreview(): Promise<boolean> {
     return new Promise(resolve => {
       setTimeout(() => {
-        // Check for the specific OpenRouter file preview structure
-        const chatContainer = document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4');
+        // Check for the specific OpenRouter file preview structure (Jan 2026)
+        const chatContainer =
+          document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4.w-full.max-w-4xl') ||
+          document.querySelector('.rounded-xl.overflow-hidden.p-2.border.border-slate-4');
         if (chatContainer) {
           // Look for the file preview area that appears after file drop
           const filePreviewArea = chatContainer.querySelector('.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2');

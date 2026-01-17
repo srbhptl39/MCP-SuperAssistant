@@ -4,7 +4,7 @@ import { CONFIG } from '../core/config';
 import { safelySetContent } from '../utils/index';
 import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/storage';
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
-import { extractJSONParameters, stripLanguageTags } from '../parser/jsonFunctionParser';
+import { extractJSONParameters, stripLanguageTags, extractCleanContent } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
 
 // Add type declarations for the global adapter and mcpClient access
@@ -47,7 +47,7 @@ function getCurrentAdapter(): any {
     return null;
   } catch (error) {
     logger.error('[AdapterAccess] Error getting current adapter:', error);
-    
+
     // Final fallback to legacy system
     try {
       const legacyAdapter = window.mcpAdapter || window.getCurrentAdapter?.();
@@ -58,7 +58,7 @@ function getCurrentAdapter(): any {
     } catch (fallbackError) {
       logger.error('[AdapterAccess] Fallback adapter access also failed:', fallbackError);
     }
-    
+
     return null;
   }
 }
@@ -205,9 +205,12 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
     // Try to find the original element with the complete XML
     const originalPre = document.querySelector(`div[data-block-id="${blockId}"]`);
     if (originalPre) {
-      // Use the original content directly
-      rawContent = originalPre.textContent?.trim() || rawContent;
+      // Extract clean JSON content for display (removes localized UI labels)
+      rawContent = extractCleanContent(originalPre.textContent?.trim() || rawContent);
     }
+  } else {
+    // Clean the provided rawContent as well
+    rawContent = extractCleanContent(rawContent);
   }
 
   // Use DocumentFragment for efficient DOM construction
@@ -751,7 +754,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       // Call tool using the new mcpClient async API
       try {
         const result = await mcpClient.callTool(functionName, parameters);
-        
+
         resetButtonState();
         displayResult(resultsPanel, loadingIndicator, true, result);
 
@@ -759,16 +762,16 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         const executionData = storeExecutedFunction(functionName, callId, parameters, contentSignature);
         const historyPanel = (blockDiv.querySelector('.function-history-panel') ||
           createHistoryPanel(blockDiv, callId, contentSignature)) as HTMLDivElement;
-        
+
         // Update history panel with mcpClient reference
         updateHistoryPanel(historyPanel, executionData, mcpClient);
-        
+
       } catch (toolError: any) {
         resetButtonState();
-        
+
         // Enhanced error handling for connection issues
         let errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
-        
+
         // Check for connection-related errors and provide better user feedback
         if (errorMessage.includes('not connected') || errorMessage.includes('connection')) {
           errorMessage = 'Connection lost. Please check your MCP server connection.';
@@ -777,17 +780,17 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         } else if (errorMessage.includes('server unavailable') || errorMessage.includes('SERVER_UNAVAILABLE')) {
           errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
-        
+
         displayResult(resultsPanel, loadingIndicator, false, errorMessage);
       }
 
     } catch (error: any) {
       resetButtonState();
       resultsPanel.style.display = 'block';
-      
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Execute button error:', error);
-      
+
       displayResult(
         resultsPanel,
         loadingIndicator,
@@ -903,8 +906,8 @@ export const extractFunctionParameters = (rawContent: string): Record<string, an
         } else {
           // Try to parse as JSON if it looks like JSON (starts with { or [)
           const trimmedValue = value.trim();
-          if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) || 
-              (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
+          if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) ||
+            (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
             try {
               value = JSON.parse(trimmedValue);
               if (CONFIG.debug) logger.debug(`Auto-parsed JSON for parameter ${name}:`, value);
@@ -943,7 +946,7 @@ const attachResultAsFile = async (
   // Early validation for better performance
   if (!adapter) {
     logger.error('No adapter provided for file attachment.');
-    
+
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
       button.innerHTML = `${ICONS.ATTACH}<span>No Adapter</span>`;
@@ -962,7 +965,7 @@ const attachResultAsFile = async (
   // Check if adapter supports file attachment using the new capability system
   if (!adapterSupportsCapability('file-attachment')) {
     logger.error('Current adapter does not support file attachment.');
-    
+
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
       button.innerHTML = `${ICONS.ATTACH}<span>Attach Not Supported</span>`;
@@ -987,7 +990,7 @@ const attachResultAsFile = async (
   const setButtonState = (text: string, className?: string, disabled: boolean = true) => {
     // Clear button content and rebuild properly
     button.innerHTML = '';
-    
+
     // Create new icon element to avoid DOM reference issues
     const iconElement = createOptimizedElement('span', {
       innerHTML: ICONS.ATTACH,
@@ -996,11 +999,11 @@ const attachResultAsFile = async (
         marginRight: '6px',
       },
     });
-    
+
     const textElement = createOptimizedElement('span', {
       textContent: text,
     });
-    
+
     button.appendChild(iconElement);
     button.appendChild(textElement);
     button.disabled = disabled;
@@ -1026,7 +1029,7 @@ const attachResultAsFile = async (
     if (typeof adapter.attachFile === 'function') {
       try {
         const success = await adapter.attachFile(file);
-        
+
         if (success) {
           confirmationText = `File attached successfully: ${fileName}`;
           setButtonState('Attached!', 'attach-success', true);
@@ -1101,7 +1104,7 @@ const attachResultAsFile = async (
         }
       } catch (error) {
         logger.error('New adapter attachFile method failed:', error);
-        
+
         // For now, we'll consider it successful since it's a complex operation
         // This is optimistic handling for better UX
         confirmationText = `File attachment initiated: ${fileName}`;
@@ -1175,7 +1178,7 @@ const attachResultAsFile = async (
       // Fallback: Optimistic success for adapters without explicit attachFile method
       // This maintains compatibility while providing user feedback
       logger.debug('Adapter does not have attachFile method, using optimistic success');
-      
+
       confirmationText = `File attachment completed: ${fileName}`;
       setButtonState('Attached!', 'attach-success', true);
 
@@ -1342,7 +1345,7 @@ export const displayResult = (
           const textParts = result.content
             .filter((item: any) => item.type === 'text' && item.text)
             .map((item: any) => item.text);
-          
+
           if (textParts.length > 0) {
             rawResultText = textParts.join('\n');
             resultContent.textContent = rawResultText;
@@ -1472,7 +1475,7 @@ export const displayResult = (
         if (typeof adapter.insertText === 'function') {
           try {
             const success = await adapter.insertText(wrapperText);
-            
+
             if (success) {
               // Optimized success state handling
               insertButton.textContent = 'Inserted!';
@@ -1503,11 +1506,11 @@ export const displayResult = (
             }
           } catch (error) {
             logger.error('New adapter insertText method failed:', error);
-            
+
             // Fallback to legacy method if available
             if (typeof adapter.insertTextIntoInput === 'function') {
               logger.debug('Falling back to legacy insertTextIntoInput method');
-              
+
               // Efficient event dispatch with requestAnimationFrame
               requestAnimationFrame(() => {
                 document.dispatchEvent(
@@ -1547,7 +1550,7 @@ export const displayResult = (
         } else if (typeof adapter.insertTextIntoInput === 'function') {
           // Legacy method fallback
           logger.debug('Using legacy insertTextIntoInput method');
-          
+
           // Efficient event dispatch with requestAnimationFrame
           requestAnimationFrame(() => {
             document.dispatchEvent(
@@ -1648,7 +1651,7 @@ export const displayResult = (
         .then(async ({ success, message }) => {
           if (success && message) {
             logger.debug(`Auto-attached file successfully: ${message}`);
-            
+
             // Insert the auto-attachment confirmation text
             if (typeof adapter.insertText === 'function') {
               try {
@@ -1712,13 +1715,13 @@ export const displayResult = (
     } else {
       // Dispatch event for normal-sized results
       const wrappedResult = `<function_result call_id="${callId}">\n${rawResultText}\n</function_result>`;
-      
+
       // Dispatch event - delays are handled by automation service
       requestAnimationFrame(() => {
         document.dispatchEvent(
           new CustomEvent('mcp:tool-execution-complete', {
-            detail: { 
-              result: wrappedResult, 
+            detail: {
+              result: wrappedResult,
               skipAutoInsertCheck: false
             },
           }),

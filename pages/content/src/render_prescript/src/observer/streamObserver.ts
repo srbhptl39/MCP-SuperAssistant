@@ -123,12 +123,15 @@ const CHUNK_PATTERNS = {
   // Pre-compiled for faster detection
   functionChunkStart: /(<function_calls>|<invoke\s+name="[^"]*"|<parameter\s+name="[^"]*">)/,
   significantChunk: /(<function_calls>|<invoke|<parameter|<\/)/,
-  // JSON patterns
+  // JSON patterns - enhanced for Unicode support
   jsonFunctionStart: /"type"\s*:\s*"function_call_start"/,
   jsonParameter: /"type"\s*:\s*"parameter"/,
   jsonDescription: /"type"\s*:\s*"description"/,
   jsonFunctionEnd: /"type"\s*:\s*"function_call_end"/,
   jsonSignificant: /"type"\s*:\s*"(?:function_call_start|parameter|description|function_call_end)"/,
+  // Enhanced patterns for partial/incomplete JSON during streaming
+  jsonPartialFunctionCall: /"type"\s*:\s*"function_call_/,
+  jsonPartialParameter: /"type"\s*:\s*"parameter"/,
 };
 
 // Track parameter content during streaming to prevent loss
@@ -139,8 +142,8 @@ const parameterContentCache = new Map<string, Map<string, string>>(); // blockId
  */
 const cacheParameterContent = (blockId: string, content: string): void => {
   // Detect format
-  const isJSON = content.includes('"type"') &&
-                 (content.includes('function_call_start') || content.includes('parameter'));
+  const isJSON =
+    content.includes('"type"') && (content.includes('function_call_start') || content.includes('parameter'));
 
   let params;
   if (isJSON) {
@@ -171,7 +174,10 @@ const cacheParameterContent = (blockId: string, content: string): void => {
     parameterContentCache.set(blockId, blockCache);
 
     if (CONFIG.debug) {
-      logger.debug(`Cached ${isJSON ? 'JSON' : 'XML'} parameter content for ${blockId}:`, Array.from(blockCache.entries()));
+      logger.debug(
+        `Cached ${isJSON ? 'JSON' : 'XML'} parameter content for ${blockId}:`,
+        Array.from(blockCache.entries()),
+      );
     }
   }
 };
@@ -185,6 +191,7 @@ const getCachedParameterContent = (blockId: string): Map<string, string> => {
 
 /**
  * Ultra-fast chunk detection for immediate streaming response
+ * Enhanced to handle Unicode characters and partial JSON during streaming
  */
 const detectFunctionChunk = (
   content: string,
@@ -201,7 +208,7 @@ const detectFunctionChunk = (
     return { hasNewChunk: false, chunkType: null, isSignificant: false };
   }
 
-  // Check for JSON patterns first
+  // Check for JSON patterns first - handle partial matches during streaming
   if (CHUNK_PATTERNS.jsonFunctionStart.test(newContent)) {
     return { hasNewChunk: true, chunkType: 'function_start', isSignificant: true };
   }
@@ -216,6 +223,12 @@ const detectFunctionChunk = (
 
   if (CHUNK_PATTERNS.jsonFunctionEnd.test(newContent)) {
     return { hasNewChunk: true, chunkType: 'closing', isSignificant: true };
+  }
+
+  // Enhanced: Check for partial/incomplete JSON function calls during streaming
+  // This catches cases where "function_call" is being typed character by character
+  if (CHUNK_PATTERNS.jsonPartialFunctionCall.test(newContent)) {
+    return { hasNewChunk: true, chunkType: 'content', isSignificant: newContent.length > 30 };
   }
 
   // Check for XML patterns
@@ -236,10 +249,14 @@ const detectFunctionChunk = (
   }
 
   // Check if it's any significant content (XML or JSON)
-  if (CHUNK_PATTERNS.significantChunk.test(newContent) ||
-      CHUNK_PATTERNS.jsonSignificant.test(newContent) ||
-      newContent.length > 20) {
-    return { hasNewChunk: true, chunkType: 'content', isSignificant: newContent.length > 20 };
+  // Enhanced to handle Unicode content length detection
+  const contentLength = [...newContent].length; // Count Unicode characters correctly
+  if (
+    CHUNK_PATTERNS.significantChunk.test(newContent) ||
+    CHUNK_PATTERNS.jsonSignificant.test(newContent) ||
+    contentLength > 20
+  ) {
+    return { hasNewChunk: true, chunkType: 'content', isSignificant: contentLength > 20 };
   }
 
   return { hasNewChunk: false, chunkType: null, isSignificant: false };
@@ -435,7 +452,9 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
   const isJSON = content.includes('"type"');
 
   if (CONFIG.debug) {
-    logger.debug(`Setting up monitoring for block: ${blockId}, element: ${node.tagName}, format: ${isJSON ? 'JSON' : 'XML'}`);
+    logger.debug(
+      `Setting up monitoring for block: ${blockId}, element: ${node.tagName}, format: ${isJSON ? 'JSON' : 'XML'}`,
+    );
     logger.debug(`Content preview:`, content);
   }
 
@@ -470,8 +489,9 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
 
     // Check for incomplete JSON
     const hasJSONStart = currentContent.includes('"type"') && currentContent.includes('function_call_start');
-    const hasJSONEnd = currentContent.includes('"type"') &&
-                       (currentContent.includes('"function_call_end"') || currentContent.includes('"type": "function_call_end"'));
+    const hasJSONEnd =
+      currentContent.includes('"type"') &&
+      (currentContent.includes('"function_call_end"') || currentContent.includes('"type": "function_call_end"'));
     const hasIncompleteJSON = hasJSONStart && !hasJSONEnd;
 
     // Detect incomplete tags (XML or JSON)
@@ -544,8 +564,9 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
         if (!functionCallPattern) {
           PATTERN_CACHE.allFunctionPatterns.lastIndex = 0;
           const hasXMLPattern = PATTERN_CACHE.allFunctionPatterns.test(textContent);
-          const hasJSONPattern = textContent.includes('"type"') &&
-                                (textContent.includes('function_call') || textContent.includes('parameter'));
+          const hasJSONPattern =
+            textContent.includes('"type"') &&
+            (textContent.includes('function_call') || textContent.includes('parameter'));
           functionCallPattern = hasXMLPattern || hasJSONPattern;
         }
 
