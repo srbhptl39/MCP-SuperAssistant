@@ -36,8 +36,7 @@
     "copy_env": "node scripts/copy-env.mjs",
     "set-global-env": "node scripts/set-global-env.mjs",
     "postinstall": "pnpm build:eslint && pnpm copy_env",
-    "module-manager": "pnpm -F module-manager start"
-    ,
+    "module-manager": "pnpm -F module-manager start",
     "scan:unsafe-eval": "node scripts/scan-unsafe-eval.mjs dist"
   },
   "dependencies": {
