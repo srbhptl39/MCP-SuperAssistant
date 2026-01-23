@@ -43,7 +43,24 @@ export function and(...parts: unknown[]): string {
 
 export function getProperty(prop: unknown): string {
   if (typeof prop === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(prop)) return `.${prop}`;
-  const safe = String(prop).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safe = String(prop).replace(/[\\'\n\r\u2028\u2029]/g, (ch) => {
+    switch (ch) {
+      case '\\':
+        return '\\\\';
+      case "'":
+        return "\\'";
+      case '\n':
+        return '\\n';
+      case '\r':
+        return '\\r';
+      case '\u2028':
+        return '\\u2028';
+      case '\u2029':
+        return '\\u2029';
+      default:
+        return ch;
+    }
+  });
   return `['${safe}']`;
 }
 
