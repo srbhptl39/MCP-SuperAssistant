@@ -51,6 +51,9 @@ const manifest = {
   ],
 
   permissions: ['storage', 'clipboardWrite'],
+  content_security_policy: {
+    extension_pages: "script-src 'self'; object-src 'self'",
+  },
   // permissions: ['storage', 'scripting', 'clipboardWrite'],
   // options_page: 'options/index.html',
   background: {
@@ -67,7 +70,6 @@ const manifest = {
   icons: {
     128: 'icon-128.png',
     34: 'icon-34.png',
-    16: 'icon-16.png',
   },
   content_scripts: [
     // {

@@ -1,3 +1,9 @@
+// Disable AJV code generation to avoid CSP issues with Function()
+// Polyfill process.env for browser environment
+if (!globalThis.process) {
+  globalThis.process = { env: {} };
+}
+
 import 'webextension-polyfill';
 import { exampleThemeStorage } from '@extension/storage';
 import { RemoteConfigManager } from './remote-config-manager';
