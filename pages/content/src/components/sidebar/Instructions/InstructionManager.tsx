@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { generateInstructions } from './instructionGenerator';
+// import { generateInstructions } from './instructionGenerator';
 import { generateInstructionsJson } from './instructionGeneratorJson';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
 import { useToolStore } from '../../../stores/tool.store';

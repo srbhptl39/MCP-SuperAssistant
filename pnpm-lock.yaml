@@ -151,7 +151,7 @@ importers:
         specifier: workspace:*
         version: link:../packages/storage
       '@modelcontextprotocol/sdk':
-        specifier: ^1.25.2
+        specifier: ^1.20.2
         version: 1.25.2(hono@4.11.4)(zod@4.3.5)
       vite-plugin-node-polyfills:
         specifier: ^0.23.0
