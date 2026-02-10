@@ -22,7 +22,7 @@
     "@extension/env": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@modelcontextprotocol/sdk": "1.19.1",
     "zod": "^4.3.5",
     "vite-plugin-node-polyfills": "^0.23.0",
     "webextension-polyfill": "^0.12.0",
