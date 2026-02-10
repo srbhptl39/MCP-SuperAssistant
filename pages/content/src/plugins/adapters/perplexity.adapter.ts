@@ -22,25 +22,27 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   ];
 
   // CSS selectors for Perplexity's UI elements
-  // Updated selectors based on current Perplexity interface
+  // Updated selectors based on current Perplexity interface (Feb 2026 refresh)
   private readonly selectors = {
-    // Primary chat input selectors
-    CHAT_INPUT: '#ask-input[contenteditable="true"], #ask-input[role="textbox"], div[role="textbox"][contenteditable="true"], textarea[placeholder="Ask anything..."], textarea[placeholder="Ask follow-up"], textarea[placeholder*="Ask"], div[contenteditable="true"][data-lexical-editor="true"]',
-    // Submit button selectors (multiple fallbacks)
+    // Primary chat input selectors - Lexical editor with #ask-input
+    CHAT_INPUT: '#ask-input[contenteditable="true"], #ask-input[role="textbox"], div[role="textbox"][contenteditable="true"], div[contenteditable="true"][data-lexical-editor="true"]',
+    // Submit button selectors - No explicit submit button in new UI, Enter key is primary
     SUBMIT_BUTTON: 'button[aria-label="Submit"], button[aria-label="Send"], button[type="submit"]',
-    // File upload related selectors
-    FILE_UPLOAD_BUTTON: 'button[aria-label*="Attach"], button[aria-label*="attach"]',
-    FILE_INPUT: 'input[type="file"][multiple][accept*=".pdf"], input[type="file"][multiple]',
-    // Main panel and container selectors
-    MAIN_PANEL: '.main-content, .chat-container, .conversation-container',
+    // File upload related selectors - New "Add files or tools" button
+    FILE_UPLOAD_BUTTON: 'button[aria-label="Add files or tools"], button[aria-label*="Attach"], button[aria-label*="attach"]',
+    FILE_INPUT: 'input[type="file"][multiple][style="display: none;"], input[type="file"][multiple]',
+    // Main panel and container selectors - New grid-based layout with bg-raised
+    MAIN_PANEL: '.bg-raised, .main-content, .chat-container, .conversation-container',
     // Drop zones for file attachment
-    DROP_ZONE: 'textarea[placeholder*="Ask"], .input-area, .chat-input-container',
+    DROP_ZONE: '#ask-input, div[data-lexical-editor="true"], .input-area, .chat-input-container',
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, .file-upload-preview',
-    // Button insertion points (for MCP popover) - looking for search/research toggle area
-    BUTTON_INSERTION_CONTAINER: 'div[role="radiogroup"].group.relative.isolate.flex, .flex.items-center, div.flex.items-end.gap-sm',
-    // Alternative insertion points
-    FALLBACK_INSERTION: '.input-area, .chat-input-container, .conversation-input'
+    // Button insertion points (for MCP popover) - New grid layout with col-start classes
+    // Left side: gap-sm flex col-start-1 row-start-2 (file upload area)
+    // Right side: flex items-center justify-self-end col-start-3 row-start-2 (model/voice buttons)
+    BUTTON_INSERTION_CONTAINER: 'div.gap-sm.flex.col-start-1.row-start-2, div.flex.items-center.justify-self-end.col-start-3.row-start-2, div[role="radiogroup"].group.relative.isolate.flex, div.flex.items-end.gap-sm',
+    // Alternative insertion points - Grid parent container
+    FALLBACK_INSERTION: '.px-3\\.5.grid-rows-1fr-auto, .input-area, .chat-input-container, .conversation-input'
   };
 
   // URL patterns for navigation tracking
@@ -951,7 +953,31 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try to find the search/research toggle area first (primary insertion point)
+    // New UI: Look for the left side action buttons container (gap-sm flex col-start-1 row-start-2)
+    // This is where the "Add files or tools" button is located
+    const leftActionsContainer = document.querySelector('div.gap-sm.flex.col-start-1.row-start-2, div.gap-sm.flex.col-start-1');
+    if (leftActionsContainer) {
+      this.context.logger.debug('Found left actions container (new grid UI)');
+      // Find the gap-xs flex items-center container inside
+      const innerContainer = leftActionsContainer.querySelector('div.gap-xs.flex.items-center');
+      if (innerContainer) {
+        // Insert after the file upload button
+        const fileUploadButton = innerContainer.querySelector('button[aria-label="Add files or tools"]');
+        return { container: innerContainer, insertAfter: fileUploadButton };
+      }
+      return { container: leftActionsContainer, insertAfter: null };
+    }
+
+    // Alternative: Right side actions container (flex items-center justify-self-end col-start-3 row-start-2)
+    const rightActionsContainer = document.querySelector('div.flex.items-center.justify-self-end.col-start-3.row-start-2, div.flex.items-center.justify-self-end.col-start-3');
+    if (rightActionsContainer) {
+      this.context.logger.debug('Found right actions container (new grid UI)');
+      // Insert at the beginning (before model selector)
+      const firstChild = rightActionsContainer.firstElementChild;
+      return { container: rightActionsContainer, insertAfter: null };
+    }
+
+    // Try to find the search/research toggle area (legacy/alternative)
     const radioGroup = document.querySelector('div[role="radiogroup"].group.relative.isolate.flex');
     if (radioGroup) {
       const container = radioGroup.closest('.flex.items-center');
@@ -966,12 +992,13 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     const actionsContainer = document.querySelector('div.flex.items-end.gap-sm');
     if (actionsContainer) {
       this.context.logger.debug('Found actions container (fallback)');
-      const fileUploadButton = actionsContainer.querySelector('button[aria-label*="Attach"]');
+      const fileUploadButton = actionsContainer.querySelector('button[aria-label*="Attach"], button[aria-label="Add files or tools"]');
       return { container: actionsContainer, insertAfter: fileUploadButton };
     }
 
-    // Try fallback selectors
+    // Try fallback selectors for grid parent
     const fallbackSelectors = [
+      '.px-3\\.5.grid-rows-1fr-auto',
       '.input-area .actions',
       '.chat-input-actions',
       '.conversation-input .actions'
