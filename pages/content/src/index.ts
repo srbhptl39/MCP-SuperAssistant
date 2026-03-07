@@ -89,7 +89,9 @@ function setupSidebarRecovery(): void {
   }, 1000); // Check every second
 
   // Clean up when navigating away
-  window.addEventListener('unload', () => {
+  // Using 'pagehide' instead of 'unload' to comply with the Permissions-Policy that
+  // disallows 'unload' handlers (they prevent bfcache usage in modern browsers).
+  window.addEventListener('pagehide', () => {
     clearInterval(recoveryInterval);
   });
 
