@@ -17,11 +17,22 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'CEB_'],
   resolve: {
-    alias: {
-      '@root': rootDir,
-      '@src': srcDir,
-      '@assets': resolve(srcDir, 'assets'),
-    },
+    // NOTE: Vite only supports RegExp aliases via the array form.
+    alias: [
+      { find: '@root', replacement: rootDir },
+      { find: '@src', replacement: srcDir },
+      { find: '@assets', replacement: resolve(srcDir, 'assets') },
+      // MV3 CSP: ajv-formats can import deep subpaths (e.g. `ajv-formats/dist/formats`).
+      // Catch all of them and route to a no-op shim.
+      { find: /^ajv-formats(\/.*)?$/, replacement: resolve(srcDir, 'shims', 'ajv-formats.ts') },
+      // MV3 CSP: some dependencies (often via MCP SDK) may pull Ajv which uses `new Function()`.
+      // Alias all Ajv imports (including subpaths) to a CSP-safe stub to prevent service worker crashes.
+      // If upstream removes Ajv, this alias becomes a no-op.
+      // Ajv internal imports used by ajv-formats expect codegen exports like `operators`, `_`, `str`, etc.
+      { find: 'ajv/dist/compile/codegen', replacement: resolve(srcDir, 'shims', 'ajv-codegen.ts') },
+      // Fallback: route any other Ajv entry/subpath to the main Ajv shim.
+      { find: /^ajv(\/.*)?$/, replacement: resolve(srcDir, 'shims', 'ajv.ts') },
+    ],
   },
   plugins: [
     libAssetsPlugin({
