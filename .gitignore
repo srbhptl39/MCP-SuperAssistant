@@ -1,87 +1,56 @@
 # dependencies
 **/node_modules
 
-# testing
-**/coverage
-
-# build
+# build output
 **/dist
 **/build
 **/dist-zip
+**/coverage
+**/tailwind-output.css
 chrome-extension/manifest.js
 chrome-extension/pre-build.tsconfig.tsbuildinfo
 eslint.config.js
 tsconfig.tsbuildinfo
+**/.turbo
 
-# env
-**/.env.*
+# env (keep .example.env tracked as the template)
 **/.env
+**/.env.*
+.env2
 
-# etc
+# stray junk (repo uses pnpm; .gitt is not a real dir)
+**/bun.lock
+**/.gitt
+
+# local scratch docs (untracked notes, not part of the repo)
+docs/
+
+# editor / OS
 .DS_Store
 .idea
-**/.turbo
-**/.gitt
-# compiled
-**/tailwind-output.css
-
-# trash
-.trash
-.trash/*
-mcp-superassistant-proxy/bun.lock
-# pnpm-lock.yaml
-
-# Added by Task Master AI
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
-# Dependency directories
-node_modules/
-# Environment variables
-.env
-.env2
-# Editor directories and files
 .vscode
+.claude
+.trash/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-# OS specific
-# Task files
+
+# logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+
+# task-master
 tasks.json
-tasks/ 
+tasks/
 
-
-
-.windsurfrules
-ADAPTER_BUTTON_STYLING.md
-bun.lock
-commit_diff.patch
-DYNAMIC_THEMING.md
-file_structure.md
-FIREBASE_REMOTE_CONFIG_ADAPTER_INTEGRATION.md
-FIREBASE_REMOTE_CONFIG_INTEGRATION copy.md
-FIREBASE_REMOTE_CONFIG_INTEGRATION.md
-FIREBASE_REMOTE_CONFIG_SUMMARY.md
-FIREBASE_REMOTE_CONFIG_TESTING.md
-FIREBASE_SERVICE_WORKER_SOLUTION.md
-FIREBASE_SETUP_GUIDE.md
-firebase-remote-config-gemini-production.json
-firebase-remote-config-gemini.json
-firebase-remote-config-unified.json
-MCP_CLIENT_REWRITE_COMPLETE.md
-MCP_COMMUNICATION_FIXES.md
-SESSION_10_COMPLETE.md
-TEST_MCP_TOGGLE.md
-websocket doc.md
+# Local-only source (intentionally untracked; do not commit — may hold local config)
 chrome-extension/public/icon-16.png
-chrome-extension/public/icon-34 copy.png
-chrome-extension/public/icon-34.png
 chrome-extension/src/mcpclient/architecture-option-3-plugin-based.md
 pages/content/src/plugins/adapters/gemini-migration-guide.md
 pages/content/src/plugins/adapters/scira.adapter.ts
@@ -90,4 +59,3 @@ pages/content/src/shared/firebase-config.ts
 pages/content/src/utils/migration-bridge.ts
 pages/content/src/utils/siteAdapter.ts
 pages/content/src/utils/themeDetector.ts
-clients.md
