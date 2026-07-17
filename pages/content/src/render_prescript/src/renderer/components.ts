@@ -1,7 +1,7 @@
 import type { ParamValueElement } from '../core/types';
 import { StabilizedBlock } from '../core/types';
 import { CONFIG } from '../core/config';
-import { safelySetContent } from '../utils/index';
+import { safelySetContent, scheduleWork } from '../utils/index';
 import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/storage';
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
 import { extractJSONParameters, stripLanguageTags, extractCleanContent } from '../parser/jsonFunctionParser';
@@ -1045,7 +1045,7 @@ const attachResultAsFile = async (
               if (typeof adapter.insertTextIntoInput === 'function') {
                 try {
                   // Dispatch event for legacy insertion
-                  requestAnimationFrame(() => {
+                  scheduleWork(() => {
                     document.dispatchEvent(
                       new CustomEvent('mcp:tool-execution-complete', {
                         detail: {
@@ -1065,7 +1065,7 @@ const attachResultAsFile = async (
           } else if (typeof adapter.insertTextIntoInput === 'function') {
             // Use legacy method directly
             try {
-              requestAnimationFrame(() => {
+              scheduleWork(() => {
                 document.dispatchEvent(
                   new CustomEvent('mcp:tool-execution-complete', {
                     detail: {
@@ -1093,7 +1093,7 @@ const attachResultAsFile = async (
           };
 
           // Use requestAnimationFrame for better performance
-          requestAnimationFrame(() => {
+          scheduleWork(() => {
             document.dispatchEvent(new CustomEvent('mcp:tool-execution-complete', { detail: eventDetail }));
           });
 
@@ -1121,7 +1121,7 @@ const attachResultAsFile = async (
             if (typeof adapter.insertTextIntoInput === 'function') {
               try {
                 // Dispatch event for legacy insertion
-                requestAnimationFrame(() => {
+                scheduleWork(() => {
                   document.dispatchEvent(
                     new CustomEvent('mcp:tool-execution-complete', {
                       detail: {
@@ -1141,7 +1141,7 @@ const attachResultAsFile = async (
         } else if (typeof adapter.insertTextIntoInput === 'function') {
           // Use legacy method directly
           try {
-            requestAnimationFrame(() => {
+            scheduleWork(() => {
               document.dispatchEvent(
                 new CustomEvent('mcp:tool-execution-complete', {
                   detail: {
@@ -1167,7 +1167,7 @@ const attachResultAsFile = async (
           skipAutoInsertCheck,
         };
 
-        requestAnimationFrame(() => {
+        scheduleWork(() => {
           document.dispatchEvent(new CustomEvent('mcp:tool-execution-complete', { detail: eventDetail }));
         });
 
@@ -1193,7 +1193,7 @@ const attachResultAsFile = async (
           if (typeof adapter.insertTextIntoInput === 'function') {
             try {
               // Dispatch event for legacy insertion
-              requestAnimationFrame(() => {
+              scheduleWork(() => {
                 document.dispatchEvent(
                   new CustomEvent('mcp:tool-execution-complete', {
                     detail: {
@@ -1213,7 +1213,7 @@ const attachResultAsFile = async (
       } else if (typeof adapter.insertTextIntoInput === 'function') {
         // Use legacy method directly
         try {
-          requestAnimationFrame(() => {
+          scheduleWork(() => {
             document.dispatchEvent(
               new CustomEvent('mcp:tool-execution-complete', {
                 detail: {
@@ -1239,7 +1239,7 @@ const attachResultAsFile = async (
         skipAutoInsertCheck,
       };
 
-      requestAnimationFrame(() => {
+      scheduleWork(() => {
         document.dispatchEvent(new CustomEvent('mcp:tool-execution-complete', { detail: eventDetail }));
       });
 
@@ -1489,7 +1489,7 @@ export const displayResult = (
               }, 2000);
 
               // Efficient event dispatch with requestAnimationFrame
-              requestAnimationFrame(() => {
+              scheduleWork(() => {
                 document.dispatchEvent(
                   new CustomEvent('mcp:tool-execution-complete', {
                     detail: {
@@ -1512,7 +1512,7 @@ export const displayResult = (
               logger.debug('Falling back to legacy insertTextIntoInput method');
 
               // Efficient event dispatch with requestAnimationFrame
-              requestAnimationFrame(() => {
+              scheduleWork(() => {
                 document.dispatchEvent(
                   new CustomEvent('mcp:tool-execution-complete', {
                     detail: {
@@ -1552,7 +1552,7 @@ export const displayResult = (
           logger.debug('Using legacy insertTextIntoInput method');
 
           // Efficient event dispatch with requestAnimationFrame
-          requestAnimationFrame(() => {
+          scheduleWork(() => {
             document.dispatchEvent(
               new CustomEvent('mcp:tool-execution-complete', {
                 detail: {
@@ -1663,7 +1663,7 @@ export const displayResult = (
                 if (typeof adapter.insertTextIntoInput === 'function') {
                   try {
                     // Dispatch event for legacy insertion
-                    requestAnimationFrame(() => {
+                    scheduleWork(() => {
                       document.dispatchEvent(
                         new CustomEvent('mcp:tool-execution-complete', {
                           detail: {
@@ -1683,7 +1683,7 @@ export const displayResult = (
             } else if (typeof adapter.insertTextIntoInput === 'function') {
               // Use legacy method directly
               try {
-                requestAnimationFrame(() => {
+                scheduleWork(() => {
                   document.dispatchEvent(
                     new CustomEvent('mcp:tool-execution-complete', {
                       detail: {
@@ -1717,7 +1717,7 @@ export const displayResult = (
       const wrappedResult = `<function_result call_id="${callId}">\n${rawResultText}\n</function_result>`;
 
       // Dispatch event - delays are handled by automation service
-      requestAnimationFrame(() => {
+      scheduleWork(() => {
         document.dispatchEvent(
           new CustomEvent('mcp:tool-execution-complete', {
             detail: {

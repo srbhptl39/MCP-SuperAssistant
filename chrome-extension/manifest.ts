@@ -50,9 +50,18 @@ const manifest = {
 
   ],
 
-  permissions: ['storage', 'clipboardWrite'],
-  // permissions: ['storage', 'scripting', 'clipboardWrite'],
-  // options_page: 'options/index.html',
+  permissions: ['storage', 'clipboardWrite', 'tabs', 'scripting', 'activeTab'],
+  optional_host_permissions: ['<all_urls>'],
+  options_page: 'options/index.html',
+  commands: {
+    'capture-page': {
+      suggested_key: {
+        default: 'Alt+Shift+A',
+        mac: 'Alt+Shift+A',
+      },
+      description: 'Send current page to your AI',
+    },
+  },
   background: {
     service_worker: 'background.js',
     type: 'module',

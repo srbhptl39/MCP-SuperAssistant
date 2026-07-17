@@ -17,6 +17,9 @@ import {
 } from '../mcpclient/index';
 import { sendAnalyticsEvent, trackError, collectDemographicData } from '../../utils/analytics';
 import { analyticsService } from '../../utils/analytics-service';
+import { getBrowserTools, executeBrowserTool, listTabsRaw, readTabRaw } from './browser-tools';
+import { browserBridgeStorage } from '@extension/storage';
+import { initCaptureFlow, handleContentReady } from './browser-tools/capture';
 
 // Import message types for type safety
 import type {
@@ -603,6 +606,27 @@ initializeExtension()
 logger.debug('Background script loaded');
 logger.debug("Edit 'chrome-extension/src/background/index.ts' and save to reload.");
 
+// --- Browser Bridge wiring ---
+initCaptureFlow();
+
+// When browser-bridge settings change (e.g. tools toggled on/off), re-broadcast the
+// merged tool list so the sidebar reflects the new toggle immediately.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes['browser-bridge-settings']) return;
+  (async () => {
+    let mcpTools: any[] = [];
+    if (isMcpServerConnected()) {
+      try {
+        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), false, connectionType);
+        mcpTools = normalizeTools(primitives);
+      } catch (error) {
+        logger.warn('[Background] Could not refresh MCP tools on settings change:', error);
+      }
+    }
+    broadcastToolsUpdateToContentScripts(mcpTools);
+  })().catch(err => logger.error('[Background] Error broadcasting tools on settings change:', err));
+});
+
 // --- Enhanced Message Handling ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -614,6 +638,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     hasPayload: !!message.payload,
     from: sender.tab ? `tab-${sender.tab.id}` : 'extension'
   });
+
+  // Browser Bridge: content script announcing it's ready to receive a queued capture
+  if (message.type === 'browser-bridge:content-ready') {
+    handleContentReady(sender, sendResponse);
+    return true; // Async response
+  }
+
+  // Browser Bridge: user-initiated tab picker (NOT an AI tool call; not gated on browserToolsEnabled).
+  // Still enforces denylist / excluded hosts / <all_urls> via the shared raw helpers.
+  if (message.type === 'browser-bridge:list-tabs') {
+    (async () => {
+      const { domainDenylist } = await browserBridgeStorage.get();
+      const [tabs, hasAllUrls] = await Promise.all([
+        listTabsRaw(domainDenylist),
+        chrome.permissions.contains({ origins: ['<all_urls>'] }),
+      ]);
+      sendResponse({ success: true, tabs, senderTabId: sender.tab?.id, hasAllUrls });
+    })().catch(e => sendResponse({ success: false, error: String(e) }));
+    return true; // Async response
+  }
+
+  if (message.type === 'browser-bridge:get-tab-content') {
+    const { tabId, maxChars } = message.payload ?? {};
+    readTabRaw(Number(tabId), { maxChars })
+      .then(r =>
+        sendResponse(
+          r.ok
+            ? { success: true, title: r.title, url: r.url, content: r.content, truncated: r.truncated }
+            : { success: false, error: r.error, needsPermission: r.needsPermission },
+        ),
+      )
+      .catch(e => sendResponse({ success: false, error: String(e) }));
+    return true; // Async response
+  }
+
+  if (message.type === 'browser-bridge:open-options') {
+    chrome.runtime.openOptionsPage();
+    return false;
+  }
 
   // Handle MCP client connection status changes
   if (message.type === 'mcp:connection-status-changed' && message.origin === 'mcpclient') {
@@ -699,6 +762,14 @@ async function handleMcpMessage(
           throw new Error('Tool name is required');
         }
 
+        // Virtual browser tools execute locally in the background, not over MCP.
+        if (toolName.startsWith('browser_')) {
+          logger.debug(`Executing local browser tool: ${toolName}`);
+          result = await executeBrowserTool(toolName, args || {}, sender);
+          logger.debug(`Browser tool completed: ${toolName}`);
+          break;
+        }
+
         logger.debug(`Calling tool: ${toolName} from adapter: ${adapterName || 'unknown'}`);
         result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {}, adapterName);
         logger.debug(`Tool call completed: ${toolName}`);
@@ -732,21 +803,24 @@ async function handleMcpMessage(
       case 'mcp:get-tools': {
         const { forceRefresh = false } = payload as GetToolsRequest;
         logger.debug(`Getting tools (forceRefresh: ${forceRefresh})`);
-        
+
+        let mcpTools: any[] = [];
         try {
           const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), forceRefresh, connectionType);
           logger.debug(`Retrieved ${primitives.length} primitives from server`);
-          
+
           // Use the helper function to normalize tools with proper schema handling
-          const tools = normalizeTools(primitives);
-          logger.debug(`Returning ${tools.length} normalized tools to content script`);
-          
-          result = tools;
+          mcpTools = normalizeTools(primitives);
+          logger.debug(`Returning ${mcpTools.length} normalized tools to content script`);
         } catch (error) {
           logger.error('[Background] Error getting tools:', error);
-          // Return empty array instead of throwing to prevent UI crashes
-          result = [];
+          // Keep going with an empty MCP list so virtual browser tools still surface.
+          mcpTools = [];
         }
+
+        // Merge virtual browser tools (gated on browserToolsEnabled) even when MCP is down.
+        const browserTools = await getBrowserTools();
+        result = [...mcpTools, ...browserTools];
         break;
       }
 
@@ -1001,9 +1075,12 @@ function broadcastConnectionStatusToContentScripts(isConnected: boolean, error?:
  * 
  * @param tools - Array of available MCP tools
  */
-function broadcastToolsUpdateToContentScripts(tools: any[]) {
+async function broadcastToolsUpdateToContentScripts(mcpTools: any[]) {
+  // Always fold in the virtual browser tools (gated internally on settings).
+  const browserTools = await getBrowserTools();
+  const tools = [...mcpTools, ...browserTools];
   logger.debug(`Broadcasting tools update to content scripts: ${tools.length} tools`);
-  
+
   const broadcastMessage: BaseMessage & { payload: ToolUpdateBroadcast } = {
     type: 'mcp:tool-update',
     payload: {
@@ -1012,7 +1089,7 @@ function broadcastToolsUpdateToContentScripts(tools: any[]) {
     origin: 'background',
     timestamp: Date.now()
   };
-  
+
   chrome.tabs.query({}, (tabs) => {
     tabs.forEach(tab => {
       if (tab.id) {

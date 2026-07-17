@@ -67,7 +67,8 @@ export const useMcpCommunication = () => {
       throw new Error('Communication layer not initialized');
     }
 
-    if (!connection.isConnected) {
+    // Virtual browser_* tools execute locally and don't need an MCP connection.
+    if (!toolName.startsWith('browser_') && !connection.isConnected) {
       throw new Error('Not connected to MCP server');
     }
 

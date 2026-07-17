@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks';
 import PopoverPortal from './PopoverPortal';
+import TabPickerPanel from './TabPickerPanel';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 import { AutomationService } from '../../services/automation.service';
 import { createLogger } from '@extension/shared/lib/logger';
@@ -514,6 +515,53 @@ input:checked + .mcp-toggle-slider:before {
     box-shadow: 0 2px 8px rgba(147, 197, 253, 0.2) !important;
   }
 }
+
+.mcp-tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mcp-tab-row:hover {
+  background-color: #e8f0fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mcp-tab-row:hover {
+    background-color: #174ea6;
+  }
+}
+
+/* Standalone hover-opened tab picker flyout (page DOM, elevated above site UI). */
+.mcp-tab-flyout {
+  position: fixed !important;
+  width: min(360px, calc(100vw - 16px)) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #ffffff !important;
+  border: 1px solid #dadce0 !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 12px 32px rgba(60,64,67,0.16), 0 4px 12px rgba(60,64,67,0.08), 0 1px 3px rgba(60,64,67,0.06) !important;
+  z-index: 2147483646 !important;
+  box-sizing: border-box !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif !important;
+}
+.mcp-tab-flyout--down { animation: mcp-flyout-in-down 120ms cubic-bezier(0.2,0,0.2,1) !important; transform-origin: left top !important; }
+.mcp-tab-flyout--up   { animation: mcp-flyout-in-up   120ms cubic-bezier(0.2,0,0.2,1) !important; transform-origin: left bottom !important; }
+@keyframes mcp-flyout-in-down { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mcp-flyout-in-up   { from { opacity: 0; transform: translateY(4px);  } to { opacity: 1; transform: translateY(0); } }
+.mcp-tab-flyout input[type="checkbox"] { accent-color: #1a73e8 !important; }
+.mcp-tab-flyout .mcp-tab-list { scrollbar-width: thin; }
+@media (prefers-color-scheme: dark) {
+  .mcp-tab-flyout {
+    background: #2d2d2d !important;
+    border-color: #444 !important;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.25) !important;
+  }
+  .mcp-tab-flyout input[type="checkbox"] { accent-color: #8ab4f8 !important; }
+}
+@media (prefers-reduced-motion: reduce) { .mcp-tab-flyout { animation: none !important; } }
 `;
 function useInjectStyles() {
   useEffect(() => {
@@ -705,6 +753,13 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const buttonRef = useRef<HTMLButtonElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hoverOverlayRef = useRef<HTMLDivElement>(null);
+
+  // Standalone tab-picker flyout (opened by hovering either "Tabs" affordance).
+  const [isTabPanelOpen, setIsTabPanelOpen] = useState(false);
+  const [tabPanelAnchor, setTabPanelAnchor] = useState<DOMRect | null>(null);
+  const tabPanelTriggerRef = useRef<HTMLElement | null>(null);
+  const tabOpenTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const tabCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update state from manager
   const updateState = useCallback(() => {
@@ -1066,6 +1121,92 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     setIsHoverOverlayVisible(false);
   };
 
+  // --- Standalone tab-picker flyout: open-state + hover-intent helpers ---
+  const cancelTabPanelOpen = useCallback(() => {
+    if (tabOpenTimerRef.current) {
+      clearTimeout(tabOpenTimerRef.current);
+      tabOpenTimerRef.current = null;
+    }
+  }, []);
+
+  const cancelTabPanelClose = useCallback(() => {
+    if (tabCloseTimerRef.current) {
+      clearTimeout(tabCloseTimerRef.current);
+      tabCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const openTabPanel = useCallback(
+    (el: HTMLElement) => {
+      cancelTabPanelOpen();
+      cancelTabPanelClose();
+      tabPanelTriggerRef.current = el;
+      setTabPanelAnchor(el.getBoundingClientRect());
+      setIsTabPanelOpen(true);
+    },
+    [cancelTabPanelOpen, cancelTabPanelClose],
+  );
+
+  const closeTabPanel = useCallback(() => {
+    cancelTabPanelOpen();
+    cancelTabPanelClose();
+    setIsTabPanelOpen(false);
+  }, [cancelTabPanelOpen, cancelTabPanelClose]);
+
+  const scheduleTabPanelOpen = useCallback(
+    (el: HTMLElement) => {
+      cancelTabPanelOpen();
+      cancelTabPanelClose();
+      tabOpenTimerRef.current = setTimeout(() => openTabPanel(el), 150);
+    },
+    [cancelTabPanelOpen, cancelTabPanelClose, openTabPanel],
+  );
+
+  const scheduleTabPanelClose = useCallback(() => {
+    cancelTabPanelOpen();
+    cancelTabPanelClose();
+    tabCloseTimerRef.current = setTimeout(() => setIsTabPanelOpen(false), 300);
+  }, [cancelTabPanelOpen, cancelTabPanelClose]);
+
+  // Live rect while the trigger is connected; frozen anchor once it unmounts (overlay).
+  const getTabPanelAnchorRect = useCallback(
+    () =>
+      tabPanelTriggerRef.current?.isConnected
+        ? tabPanelTriggerRef.current.getBoundingClientRect()
+        : (tabPanelAnchor as DOMRect),
+    [tabPanelAnchor],
+  );
+
+  // Trigger hover/click handlers (shared by both "Tabs" affordances).
+  const handleTabTriggerEnter = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      cancelTabPanelClose();
+      if (!isTabPanelOpen) scheduleTabPanelOpen(e.currentTarget);
+    },
+    [cancelTabPanelClose, isTabPanelOpen, scheduleTabPanelOpen],
+  );
+
+  const handleTabTriggerLeave = useCallback(() => {
+    cancelTabPanelOpen();
+    if (isTabPanelOpen) scheduleTabPanelClose();
+  }, [cancelTabPanelOpen, isTabPanelOpen, scheduleTabPanelClose]);
+
+  const handleTabTriggerClick = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      cancelTabPanelOpen();
+      if (isTabPanelOpen) closeTabPanel();
+      else openTabPanel(e.currentTarget);
+    },
+    [cancelTabPanelOpen, isTabPanelOpen, closeTabPanel, openTabPanel],
+  );
+
+  // Pointer entered the panel: keep it open, and keep the hover overlay alive so it
+  // doesn't vanish mid-path when the panel was opened from it.
+  const handleTabPanelPointerEnter = useCallback(() => {
+    cancelTabPanelClose();
+    handleHoverOverlayEnter();
+  }, [cancelTabPanelClose]);
+
   // Popover show/hide logic
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1074,8 +1215,9 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
       const isButtonClick = buttonRef.current && buttonRef.current.contains(e.target as Node);
       const isPopoverClick = popoverRef.current && popoverRef.current.contains(e.target as Node);
       const isPortalClick = document.getElementById('mcp-popover-portal')?.contains(e.target as Node);
+      const isTabPanelClick = document.getElementById('mcp-tab-flyout')?.contains(e.target as Node);
 
-      if (!isButtonClick && !isPopoverClick && !isPortalClick) {
+      if (!isButtonClick && !isPopoverClick && !isPortalClick && !isTabPanelClick) {
         setIsPopoverOpen(false);
       }
     };
@@ -1114,12 +1256,12 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     return undefined;
   }, [isHoverOverlayVisible, updateHoverOverlayPosition]);
 
-  // Cleanup hover timeout on unmount
+  // Cleanup hover + tab-panel timers on unmount
   useEffect(() => {
     return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (tabOpenTimerRef.current) clearTimeout(tabOpenTimerRef.current);
+      if (tabCloseTimerRef.current) clearTimeout(tabCloseTimerRef.current);
     };
   }, []);
 
@@ -1225,6 +1367,20 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
           </button>
           <button
             className="mcp-hover-button"
+            data-mcp-tabs-trigger="true"
+            onClick={handleTabTriggerClick}
+            onMouseEnter={handleTabTriggerEnter}
+            onMouseLeave={handleTabTriggerLeave}
+            title="Attach browser tabs"
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M3 5h10v2H3V5zm0 4h10v2H3V9zm0 4h7v2H3v-2zm14-8h4v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+            </svg>
+            Tabs
+          </button>
+          <button
+            className="mcp-hover-button"
             onClick={() => setIsPopoverOpen(!isPopoverOpen)}
             title="Configure MCP settings"
             type="button"
@@ -1299,6 +1455,36 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
               disabled={autoExecuteDisabled}
               onChange={handleAutoExecute}
             />
+            <button
+              className="mcp-instruction-btn"
+              data-mcp-tabs-trigger="true"
+              style={{
+                marginTop: 'auto',
+                padding: '10px 0',
+                fontSize: 13,
+                fontWeight: 500,
+                borderRadius: 8,
+                border: `1px solid ${isTabPanelOpen ? theme.buttonBackgroundActive : theme.borderColor}`,
+                background: isTabPanelOpen ? theme.buttonBackground : theme.secondaryBackground,
+                color: theme.primaryText,
+                cursor: 'pointer',
+                gap: 6,
+              }}
+              onClick={handleTabTriggerClick}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = theme.buttonBackground;
+                handleTabTriggerEnter(e);
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = isTabPanelOpen ? theme.buttonBackground : theme.secondaryBackground;
+                handleTabTriggerLeave();
+              }}
+              type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                <path d="M3 5h10v2H3V5zm0 4h10v2H3V9zm0 4h7v2H3v-2zm14-8h4v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+              </svg>
+              Tabs
+            </button>
           </div>
           {/* Instruction panel column */}
           <div
@@ -1425,6 +1611,16 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
           </div>
         </div>
       </PopoverPortal>
+      {isTabPanelOpen && tabPanelAnchor && (
+        <TabPickerPanel
+          theme={theme}
+          anchorRect={tabPanelAnchor}
+          getAnchorRect={getTabPanelAnchorRect}
+          onClose={closeTabPanel}
+          onPointerEnter={handleTabPanelPointerEnter}
+          onPointerLeave={scheduleTabPanelClose}
+        />
+      )}
     </div>
   );
 };

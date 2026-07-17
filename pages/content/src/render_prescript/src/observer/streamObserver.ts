@@ -17,6 +17,7 @@ declare global {
 import { CONFIG } from '../core/config';
 import { renderFunctionCall } from '../renderer/index';
 import { extractParameters, containsFunctionCalls, extractLanguageTag } from '../parser/index';
+import { scheduleWork } from '../utils/index';
 import { extractJSONParameters } from '../parser/jsonFunctionParser';
 
 // Maps to store observers and state for streaming content
@@ -719,9 +720,9 @@ const performSeamlessCompletion = (blockId: string, finalContent: string): void 
   // Mark as transitioning to prevent duplicate completion attempts
   functionBlock.setAttribute('data-completing', 'true');
 
-  // Use multiple requestAnimationFrame calls for ultra-smooth transition
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
+  // Schedule the completion transition (must run even when the tab is hidden)
+  scheduleWork(() => {
+    scheduleWork(() => {
       // Remove loading state and add complete state
       functionBlock.classList.remove('function-loading');
       functionBlock.classList.add('function-complete');
@@ -816,8 +817,8 @@ export const resyncWithOriginalContent = (blockId: string): void => {
   const isAlreadyComplete = functionBlock.classList.contains('function-complete');
   const isCurrentlyLoading = functionBlock.classList.contains('function-loading');
 
-  // Use a single requestAnimationFrame to batch all updates
-  requestAnimationFrame(() => {
+  // Batch all updates; schedule so it still runs when the tab is hidden
+  scheduleWork(() => {
     // Only update function name if it's actually different and won't cause jitter
     if (originalFunctionName && !isAlreadyComplete) {
       const functionNameElement = functionBlock.querySelector('.function-name-text');

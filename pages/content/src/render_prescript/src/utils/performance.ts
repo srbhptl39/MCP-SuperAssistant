@@ -22,3 +22,17 @@ export const debounce = <T extends (...args: any[]) => any>(
     timeout = setTimeout(later, wait);
   };
 };
+
+/**
+ * Schedule work that must run even when the tab is hidden.
+ * requestAnimationFrame callbacks never fire in a backgrounded tab, which stalls
+ * functional pipelines (event dispatch, execution/completion state). When hidden,
+ * fall back to setTimeout (throttled to ~1s but still fires); otherwise use rAF.
+ */
+export const scheduleWork = (cb: () => void): void => {
+  if (document.visibilityState === 'hidden') {
+    setTimeout(cb, 0);
+  } else {
+    requestAnimationFrame(cb);
+  }
+};

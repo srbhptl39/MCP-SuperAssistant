@@ -188,7 +188,9 @@ class McpClient {
     // Listen for tool-list updates (broadcast by background when primitives change)
     contextBridge.onMessage('mcp:tool-update', message => {
       try {
-        const tools = Array.isArray(message.payload) ? message.payload : [];
+        // Background broadcasts { payload: { tools: [...] } }; tolerate a bare array too.
+        const payload = message.payload;
+        const tools = Array.isArray(payload) ? payload : Array.isArray(payload?.tools) ? payload.tools : [];
         logMessage(`[McpClient] Received tool update: ${tools.length} tools`);
         this.handleToolUpdate(tools);
       } catch (error) {
@@ -373,9 +375,11 @@ class McpClient {
       throw new Error('Tool name is required and must be a string');
     }
 
-    // Validate connection status before making the call
+    // Validate connection status before making the call.
+    // Virtual browser_* tools execute locally in the background and work with no
+    // MCP server connected — only gate real MCP tools on connection status.
     const connectionStore = useConnectionStore.getState();
-    if (connectionStore.status !== 'connected') {
+    if (!toolName.startsWith('browser_') && connectionStore.status !== 'connected') {
       throw new Error(`Not connected to MCP server. Current status: ${connectionStore.status}. Please check your connection.`);
     }
 

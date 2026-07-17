@@ -33,6 +33,7 @@ import {
 
 // Import the automation service
 import { initializeAllServices, cleanupAllServices } from './services';
+import { receiveCapture } from './services/capture-receiver';
 import { createLogger } from '@extension/shared/lib/logger';
 
 // Add this as a global recovery mechanism for the sidebar
@@ -332,6 +333,18 @@ function collectDemographicData(): { [key: string]: any } {
 
     logMessage('Application initialized successfully with Session 10 architecture');
 
+    // Browser Bridge: tell the background we're ready and drain any queued capture
+    // (e.g. from the capture shortcut opening this tab fresh).
+    try {
+      const readyResponse = await chrome.runtime.sendMessage({ type: 'browser-bridge:content-ready' });
+      if (readyResponse?.pending) {
+        logMessage('[Browser Bridge] Received pending capture on content-ready');
+        receiveCapture(readyResponse.pending);
+      }
+    } catch (captureError) {
+      logger.debug('[Browser Bridge] content-ready ping failed (non-fatal):', captureError);
+    }
+
     // Expose plugin registry globally for adapter access
     try {
       const { pluginRegistry } = await import('./plugins/plugin-registry');
@@ -625,6 +638,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'Renderer not initialized' });
     }
   } 
+  // Browser Bridge: capture pushed from the background (capture shortcut)
+  else if (message.type === 'browser-bridge:insert-capture') {
+    receiveCapture(message.payload);
+    sendResponse({ success: true });
+  }
   // Remote Config message handling
   else if (message.type && message.type.startsWith('remote-config:')) {
     handleRemoteConfigMessage(message, sendResponse);
