@@ -22,80 +22,26 @@
   transition: none !important;
 }
 
-/* Enhanced shadow host transitions with smooth appearing/disappearing */
+/* Shadow host transitions: simple fade + slight translateX */
 #mcp-sidebar-shadow-host {
-  transition: opacity 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), 
-              transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
   transform-origin: right center;
   will-change: opacity, transform;
 }
 
 #mcp-sidebar-shadow-host.showing {
   opacity: 0;
-  transform: translateX(40px) scale(0.9) rotateY(5deg);
-  animation: sidebarAppear 0.6s cubic-bezier(0.34, 1.26, 0.64, 1) forwards;
+  transform: translateX(8px);
 }
 
 #mcp-sidebar-shadow-host.hiding {
-  opacity: 1;
-  transform: translateX(0) scale(1);
-  animation: sidebarDisappear 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+  opacity: 0;
+  transform: translateX(8px);
 }
 
 #mcp-sidebar-shadow-host.initialized:not(.showing):not(.hiding) {
   opacity: 1;
-  transform: translateX(0) scale(1);
-}
-
-/* Smooth appearing animation with subtle 3D effect */
-@keyframes sidebarAppear {
-  0% {
-    opacity: 0;
-    transform: translateX(60px) scale(0.85) rotateY(8deg);
-    filter: blur(1px);
-  }
-  30% {
-    opacity: 0.4;
-    transform: translateX(20px) scale(0.95) rotateY(3deg);
-    filter: blur(0.5px);
-  }
-  60% {
-    opacity: 0.8;
-    transform: translateX(-8px) scale(1.02) rotateY(-1deg);
-    filter: blur(0px);
-  }
-  85% {
-    opacity: 0.95;
-    transform: translateX(2px) scale(1.01) rotateY(0deg);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0) scale(1) rotateY(0deg);
-    filter: blur(0px);
-  }
-}
-
-/* Smooth disappearing animation with elegant fade */
-@keyframes sidebarDisappear {
-  0% {
-    opacity: 1;
-    transform: translateX(0) scale(1) rotateY(0deg);
-    filter: blur(0px);
-  }
-  20% {
-    opacity: 0.9;
-    transform: translateX(8px) scale(0.98) rotateY(2deg);
-  }
-  50% {
-    opacity: 0.5;
-    transform: translateX(20px) scale(0.92) rotateY(4deg);
-    filter: blur(0.5px);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(40px) scale(0.85) rotateY(8deg);
-    filter: blur(1px);
-  }
+  transform: translateX(0);
 }
 
 /* Base sidebar container */
@@ -107,18 +53,16 @@
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  /* Smooth, natural width transitions with subtle elastic feel */
-  transition: width 0.4s cubic-bezier(0.4, 0.0, 0.2, 1), 
+  /* Smooth, natural width transitions */
+  transition: width 0.25s cubic-bezier(0.4, 0.0, 0.2, 1),
               box-shadow 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   overflow-y: auto;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08),
               0 1px 6px rgba(0, 0, 0, 0.04);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  will-change: width, transform; 
+  will-change: width, transform;
   transform: translateZ(0); /* Force GPU acceleration */
   contain: layout style;
-  backdrop-filter: blur(20px);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Sidebar in transitioning state */
@@ -128,15 +72,11 @@
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.sidebar.sidebar-transitioning:hover {
-  transform: scale(1.01);
-}
-
 /* Collapsed state */
 .sidebar.collapsed {
   width: 56px;
   overflow: hidden;
-  transition: width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: width 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 /* Push mode */
@@ -199,13 +139,18 @@
 /* Header should not resize or shift */
 .sidebar-header {
   flex-shrink: 0;
-  contain: layout size;
-  padding: 1rem;
+  contain: layout;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 48px;
+}
+
+/* Minimized rail: let the header grow to fit the stacked chevron / logo / dot */
+.sidebar.collapsed .sidebar-header {
   height: auto;
-  min-height: 60px;
+  padding: 8px 0;
 }
 
 /* Make sure the header title is properly spaced */
@@ -377,12 +322,10 @@
 }
 
 .sidebar .input-submit:hover {
-  transform: translateY(-1px) scale(1.02);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .sidebar .input-submit:active {
-  transform: translateY(0) scale(0.98);
   transition-duration: 0.1s;
 }
 
@@ -392,17 +335,9 @@
   opacity: 0.6;
 }
 
-/* Enhanced button animations - simplified */
+/* Button transitions - colour only, no transform */
 .sidebar button {
-  transition: all 0.2s ease-out;
-}
-
-.sidebar button:hover {
-  transform: translateY(-1px);
-}
-
-.sidebar button:active {
-  transform: translateY(0) scale(0.98);
+  transition: color 0.15s ease-out, background-color 0.15s ease-out, border-color 0.15s ease-out;
 }
 
 /* ServerStatus specific enhancements - simplified and stable */
@@ -532,16 +467,7 @@
 
 /* Simple card animations */
 .sidebar-card {
-  transition: all 0.2s ease-out;
-}
-
-.sidebar-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.dark .sidebar-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.15s ease-out;
 }
 
 /* Font styles */
@@ -573,40 +499,13 @@
 /* Card styles */
 .sidebar-card {
   overflow: hidden;
-  transition: box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
-              transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: box-shadow 0.15s ease-out;
   border-radius: 0.5rem;
   margin-bottom: 0.75rem;
-}
-/* 
-.sidebar-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
-} */
-
-.dark .sidebar-card {
-  /* background-color: #1f2937; */
-  /* border-color: rgba(255, 255, 255, 0.1); */
-}
-
-.dark .sidebar-card:hover {
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-}
-
-/* Spring animation for expanding content - reduced springiness */
-@keyframes expandIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
 }
 
 .sidebar .expand-in {
   animation: expandIn 0.5s cubic-bezier(0.25, 1.0, 0.5, 1);
-}
-
-/* Spring animation for expanding content - reduced springiness */
-@keyframes expandIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 .sidebar-expand-animation {

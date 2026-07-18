@@ -86,6 +86,7 @@ export interface AutomationState {
   autoInsertDelay: number;
   autoSubmitDelay: number;
   autoExecuteDelay: number;
+  autoDiscovery: boolean; // Auto-run discovery meta-tools (get_tool_schema/tool_lookup) even when autoExecute is off
 }
 
 /**
@@ -262,6 +263,7 @@ export class AutomationService {
         autoInsertDelay: preferences.autoInsertDelay || 0,
         autoSubmitDelay: preferences.autoSubmitDelay || 0,
         autoExecuteDelay: preferences.autoExecuteDelay || 0,
+        autoDiscovery: preferences.autoDiscovery !== false, // Default true when unset
       };
     } catch (error) {
       logger.error('[AutomationService] Error getting automation state:', error);

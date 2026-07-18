@@ -2,9 +2,9 @@ import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 // import { generateInstructions } from './instructionGenerator';
 import { generateInstructionsJson } from './instructionGeneratorJson';
+import { generateInstructionsCompact } from './instructionGeneratorCompact';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
 import { useToolStore } from '../../../stores/tool.store';
-import { Typography } from '../ui';
 import { cn } from '@src/lib/utils';
 import { logMessage } from '@src/utils/helpers';
 import { createLogger } from '@extension/shared/lib/logger';
@@ -79,25 +79,20 @@ interface ActionButtonProps {
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, loading, success, color, label }) => {
-  const colorClasses = {
-    blue: 'text-blue-700 dark:text-blue-500 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/40',
-    green:
-      'text-green-700 dark:text-green-500 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-800/40',
-    red: 'text-red-700 dark:text-red-500 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/40',
-    amber:
-      'text-amber-700 dark:text-amber-500 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-800/40',
-    purple:
-      'text-purple-700 dark:text-purple-500 bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-800/40',
-    slate: 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
-  };
+  // Single accent: primary (indigo) for Save, neutral for everything else.
+  const isPrimary = color === 'green';
+  const activeStyles = isPrimary
+    ? 'bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600'
+    : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800';
+  const disabledStyles = 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed';
 
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(
-        'px-2 py-1 text-xs font-medium rounded transition-colors w-[70px] text-center',
-        disabled || loading ? colorClasses.slate : colorClasses[color],
+        'h-7 px-2.5 text-xs font-medium rounded-md min-w-[64px] text-center transition-colors duration-150',
+        disabled || loading ? disabledStyles : activeStyles,
       )}>
       {loading ? `${label}...` : success ? `${label} ✓` : label}
     </button>
@@ -162,8 +157,10 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     //   return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
     // }
 
-    return generateInstructionsJson(enabledTools, customInstructions, customInstructionsEnabled);
-  }, [enabledTools, customInstructions, customInstructionsEnabled]);
+    return preferences.promptMode === 'full'
+      ? generateInstructionsJson(enabledTools, customInstructions, customInstructionsEnabled)
+      : generateInstructionsCompact(enabledTools, customInstructions, customInstructionsEnabled);
+  }, [enabledTools, customInstructions, customInstructionsEnabled, preferences.promptMode]);
 
   // Memoize the actual current instructions to prevent unnecessary re-calculations
   const currentInstructions = useMemo(() => {
@@ -363,22 +360,20 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
   }, [preferences]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pt-1">
       {/* Custom Instructions Panel */}
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
-        <div className="p-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+        <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Typography variant="h4" className="text-slate-700 dark:text-slate-300">
-              Custom Instructions
-            </Typography>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Custom Instructions</span>
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
                 checked={customInstructionsEnabled}
                 onChange={e => handleCustomInstructionsToggle(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                className="h-4 w-4 rounded accent-indigo-600"
               />
-              <span className="text-xs text-slate-600 dark:text-slate-400">Enable</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">Enable</span>
             </label>
           </div>
           <div className="flex items-center gap-1.5">
@@ -404,12 +399,12 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
               value={customInstructions}
               onChange={e => setCustomInstructions(e.target.value)}
               placeholder="Enter your custom instructions here..."
-              className="w-full h-32 p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200"
+              className="w-full h-32 p-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200"
             />
           ) : (
             <div className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
               {customInstructionsEnabled && customInstructions ? (
-                <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded overflow-x-auto text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                <pre className="text-[11px] font-mono bg-slate-50 dark:bg-slate-800 p-3 rounded-md overflow-x-auto text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
                   {customInstructions}
                 </pre>
               ) : (
@@ -424,10 +419,8 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
       {/* Main Instructions Panel */}
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
-        <div className="p-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-          <Typography variant="h4" className="text-slate-700 dark:text-slate-300">
-            Instructions
-          </Typography>
+        <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Instructions</span>
           <div className="flex items-center gap-1.5">
             {isEditing ? (
               <>
@@ -469,11 +462,11 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
             <textarea
               value={instructions}
               onChange={e => setInstructions(e.target.value)}
-              className="w-full h-64 p-2 text-sm font-mono border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200"
+              className="w-full h-64 p-2 text-sm font-mono border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200"
             />
           ) : (
             <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
-              <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded overflow-x-auto text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+              <pre className="text-[11px] font-mono bg-slate-50 dark:bg-slate-800 p-3 rounded-md overflow-x-auto text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
                 {instructions}
               </pre>
             </div>

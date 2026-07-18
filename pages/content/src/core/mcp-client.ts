@@ -5,6 +5,12 @@ import { eventBus } from '../events/event-bus';
 import type { ServerConfig, ConnectionStatus } from '../types/stores';
 import { logMessage } from '../utils/helpers';
 import { pluginRegistry } from '../plugins';
+import { META_TOOLS, runMetaTool } from './metaTools';
+
+// Wording that marks a tool error as an argument/validation failure worth
+// answering with the expected schema ("requires"/"must be one of" are the
+// browser tools' phrasing; the rest matches proxy/Zod errors).
+const SCHEMA_HINT_TRIGGER = /invalid|requir|schema|argument|parameter|missing|must be|expected/i;
 
 /**
  * McpClient – Enhanced wrapper around ContextBridge for communicating with the
@@ -375,6 +381,15 @@ class McpClient {
       throw new Error('Tool name is required and must be a string');
     }
 
+    // Meta-tools (get_tool_schema / tool_lookup) resolve entirely client-side
+    // from the tool store — no MCP server needed. Intercept BEFORE the
+    // connection guard and BEFORE contextBridge so they work offline and never
+    // reach the background/MCP proxy. Same result shape as a real tool call.
+    if (META_TOOLS.has(toolName)) {
+      logMessage(`[McpClient] Handling meta-tool locally: ${toolName}`);
+      return runMetaTool(toolName, args || {});
+    }
+
     // Validate connection status before making the call.
     // Virtual browser_* tools execute locally in the background and work with no
     // MCP server connected — only gate real MCP tools on connection status.
@@ -401,6 +416,11 @@ class McpClient {
       );
 
       logMessage(`[McpClient] Tool call successful: ${toolName}`);
+
+      // Tool errors usually come back as RESOLVED results (proxy: isError:true;
+      // browser tools: plain text starting with the tool name), not thrown errors —
+      // append the schema hint here too so the model can self-correct.
+      this.appendSchemaHint(toolName, result);
 
       // Update tool execution with success
       useToolStore.getState().completeToolExecution(executionId, result, 'success');
@@ -438,8 +458,40 @@ class McpClient {
         connectionStore.setDisconnected(`Tool call failed: ${errorMessage}`);
       }
 
+      // Schema-on-error: if this looks like a validation error and we know the
+      // tool's schema client-side, append it so the model can self-correct.
+      const failedTool = useToolStore.getState().availableTools.find(x => x.name === toolName);
+      if (failedTool && SCHEMA_HINT_TRIGGER.test(errorMessage)) {
+        throw new Error(
+          `${errorMessage}\n\nExpected input_schema for ${toolName}:\n` +
+            JSON.stringify(failedTool.input_schema, null, 2),
+        );
+      }
+
       throw error;
     }
+  }
+
+  /**
+   * Mutates an error-looking RESOLVED tool result to append the tool's
+   * input_schema. Proxy errors arrive as isError:true results; browser-tool
+   * validation errors arrive as short plain-text results starting with the tool
+   * name (e.g. "browser_read_tab requires a numeric tabId ..."). Legit content
+   * results never match both the error shape and the validation wording.
+   */
+  private appendSchemaHint(toolName: string, result: any): void {
+    const item = Array.isArray(result?.content)
+      ? result.content.find((c: any) => c?.type === 'text' && typeof c.text === 'string')
+      : undefined;
+    if (!item) return;
+    const text: string = item.text;
+    const looksLikeError =
+      result?.isError === true || text.startsWith('Error') || text.startsWith(`${toolName} `);
+    if (!looksLikeError || text.length > 600 || text.includes('Expected input_schema')) return;
+    if (!SCHEMA_HINT_TRIGGER.test(text)) return;
+    const tool = useToolStore.getState().availableTools.find(t => t.name === toolName);
+    if (!tool) return;
+    item.text = `${text}\n\nExpected input_schema for ${toolName}:\n${JSON.stringify(tool.input_schema, null, 2)}`;
   }
 
   /**

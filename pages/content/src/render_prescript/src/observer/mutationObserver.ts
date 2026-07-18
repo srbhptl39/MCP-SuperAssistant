@@ -1,7 +1,6 @@
 import { CONFIG } from '../core/config';
 import { debounce } from '../utils/index';
 import { renderFunctionCall, renderedFunctionBlocks, processedElements } from '../renderer/index';
-import { stabilizeBlock, unstabilizeBlock } from '../renderer/components';
 import {
   monitorNode,
   streamingObservers,
@@ -9,7 +8,6 @@ import {
   streamingLastUpdated,
   startProgressiveUpdates,
 } from './streamObserver';
-import type { StabilizedBlock } from '../core/types';
 import { streamingContentLengths } from '../parser/index';
 import {
   preExistingIncompleteBlocks,
@@ -86,18 +84,7 @@ export const processUpdateQueue = (): void => {
   isProcessing = true;
   window._isProcessing = true;
 
-  const stabilizedBlocks = new Map<string, StabilizedBlock>();
-
   try {
-    // if (CONFIG.usePositionFixed) {
-    //     updateQueue.forEach((node, blockId) => {
-    //         const stabilized = stabilizeBlock(blockId);
-    //         if (stabilized) {
-    //             stabilizedBlocks.set(blockId, stabilized);
-    //         }
-    //     });
-    // }
-
     updateQueue.forEach((node, blockId) => {
       if (CONFIG.debug) logger.debug(`Processing update for block: ${blockId}`);
       renderFunctionCall(node as HTMLPreElement, { current: isProcessing });
@@ -115,13 +102,6 @@ export const processUpdateQueue = (): void => {
   } catch (e) {
     logger.error('Error processing update queue:', e);
   } finally {
-    // if (stabilizedBlocks.size > 0) {
-    //     setTimeout(() => {
-    //         stabilizedBlocks.forEach((stabilized) => {
-    //             unstabilizeBlock(stabilized);
-    //         });
-    //     }, CONFIG.stabilizeTimeout);
-    // }
     isProcessing = false;
     window._isProcessing = false;
   }
@@ -210,6 +190,13 @@ export const startDirectMonitoring = (): void => {
     let potentialFunctionCall = false;
 
     for (const mutation of mutations) {
+      // Per-block observers own already-monitored subtrees; the doc observer only needs
+      // to detect *new* blocks. Skip mutations inside a monitored node or rendered block
+      // so streaming chunks don't trigger a full-document rescan (O(n²) with chat length).
+      const t: Node = mutation.target;
+      const el = t.nodeType === Node.ELEMENT_NODE ? (t as Element) : t.parentElement;
+      if (el && (el.closest('[data-monitored-node]') || el.closest('.function-block'))) continue;
+
       // Check if any added nodes might contain function calls
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
         for (const node of Array.from(mutation.addedNodes)) {

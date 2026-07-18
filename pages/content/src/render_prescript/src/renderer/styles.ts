@@ -3,7 +3,18 @@ import { isDarkTheme } from '../utils/themeDetector';
 // Determine if dark theme should be used
 const useDarkTheme = isDarkTheme();
 
-export const styles = `
+// Per-host CSS-variable overrides so the block reads as "native" on each site.
+// Only override what visibly clashes (font-family, radius, dark bg).
+const HOST_OVERRIDES: Record<string, string> = {
+  'gemini.google.com': `.function-block{--border-radius-lg:16px;--font-system:'Google Sans',Roboto,sans-serif;}`,
+  'aistudio.google.com': `.function-block{--border-radius-lg:12px;--font-system:'Google Sans',Roboto,sans-serif;}`,
+  'chatgpt.com': `.function-block{--border-radius-lg:12px;} .function-block.theme-dark{--dark-bg:#303030;--dark-surface:#424242;}`,
+  'www.perplexity.ai': `.function-block{--border-radius-lg:8px;--font-system:'FK Grotesk Neue',ui-sans-serif,sans-serif;}`,
+  'chat.deepseek.com': `.function-block{--border-radius-lg:12px;}`,
+  'grok.com': `.function-block{--border-radius-lg:12px;}`,
+};
+
+const baseStyles = `
   /* CSS Custom Properties for Performance */
   .function-block {
     /* Light theme variables */
@@ -68,11 +79,9 @@ export const styles = `
     border-radius: var(--border-radius-lg);
     font-family: var(--font-system);
     position: relative;
-    transition: all var(--transition-slow);
-    will-change: transform, opacity, box-shadow;
+    transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
     transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    perspective: 1000px;
+    contain: layout style;
     box-sizing: border-box;
     overflow: hidden;
     width: 100%;
@@ -1242,3 +1251,5 @@ export const styles = `
     background-image: linear-gradient(to bottom, var(--dark-primary-hover), #6ca0e8);
   }
 `;
+
+export const styles = baseStyles + (HOST_OVERRIDES[location.hostname] ?? '');

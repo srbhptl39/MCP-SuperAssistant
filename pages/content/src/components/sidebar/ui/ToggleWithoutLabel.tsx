@@ -42,10 +42,10 @@ const ToggleWithoutLabel: React.FC<ToggleWithoutLabelProps> = ({
         onClick={handleChange}
         className={cn(
           'relative inline-flex flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out',
-          'border-2 border-transparent focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-background',
+          'border-2 border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-background',
           toggleSize[size].container,
           checked
-            ? 'bg-blue-600 dark:bg-blue-500 border-transparent'
+            ? 'bg-indigo-600 dark:bg-indigo-500 border-transparent'
             : 'bg-slate-300 dark:bg-slate-700 border-transparent',
         )}>
         <span className="sr-only">{label}</span>

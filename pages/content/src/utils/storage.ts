@@ -24,6 +24,10 @@ const STORAGE_KEY = 'mcp_sidebar_preferences';
 const TOOL_PERMISSIONS_KEY = 'mcp_tool_permissions';
 const TOOL_ENABLEMENT_KEY = 'mcp_tool_enablement';
 
+// Drop 'always' grants older than this; pruned once per page load.
+const TOOL_PERMISSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+let permissionsPruned = false;
+
 // Default preferences
 const DEFAULT_PREFERENCES: SidebarPreferences = {
   isPushMode: false,
@@ -99,7 +103,20 @@ export const getToolPermissions = (): ToolPermission[] => {
     if (!storedData) {
       return [];
     }
-    return JSON.parse(storedData) as ToolPermission[];
+    const permissions = JSON.parse(storedData) as ToolPermission[];
+
+    // One-time TTL prune per page load: drop stale grants, persist if shrunk.
+    if (!permissionsPruned) {
+      permissionsPruned = true;
+      const cutoff = Date.now() - TOOL_PERMISSION_TTL_MS;
+      const fresh = permissions.filter(p => p.timestamp >= cutoff);
+      if (fresh.length < permissions.length) {
+        localStorage.setItem(TOOL_PERMISSIONS_KEY, JSON.stringify(fresh));
+        return fresh;
+      }
+    }
+
+    return permissions;
   } catch (error) {
     logMessage(
       `[Storage] Error retrieving tool permissions: ${error instanceof Error ? error.message : String(error)}`,

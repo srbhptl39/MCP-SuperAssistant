@@ -20,6 +20,7 @@ import {
   updateStalledStreamTimeoutConfig,
 } from './observer/index';
 import { renderFunctionCall, renderedFunctionBlocks } from './renderer/index';
+import { runStorageCleanup } from './mcpexecute/storage';
 import { createLogger } from '@extension/shared/lib/logger';
 // Import the website-specific components
 // import { initPerplexityComponents } from './websites_components/perplexity';
@@ -232,6 +233,9 @@ const initializeRenderer = () => {
   }
 
   injectStyles();
+
+  // Prune stored function history + schedule periodic cleanup (idempotent).
+  runStorageCleanup();
 
   // Inject CodeMirror accessor script only if the website uses CodeMirror
   if (CONFIG.useCodeMirrorExtraction) {

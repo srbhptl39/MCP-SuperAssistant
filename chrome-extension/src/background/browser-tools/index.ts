@@ -6,7 +6,7 @@
  */
 import { browserBridgeStorage, isDeniedHostname } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
-import { extractReadableContent, extractSelection } from './extractor';
+import { extractReadableContent, extractSelection, snapshotInteractive, doInteract } from './extractor';
 
 const logger = createLogger('BrowserTools');
 
@@ -42,13 +42,27 @@ const READ_TOOLS: BrowserTool[] = [
   ),
   defineTool(
     'browser_read_tab',
-    'Read the readable text content of an open browser tab. Pass the tabId from browser_list_tabs. Optional "mode": "article" (main readable content, default) or "full_text" (whole page text). Optional "maxChars" caps the returned length (default 20000); the result notes whether it was truncated.',
+    'Read the readable text content of an open browser tab. Pass the tabId from browser_list_tabs. Optional "mode": "article" (main readable content, default) or "full_text" (whole page text). Optional "maxChars" caps the returned length (default 20000); the result notes whether it was truncated. Optional "include_links" inlines hyperlink URLs as [text](url) (default true).',
     {
       type: 'object',
       properties: {
         tabId: { type: 'number', description: 'The tabId from browser_list_tabs.' },
         mode: { type: 'string', enum: ['article', 'full_text'], description: 'Extraction mode.' },
         maxChars: { type: 'number', description: 'Maximum characters of content to return.' },
+        include_links: { type: 'boolean', description: 'Inline hyperlink URLs as [text](url). Default true.' },
+      },
+      required: ['tabId'],
+      additionalProperties: false,
+    },
+  ),
+  defineTool(
+    'browser_snapshot_tab',
+    'Snapshot the visible interactive elements (links, buttons, inputs, selects, etc.) of a tab and tag them with stable indices so browser_interact_tab can target them. Pass the tabId from browser_list_tabs. Optional "maxElements" caps how many are returned (default 60). Returns a JSON list of {index, tag, type, label}.',
+    {
+      type: 'object',
+      properties: {
+        tabId: { type: 'number', description: 'From browser_list_tabs.' },
+        maxElements: { type: 'number', description: 'Cap (default 60).' },
       },
       required: ['tabId'],
       additionalProperties: false,
@@ -111,6 +125,29 @@ const ACT_TOOLS: BrowserTool[] = [
       type: 'object',
       properties: { tabId: { type: 'number', description: 'The tabId to close.' } },
       required: ['tabId'],
+      additionalProperties: false,
+    },
+  ),
+  defineTool(
+    'browser_interact_tab',
+    'Interact with an element in a tab: click, fill, select, scroll, or press Enter. Target an element by "index" (from browser_snapshot_tab) or a CSS "selector". Pass the tabId from browser_list_tabs. Returns a compact summary; call browser_snapshot_tab or browser_read_tab afterward if you need the new page state.',
+    {
+      type: 'object',
+      properties: {
+        tabId: { type: 'number', description: 'From browser_list_tabs.' },
+        action: {
+          type: 'string',
+          enum: ['click', 'fill', 'select', 'scroll', 'press_enter'],
+          description: 'Interaction to perform.',
+        },
+        index: { type: 'number', description: 'Element index from browser_snapshot_tab.' },
+        selector: { type: 'string', description: 'CSS selector (alternative to index).' },
+        value: {
+          type: 'string',
+          description: 'Text for fill; option value/label for select; scroll amount (px) or "top"/"bottom".',
+        },
+      },
+      required: ['tabId', 'action'],
       additionalProperties: false,
     },
   ),
@@ -194,8 +231,12 @@ export async function executeBrowserTool(
         return await listTabs(denylist);
       case 'browser_read_tab':
         return await readTab(args);
+      case 'browser_snapshot_tab':
+        return await snapshotTab(args, denylist);
       case 'browser_get_selection':
         return await getSelection(args, denylist);
+      case 'browser_interact_tab':
+        return await interactTab(args, denylist, callerTabId);
       case 'browser_open_tab':
         return await openTab(args);
       case 'browser_navigate':
@@ -248,7 +289,7 @@ export type ReadTabResult =
 /** Read readable content of a tab. Loads settings internally for denylist + default mode. */
 export async function readTabRaw(
   tabId: number,
-  opts?: { mode?: 'article' | 'full_text'; maxChars?: number },
+  opts?: { mode?: 'article' | 'full_text'; maxChars?: number; includeLinks?: boolean },
 ): Promise<ReadTabResult> {
   if (!Number.isFinite(tabId)) return { ok: false, error: 'A numeric tabId is required.' };
   if (!(await hasAllUrls())) return { ok: false, error: NEED_PERMISSION_MSG, needsPermission: true };
@@ -267,11 +308,12 @@ export async function readTabRaw(
 
   const mode = opts?.mode === 'full_text' || opts?.mode === 'article' ? opts.mode : settings.captureMode;
   const maxChars = Number.isFinite(opts?.maxChars) ? (opts!.maxChars as number) : DEFAULT_MAX_CHARS;
+  const includeLinks = opts?.includeLinks !== false;
 
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
     func: extractReadableContent,
-    args: [mode, maxChars],
+    args: [mode, maxChars, includeLinks],
   });
   const data = injection?.result;
   if (!data) return { ok: false, error: 'Could not read that tab (the page may block content extraction).' };
@@ -297,12 +339,82 @@ async function readTab(args: Record<string, unknown>) {
 
   const mode = args.mode === 'full_text' || args.mode === 'article' ? args.mode : undefined;
   const maxChars = parseTabId(args.maxChars) ?? undefined;
+  const includeLinks = args.include_links !== false;
 
-  const result = await readTabRaw(tabId, { mode, maxChars });
+  const result = await readTabRaw(tabId, { mode, maxChars, includeLinks });
   if (!result.ok) return textResult(result.error);
 
   const header = `Title: ${result.title}\nURL: ${result.url}\nTruncated: ${result.truncated}\n\n`;
   return textResult(header + result.content);
+}
+
+async function snapshotTab(args: Record<string, unknown>, denylist: string[]) {
+  const tabId = parseTabId(args.tabId);
+  if (tabId === null) {
+    return textResult('browser_snapshot_tab requires a numeric tabId (get one from browser_list_tabs).');
+  }
+  if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
+
+  let tab = await chrome.tabs.get(tabId);
+  const reason = tabExclusionReason(tab, denylist);
+  if (reason) return textResult(reason);
+
+  if (tab.discarded) {
+    await chrome.tabs.reload(tabId);
+    tab = await waitForComplete(tabId);
+  } else if (tab.status !== 'complete') {
+    tab = await waitForComplete(tabId);
+  }
+
+  const maxElements = parseTabId(args.maxElements) ?? 60;
+
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: snapshotInteractive,
+    args: [maxElements],
+  });
+  const data = injection?.result;
+  if (!data) return textResult('Could not snapshot that tab (the page may block content extraction).');
+
+  const header = `Title: ${data.title}\nURL: ${data.url}\nInteractive elements: ${data.elements.length}\n\n`;
+  return textResult(header + JSON.stringify(data.elements, null, 2));
+}
+
+async function interactTab(args: Record<string, unknown>, denylist: string[], callerTabId?: number) {
+  const tabId = parseTabId(args.tabId);
+  if (tabId === null) return textResult('browser_interact_tab requires a numeric tabId.');
+  if (callerTabId != null && tabId === callerTabId) return textResult('Refusing to interact with the AI chat tab.');
+
+  const action = String(args.action ?? '');
+  const validActions = ['click', 'fill', 'select', 'scroll', 'press_enter'];
+  if (!validActions.includes(action)) {
+    return textResult(`browser_interact_tab "action" must be one of: ${validActions.join(', ')}.`);
+  }
+
+  if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
+
+  const tab = await chrome.tabs.get(tabId);
+  const reason = tabExclusionReason(tab, denylist);
+  if (reason) return textResult(reason);
+
+  const index = args.index != null ? (parseTabId(args.index) ?? null) : null;
+  const selector = args.selector != null ? String(args.selector) : null;
+  const value = args.value != null ? String(args.value) : null;
+
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: doInteract,
+    args: [action, index, selector, value],
+  });
+  const result = injection?.result;
+  if (!result) return textResult('Could not run the interaction (the page may block content extraction).');
+
+  // A click or Enter may trigger navigation — let it settle before reporting.
+  if (result.urlChanged) await waitForComplete(tabId, 4000);
+
+  return textResult(
+    `Action ${action}: ${result.note}\nURL: ${result.url}${result.urlChanged ? ' (changed)' : ''}`,
+  );
 }
 
 async function getSelection(args: Record<string, unknown>, denylist: string[]) {

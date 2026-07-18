@@ -5,7 +5,6 @@ import {
   addRawXmlToggle,
   addExecuteButton,
   setupAutoScroll,
-  smoothlyUpdateBlockContent,
   extractFunctionParameters,
 } from './components';
 import { applyThemeClass } from '../utils/themeDetector';
@@ -32,7 +31,6 @@ declare global {
 const STREAMING_DEBOUNCE_MS = 16; // ~60fps for smooth updates
 const MAX_AUTO_EXECUTE_ATTEMPTS = 3;
 const CACHE_TTL = 1000; // 1 second cache TTL
-const STREAMING_TIMEOUT = 1500;
 
 // Performance optimizations: Pre-compiled regex patterns
 const REGEX_CACHE = {
@@ -477,15 +475,6 @@ const injectStreamingStyles = (() => {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       
-      .param-value[data-streaming="true"] .content-wrapper {
-        animation: subtle-breathe 3s ease-in-out infinite;
-      }
-      
-      @keyframes subtle-breathe {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.001); }
-      }
-      
       /* Enhanced scrolling styles */
       .param-value[data-streaming="true"] {
         overflow-y: auto !important;
@@ -666,22 +655,35 @@ const AutoExpandUtils = {
       });
       
       const targetHeight = expandableContent.scrollHeight + 24;
-      
+
       requestAnimationFrame(() => {
         DOMUtils.applyStyles(expandableContent, {
           maxHeight: targetHeight + 'px',
           opacity: '1',
           paddingTop: '12px',
           paddingBottom: '12px',
-          transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          transition:
+            'max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s ease, padding 0.4s ease',
         });
-        
+
         const expandIcon = expandButton.querySelector('svg path');
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M16 14l-4-4-4 4');
         }
         expandButton.title = 'Collapse function details';
       });
+
+      // Release the height clamp after the animation so content that streams in
+      // afterwards is not clipped at the height measured at expand time.
+      PerformanceUtils.setManagedTimeout(
+        'expand-' + blockDiv.getAttribute('data-block-id'),
+        () => {
+          if (blockDiv.classList.contains('expanded')) {
+            expandableContent.style.maxHeight = 'none';
+          }
+        },
+        450,
+      );
     } else {
       // Instant expansion
       DOMUtils.applyStyles(expandableContent, {
@@ -716,9 +718,10 @@ const AutoExpandUtils = {
           opacity: '0',
           paddingTop: '0',
           paddingBottom: '0',
-          transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          transition:
+            'max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s ease, padding 0.4s ease',
         });
-        
+
         const expandIcon = expandButton.querySelector('svg path');
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M8 10l4 4 4-4');
@@ -826,7 +829,7 @@ const BlockElementUtils = {
     DOMUtils.applyStyles(expandableContent, {
       display: 'none',
       overflow: 'hidden',
-      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      transition: 'max-height .25s cubic-bezier(0.4,0,0.2,1), opacity .25s ease, padding .25s ease',
       maxHeight: '0px',
       opacity: '0',
     });
@@ -903,19 +906,34 @@ const BlockElementUtils = {
           }
           expandButton.title = 'Collapse function details';
         });
+
+        // Release the height clamp after the animation so later content isn't clipped.
+        PerformanceUtils.setManagedTimeout(
+          'expand-' + blockDiv.getAttribute('data-block-id'),
+          () => {
+            if (blockDiv.classList.contains('expanded')) {
+              expandableContent.style.maxHeight = 'none';
+            }
+          },
+          450,
+        );
       }
     };
 
-    // Attach click handler to expand button
-    expandButton.onclick = toggleExpandCollapse;
+    // Attach click handlers once; renderFunctionCall calls this every pass.
+    if (!(expandButton as any)._wired) {
+      expandButton.onclick = toggleExpandCollapse;
 
-    // Make entire function-name area clickable
-    const functionNameElement = blockDiv.querySelector('.function-name') as HTMLDivElement;
-    if (functionNameElement) {
-      DOMUtils.applyStyles(functionNameElement, {
-        cursor: 'pointer',
-      });
-      functionNameElement.onclick = toggleExpandCollapse;
+      // Make entire function-name area clickable
+      const functionNameElement = blockDiv.querySelector('.function-name') as HTMLDivElement;
+      if (functionNameElement) {
+        DOMUtils.applyStyles(functionNameElement, {
+          cursor: 'pointer',
+        });
+        functionNameElement.onclick = toggleExpandCollapse;
+      }
+
+      (expandButton as any)._wired = true;
     }
   },
 };
@@ -956,17 +974,20 @@ const ParamElementUtils = {
   },
 
   updateContent: (preElement: HTMLPreElement, displayValue: string, isStreaming: boolean): void => {
-    const currentText = preElement.textContent || '';
-    if (currentText !== displayValue) {
-      if (isStreaming && displayValue.length > currentText.length + 50) {
-        preElement.style.opacity = '0.85';
-        setTimeout(() => {
-          preElement.textContent = displayValue;
-          preElement.style.opacity = '1';
-        }, 8);
-      } else {
-        preElement.textContent = displayValue;
-      }
+    const current = preElement.textContent || '';
+    if (current === displayValue) return;
+    // Append only the new tail when content grows monotonically (the common streaming case)
+    // to avoid replacing the whole text node (and the opacity flash it used to cause).
+    const first = preElement.firstChild;
+    if (
+      displayValue.startsWith(current) &&
+      current.length > 0 &&
+      first?.nodeType === Node.TEXT_NODE &&
+      !first.nextSibling
+    ) {
+      (first as Text).appendData(displayValue.slice(current.length));
+    } else {
+      preElement.textContent = displayValue;
     }
   },
 
@@ -998,24 +1019,8 @@ const ParamElementUtils = {
 
       setupAutoScroll(paramValueElement as ParamValueElement);
       ScrollUtils.performStreamingScroll(paramValueElement);
-
-      PerformanceUtils.setManagedTimeout(
-        timeoutKey,
-        () => {
-          if (paramNameElement && document.body.contains(paramNameElement)) {
-            paramNameElement.classList.remove('streaming-param-name');
-            if (paramValueElement) {
-              paramValueElement.removeAttribute('data-streaming');
-              paramValueElement.removeAttribute('data-streaming-styled');
-              DOMUtils.applyStyles(paramValueElement, {
-                willChange: 'auto',
-                containIntrinsicSize: 'auto',
-              });
-            }
-          }
-        },
-        STREAMING_TIMEOUT,
-      );
+      // Streaming state is cleared only when the parser reports the param complete
+      // (the else branch below) — no timeout-based teardown that caused collapse/re-expand churn.
     } else {
       if (paramNameElement.classList.contains('streaming-param-name')) {
         setTimeout(() => {
@@ -1026,16 +1031,6 @@ const ParamElementUtils = {
             willChange: 'auto',
             containIntrinsicSize: 'auto',
           });
-          
-          // Check if block should auto-collapse when streaming ends
-          const blockDiv = paramValueElement.closest('.function-block') as HTMLDivElement;
-          if (blockDiv && blockDiv.classList.contains('auto-expanded')) {
-            // Check if any other parameters are still streaming
-            const stillStreaming = blockDiv.querySelector('[data-streaming="true"]');
-            if (!stillStreaming) {
-              AutoExpandUtils.scheduleAutoCollapse(blockDiv, 1200);
-            }
-          }
         }, 100);
       }
 
@@ -1142,13 +1137,14 @@ const AutoExecutionUtils = {
   findReplacementBlock: (functionDetails: any): HTMLDivElement | null => {
     const potentialBlocks = document.querySelectorAll<HTMLDivElement>('.function-block');
     for (const block of potentialBlocks) {
-      const preElement = block.querySelector('pre');
-      if (!preElement?.textContent) continue;
+      // Match on the rendered (format-normalised) name + call-id instead of re-parsing the raw
+      // body with an XML-only <invoke> regex. That regex never matched JSON/JSONL (compact-mode)
+      // blocks, so when the page re-rendered a compact block during the auto-execute delay the
+      // recovery lookup always failed and auto-execute silently never fired.
+      const name = block.querySelector('.function-name-text')?.textContent?.trim();
+      const callId = block.querySelector('.call-id')?.textContent?.trim();
 
-      const match = REGEX_CACHE.invokeMatch.exec(preElement.textContent);
-      REGEX_CACHE.invokeMatch.lastIndex = 0;
-
-      if (match && match[1] === functionDetails.functionName && match[2] === functionDetails.callId) {
+      if (name === functionDetails.functionName && callId === functionDetails.callId) {
         const alreadyExecuted = getPreviousExecution(
           functionDetails.functionName,
           functionDetails.callId,
@@ -1508,8 +1504,13 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       // Setup auto-execution
       const automationState = getAutomationState();
       const autoExecuteEnabled = automationState.autoExecute;
+      // Discovery meta-tools auto-run even when auto-execute is off, provided auto-discovery
+      // is enabled. `autoDiscovery` is exposed on __mcpAutomationState by automation.service.ts;
+      // read it defensively so this compiles regardless of merge order. Meta names are a fixed contract.
+      const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
+      const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
-        if (autoExecuteEnabled !== true) {
+        if (autoExecuteEnabled !== true && !(isMeta && autoDiscovery)) {
           logger.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
           return true;
         }
@@ -1611,30 +1612,15 @@ export const createOrUpdateParamElement = (
       contentWrapper = elements.contentWrapper;
     }
 
-    const updateContent = () => {
-      ParamElementUtils.updateContent(preElement, displayValue, isStreaming);
-    };
-
+    // The outer batchStreamingUpdate already coalesces at ~60fps; write synchronously
+    // instead of deferring through another rAF (which added ~1 frame + risked interleaving).
+    ParamElementUtils.updateContent(preElement, displayValue, isStreaming);
     if (isStreaming) {
-      requestAnimationFrame(() => {
-        updateContent();
-        // Enhanced scroll for streaming content
-        ScrollUtils.performStreamingScroll(paramValueElement);
-      });
-    } else {
-      updateContent();
+      ScrollUtils.performStreamingScroll(paramValueElement);
     }
   } else {
     if (paramValueElement.textContent !== displayValue) {
-      if (paramValueElement.textContent && paramValueElement.textContent.length > 0) {
-        paramValueElement.style.opacity = '0.9';
-        setTimeout(() => {
-          paramValueElement.textContent = displayValue;
-          paramValueElement.style.opacity = '1';
-        }, 50);
-      } else {
-        paramValueElement.textContent = displayValue;
-      }
+      paramValueElement.textContent = displayValue;
     }
   }
 

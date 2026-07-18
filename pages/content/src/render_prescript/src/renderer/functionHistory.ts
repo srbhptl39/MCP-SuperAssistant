@@ -110,6 +110,12 @@ export const updateHistoryPanel = (
   reExecuteBtn.className = 'function-reexecute-button';
   reExecuteBtn.textContent = 'Re-execute';
 
+  // Params were too large to persist — re-execute can't reconstruct the args.
+  if (executionData.paramsOmitted) {
+    reExecuteBtn.disabled = true;
+    reExecuteBtn.title = 'Parameters too large to store — re-run from the function block above';
+  }
+
   // Handle re-execution with async mcpClient
   reExecuteBtn.onclick = async () => {
     // Create results panel if it doesn't exist

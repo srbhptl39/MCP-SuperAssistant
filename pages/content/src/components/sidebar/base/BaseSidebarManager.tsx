@@ -282,28 +282,28 @@ export abstract class BaseSidebarManager {
           transition: none !important;
         }
         
-        /* Enhanced shadow host animations */
+        /* Shadow host animations - simple fade + slight translateX */
         #mcp-sidebar-shadow-host {
           opacity: 0;
-          transform: translateX(30px) scale(0.95);
-          transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
-                      transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+          transform: translateX(8px);
+          transition: opacity 0.2s ease-out,
+                      transform 0.2s ease-out;
         }
-        
+
         #mcp-sidebar-shadow-host.initialized {
           opacity: 1;
-          transform: translateX(0) scale(1);
+          transform: translateX(0);
         }
-        
+
         #mcp-sidebar-shadow-host.showing {
           transition-duration: 0s;
         }
-        
+
         #mcp-sidebar-shadow-host.hiding {
           opacity: 0;
-          transform: translateX(20px) scale(0.98);
-          transition: opacity 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53),
-                      transform 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+          transform: translateX(8px);
+          transition: opacity 0.2s ease-out,
+                      transform 0.2s ease-out;
         }
         
         /* Add subtle backdrop effect */
@@ -481,7 +481,7 @@ export abstract class BaseSidebarManager {
       // Start with immediate visibility but with opacity 0 for smooth transition
       this.shadowHost.style.display = 'block';
       this.shadowHost.style.opacity = '0';
-      this.shadowHost.style.transform = 'translateX(30px) scale(0.95)';
+      this.shadowHost.style.transform = 'translateX(8px)';
 
       // Add showing class for CSS animations
       this.shadowHost.classList.add('showing');
@@ -493,9 +493,9 @@ export abstract class BaseSidebarManager {
       requestAnimationFrame(() => {
         if (this.shadowHost) {
           this.shadowHost.style.transition =
-            'opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+            'opacity 0.2s ease-out, transform 0.2s ease-out';
           this.shadowHost.style.opacity = '1';
-          this.shadowHost.style.transform = 'translateX(0) scale(1)';
+          this.shadowHost.style.transform = 'translateX(0)';
 
           // Add initialized class after animation starts
           setTimeout(() => {
@@ -528,9 +528,9 @@ export abstract class BaseSidebarManager {
 
       // Start the hiding animation
       this.shadowHost.style.transition =
-        'opacity 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53), transform 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53)';
+        'opacity 0.2s ease-out, transform 0.2s ease-out';
       this.shadowHost.style.opacity = '0';
-      this.shadowHost.style.transform = 'translateX(20px) scale(0.98)';
+      this.shadowHost.style.transform = 'translateX(8px)';
 
       // After animation completes, hide completely
       setTimeout(() => {
@@ -541,7 +541,7 @@ export abstract class BaseSidebarManager {
           this.shadowHost.style.transform = '';
           logMessage('[BaseSidebarManager] Sidebar hidden with smooth animation');
         }
-      }, 300);
+      }, 200);
     }
 
     const previouslyVisible = this._isVisible;

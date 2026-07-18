@@ -2,10 +2,10 @@ import type { ConnectionType } from '../../../types/stores';
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
-import { useConnectionStatus, useServerConfig } from '../../../hooks';
+import { useConnectionStatus, useServerConfig, useAvailableTools } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
 import { eventBus } from '@src/events/event-bus';
-import { Typography, Icon, Button } from '../ui';
+import { Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
 import { Card, CardContent } from '@src/components/ui/card';
 import { createLogger } from '@extension/shared/lib/logger';
@@ -27,6 +27,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   } = useConnectionStatus();
 
   const { config: serverConfig, setConfig: setServerConfig } = useServerConfig();
+  const { tools: availableTools } = useAvailableTools();
 
   // Local UI state
   const [showDetails, setShowDetails] = useState(false);
@@ -43,7 +44,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [configFetched, setConfigFetched] = useState<boolean>(false);
 
   // Animation states
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [settingsAnimating, setSettingsAnimating] = useState(false);
   const [detailsAnimating, setDetailsAnimating] = useState(false);
 
@@ -169,11 +169,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       switch (status) {
         case 'connected':
           setStatusMessage('MCP Server is connected and ready');
-          // Brief success indication for new connections
-          if (!isConnected) {
-            setShowSuccessAnimation(true);
-            setTimeout(() => setShowSuccessAnimation(false), 1000);
-          }
           break;
         case 'disconnected':
           setStatusMessage('MCP Server is unavailable. Some features will be limited.');
@@ -205,8 +200,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       // Update last reconnect time for successful connections
       if (data.status === 'connected') {
         setLastReconnectTime(new Date().toLocaleTimeString());
-        setShowSuccessAnimation(true);
-        setTimeout(() => setShowSuccessAnimation(false), 1000);
       }
     });
     unsubscribeCallbacks.push(unsubscribeConnection);
@@ -309,32 +302,6 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       });
     }
   }, [communicationMethods, isEditingUri, isEditingConnectionType, configFetched, getServerConfig]); // Add configFetched dependency
-
-  // Set status message based on connection state
-  useEffect(() => {
-    // During reconnection, don't override the status message set by handleSaveServerConfig
-    if (isReconnecting) {
-      return;
-    }
-
-    if (hasBackgroundError) {
-      setStatusMessage('Extension background services unavailable. Try reloading the page.');
-    } else {
-      switch (status) {
-        case 'connected':
-          setStatusMessage('MCP Server is connected and ready');
-          break;
-        case 'disconnected':
-          setStatusMessage('MCP Server is unavailable. Some features will be limited.');
-          break;
-        case 'error':
-          setStatusMessage('Error connecting to extension services. Try reloading the page.');
-          break;
-        default:
-          setStatusMessage('Checking MCP Server status...');
-      }
-    }
-  }, [status, hasBackgroundError, isReconnecting]);
 
   const handleReconnect = async () => {
     const startTime = Date.now();
@@ -613,164 +580,106 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     }
   };
 
-  // Get status info based on current state
+  // Get status info based on current state (label reused by the details panel)
   const statusInfo = getStatusInfo();
 
   // Determine if we should show enhanced visual cues for disconnected/error states
   const isDisconnectedOrError = status === 'disconnected' || status === 'error';
 
+  // Compact status presentation: a single dot + label + tool count
+  const displayStatus = isReconnecting ? 'reconnecting' : status;
+  const statusDotColor =
+    displayStatus === 'connected'
+      ? 'bg-emerald-500'
+      : displayStatus === 'reconnecting'
+        ? 'bg-amber-500'
+        : displayStatus === 'disconnected' || displayStatus === 'error'
+          ? 'bg-rose-500'
+          : 'bg-slate-400';
+  const statusLabel =
+    displayStatus === 'connected'
+      ? 'Connected'
+      : displayStatus === 'reconnecting'
+        ? 'Reconnecting…'
+        : displayStatus === 'disconnected'
+          ? 'Disconnected'
+          : displayStatus === 'error'
+            ? 'Error'
+            : 'Unknown';
+
+  const iconButtonClass =
+    'h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors duration-150 disabled:opacity-50';
+
   return (
-    <div
-      className={cn(
-        'relative px-4 py-3 border-b border-slate-200 dark:border-slate-800 transition-all duration-300 ease-out server-status-stable',
-        // Add conditional styling for disconnected/error states with smooth transitions
-        isDisconnectedOrError &&
-          'bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-900/10 dark:to-red-900/10 border border-rose-200 dark:border-rose-800/50 rounded-sm shadow-sm',
-      )}>
-      {/* Success animation overlay - subtle */}
-      {showSuccessAnimation && (
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-100 to-green-100 dark:from-emerald-900/20 dark:to-green-900/20 opacity-30 animate-pulse rounded-sm" />
-      )}
-
-      <div className="relative z-10 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'relative flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300 ease-out server-status-icon',
-              statusInfo.bgColor,
-              // Simplified animations to prevent flickers
-              isReconnecting ? 'animate-spin' : isDisconnectedOrError && 'animate-pulse',
-            )}>
-            <div className="transition-transform duration-200">{statusInfo.icon}</div>
-          </div>
-
-          <div className="flex flex-col">
-            <Typography
-              variant="body"
-              className={cn(
-                'font-semibold transition-colors duration-200 leading-tight',
-                // Enhanced text styling with smooth color transitions
-                isDisconnectedOrError
-                  ? 'text-rose-700 dark:text-rose-400'
-                  : status === 'connected'
-                    ? 'text-emerald-700 dark:text-emerald-400'
-                    : 'text-slate-700 dark:text-slate-200',
-              )}>
-              Server {statusInfo.label}
-            </Typography>
-
-            {/* Status message with stable height to prevent layout shifts */}
-            <div
-              className={cn(
-                'text-xs mt-0.5 transition-all duration-200 ease-out max-h-20 overflow-hidden status-message-stable',
-                isDisconnectedOrError
-                  ? 'text-rose-600 dark:text-rose-400 font-medium'
-                  : 'text-slate-500 dark:text-slate-400',
-              )}>
-              {statusMessage}
-            </div>
-          </div>
+    <div className="border-b border-slate-200 dark:border-slate-800">
+      <div className="px-3 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn('w-2 h-2 rounded-full flex-shrink-0', statusDotColor, isReconnecting && 'animate-pulse')} />
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{statusLabel}</span>
+          {status === 'connected' && (
+            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">· {availableTools.length} tools</span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Simplified reconnect button */}
           <button
             onClick={handleReconnect}
             disabled={isReconnecting}
-            className={cn(
-              'group relative p-2 rounded-lg transition-all duration-200 ease-out hover:scale-105 active:scale-95',
-              isReconnecting ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-md',
-              // Dynamic button styling based on state
-              isDisconnectedOrError
-                ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-100 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-rose-900/30'
-                : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30',
-            )}
+            className={iconButtonClass}
             aria-label="Reconnect to server"
             title="Reconnect to server">
-            <Icon
-              name="refresh"
-              size="sm"
-              className={cn(
-                'transition-transform duration-300',
-                isReconnecting ? 'animate-spin' : 'group-hover:rotate-180',
-              )}
-            />
+            <Icon name="refresh" size="sm" className={cn(isReconnecting ? 'animate-spin' : '')} />
           </button>
 
-          {/* Simplified settings button */}
           <button
             onClick={handleSettings}
             disabled={settingsAnimating}
-            className={cn(
-              'group relative p-2 rounded-lg transition-all duration-200 ease-out hover:scale-105 active:scale-95',
-              'text-slate-500 hover:text-slate-700 hover:bg-slate-100 hover:shadow-md dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800',
-            )}
+            className={iconButtonClass}
             aria-label="Server settings"
             title="Server settings">
-            <Icon
-              name="settings"
-              size="sm"
-              className={cn('transition-transform duration-200', showSettings ? 'rotate-90' : 'group-hover:rotate-45')}
-            />
+            <Icon name="settings" size="sm" />
           </button>
 
-          {/* Simplified details button */}
           <button
             onClick={handleDetails}
             disabled={detailsAnimating}
-            className={cn(
-              'group relative p-2 rounded-lg transition-all duration-200 ease-out hover:scale-105 active:scale-95',
-              'text-slate-500 hover:text-slate-700 hover:bg-slate-100 hover:shadow-md dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800',
-            )}
+            className={iconButtonClass}
             aria-label="Show details"
             title="Show details">
-            <Icon name="info" size="sm" className="transition-transform duration-200 group-hover:scale-110" />
+            <Icon name="info" size="sm" />
           </button>
         </div>
       </div>
 
-      {/* Add prominent alert for disconnected/error states with detailed error message */}
+      {/* Single alert for disconnected/error states with detailed error message */}
       {isDisconnectedOrError && (
-        <div className="mt-2 p-2 bg-rose-100 dark:bg-rose-900/20 rounded-md border border-rose-200 dark:border-rose-800/50">
-          <div className="flex items-center gap-2">
-            <Icon name="alert-triangle" size="sm" className="text-rose-600 dark:text-rose-400" />
-            <div className="flex-1">
-              <Typography variant="small" className="text-rose-600 dark:text-rose-400 font-medium">
-                {status === 'disconnected'
-                  ? 'Server connection lost. Click the refresh button to reconnect.'
-                  : 'Server connection error. Check your configuration and try again.'}
-              </Typography>
-              {/* Show detailed error message if available - prefer background error over local error */}
-              {(backgroundConnectionError || lastErrorMessage) && (
-                <Typography variant="small" className="text-rose-500 dark:text-rose-300 mt-1 text-xs">
-                  Details: {backgroundConnectionError || lastErrorMessage}
-                </Typography>
-              )}
-            </div>
-          </div>
+        <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50">
+          <p className="text-xs text-rose-700 dark:text-rose-300">{statusMessage}</p>
+          {(backgroundConnectionError || lastErrorMessage) && (
+            <p className="mt-1 text-[11px] text-rose-600/80 dark:text-rose-400/80 break-words">
+              {backgroundConnectionError || lastErrorMessage}
+            </p>
+          )}
         </div>
       )}
-      {/* Add connecting status indicator for background communication issues */}
+
+      {/* Background communication issue indicator */}
       {(hasBackgroundError || !communicationMethods.sendMessage) && (
-        <div className="bg-amber-50 dark:bg-amber-900/10 border-b border-amber-200/50 dark:border-amber-800/30 p-2 flex-shrink-0">
-          <div className="flex items-center space-x-2">
+        <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30">
+          <div className="flex items-center gap-2">
             <div className="animate-spin w-3 h-3 border border-amber-500 border-t-transparent rounded-full"></div>
-            <Typography variant="caption" className="text-amber-700 dark:text-amber-300 text-xs">
-              Connecting to extension services...
-            </Typography>
+            <span className="text-xs text-amber-700 dark:text-amber-300">Connecting to extension services...</span>
           </div>
         </div>
       )}
 
       {/* Settings panel */}
       {showSettings && (
-        <div className="mt-3 animate-in slide-in-from-top-2 duration-200">
-          <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
-            <CardContent className="p-4 text-xs text-slate-700 dark:text-slate-300">
-              <Typography variant="h4" className="mb-3 text-slate-800 dark:text-slate-100 font-semibold">
-                Server Configuration
-              </Typography>
-              
+        <div className="mx-3 mb-3 animate-in slide-in-from-top-2 duration-200">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <CardContent className="p-3 text-xs text-slate-700 dark:text-slate-300">
+              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Server Configuration</div>
+
               <div className="mb-4">
                 <label htmlFor="connection-type" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
                   Connection Type
@@ -781,7 +690,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onChange={handleConnectionTypeChange}
                   onFocus={handleConnectionTypeFocus}
                   onBlur={handleConnectionTypeBlur}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
+                  className="w-full h-8 px-2 text-sm border border-slate-300 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 >
                   <option value="sse">Server-Sent Events (SSE)</option>
                   <option value="websocket">WebSocket</option>
@@ -807,49 +716,38 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onChange={handleServerUriChange}
                   onFocus={handleServerUriFocus}
                   onBlur={handleServerUriBlur}
-                  placeholder={connectionType === 'sse' 
-                    ? "http://localhost:3006/sse" 
+                  placeholder={connectionType === 'sse'
+                    ? "http://localhost:3006/sse"
                     : connectionType === 'websocket'
                       ? "ws://localhost:3006/message"
                       : "http://localhost:3006/mcp"}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
+                  className="w-full h-8 px-2 text-sm border border-slate-300 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
-                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  <div className="mb-2">
+                <details className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <summary className="text-xs font-medium text-slate-500 dark:text-slate-400 cursor-pointer">Setup help</summary>
+                  <div className="mt-2 mb-2">
                     <strong>To start MCP SuperAssistant Proxy:</strong>
                   </div>
-                  <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded font-mono text-xs border">
+                  <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-md font-mono text-[11px] border border-slate-200 dark:border-slate-700 break-all">
                     npx @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json --outputTransport {connectionType === 'sse' ? 'sse' : connectionType === 'websocket' ? 'ws' : 'streamableHttp'}
                   </div>
                   <div className="mt-2 text-xs">
                     <div className="mb-1">
                       Available transports: <code>streamableHttp</code>, <code>sse</code>, <code>ws</code>
                     </div>
-                    <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
-                      <div className="font-medium text-blue-800 dark:text-blue-200 mb-1">📡 Public Endpoints Supported:</div>
-                      <div className="text-blue-700 dark:text-blue-300 space-y-1">
+                    <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
+                      <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">Public Endpoints Supported:</div>
+                      <div className="text-slate-600 dark:text-slate-300 space-y-1">
                         <div>• <strong>Zapier:</strong> Public MCP endpoints with CORS enabled</div>
                         <div>• <strong>Composio:</strong> SSE and Streamable HTTP endpoints</div>
                         <div>• <strong>Custom servers:</strong> Any MCP server with CORS headers</div>
                       </div>
-                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                         <strong>Note:</strong> WebSocket connections require local servers or proxy due to browser security restrictions.
                       </div>
                     </div>
-                    {/* <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
-                      <div className="font-medium text-green-800 dark:text-green-200 mb-2">🌍 Example Public Endpoints:</div>
-                      <div className="text-green-700 dark:text-green-300 space-y-1 text-xs">
-                        <div><strong>SSE:</strong></div>
-                        <div className="ml-2">• <code>https://api.zapier.com/v1/mcp/sse</code></div>
-                        <div className="ml-2">• <code>https://composio.dev/api/mcp/sse</code></div>
-                        <div className="mt-2"><strong>Streamable HTTP:</strong></div>
-                        <div className="ml-2">• <code>https://api.zapier.com/v1/mcp</code></div>
-                        <div className="ml-2">• <code>https://composio.dev/api/mcp</code></div>
-                        <div className="ml-2">• <code>https://your-server.com/mcp</code></div>
-                      </div>
-                    </div> */}
                   </div>
-                </div>
+                </details>
               </div>
               <div className="flex justify-end gap-2">
                 <Button
@@ -867,14 +765,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   }}
                   variant="outline"
                   size="sm"
-                  className="h-8 px-3 text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95">
+                  className="h-7 px-2.5 text-xs font-medium border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSaveServerConfig}
                   variant="default"
                   size="sm"
-                  className="h-8 px-3 text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white dark:text-white save-button-stable"
+                  className="h-7 px-2.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-md save-button-stable"
                   disabled={hasBackgroundError || isReconnecting}>
                   {isReconnecting ? (
                     <div className="flex items-center gap-2">
@@ -902,24 +800,20 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       {/* Details panel */}
       {showDetails && (
-        <div className="mt-3 animate-in slide-in-from-top-2 duration-200">
-          <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
-            <CardContent className="p-4 text-xs text-slate-700 dark:text-slate-300">
-              <Typography variant="h4" className="mb-3 text-slate-800 dark:text-slate-100 font-semibold">
-                Connection Details
-              </Typography>
+        <div className="mx-3 mb-3 animate-in slide-in-from-top-2 duration-200">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <CardContent className="p-3 text-xs text-slate-700 dark:text-slate-300">
+              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Connection Details</div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className="flex justify-between items-center py-1">
                   <span className="font-medium text-slate-700 dark:text-slate-200">Status:</span>
                   <span
                     className={cn(
-                      'px-2 py-1 rounded-full text-xs font-medium',
+                      'text-[11px] px-1.5 py-0.5 rounded font-medium',
                       status === 'connected'
                         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
-                        : status === 'disconnected'
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400'
-                          : 'bg-slate-100 text-slate-700 dark:bg-slate-900/20 dark:text-slate-400',
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
                     )}>
                     {statusInfo.label}
                   </span>
@@ -934,14 +828,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
                 <div className="flex justify-between items-center py-1">
                   <span className="font-medium text-slate-700 dark:text-slate-200">Connection Type:</span>
-                  <span className={cn(
-                    'px-2 py-1 rounded-full text-xs font-medium',
-                    connectionType === 'websocket' 
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                      : connectionType === 'streamable-http'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                        : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
-                  )}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {connectionType === 'websocket' ? 'WebSocket' : connectionType === 'streamable-http' ? 'Streamable HTTP' : 'SSE'}
                   </span>
                 </div>

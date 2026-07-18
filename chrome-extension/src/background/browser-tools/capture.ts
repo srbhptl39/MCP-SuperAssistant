@@ -71,7 +71,7 @@ async function handleCapture(): Promise<void> {
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: extractReadableContent,
-      args: [settings.captureMode, CAPTURE_MAX_CHARS],
+      args: [settings.captureMode, CAPTURE_MAX_CHARS, true],
     });
     data = injection?.result;
   } catch (err) {

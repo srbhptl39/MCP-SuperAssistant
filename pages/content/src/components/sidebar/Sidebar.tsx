@@ -5,14 +5,12 @@ import { useUIStore } from '@src/stores/ui.store';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
-import InputArea from './InputArea/InputArea';
 import Settings from './Settings/Settings';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { logMessage } from '@src/utils/helpers';
 import { eventBus } from '@src/events/event-bus';
-import { Typography, Toggle, ToggleWithoutLabel, ResizeHandle, Icon, Button } from './ui';
+import { Typography, ResizeHandle, Icon, Button } from './ui';
 import { cn } from '@src/lib/utils';
-import { Card, CardContent } from '@src/components/ui/card';
 import type { UserPreferences } from '@src/types/stores';
 import { createLogger } from '@extension/shared/lib/logger';
 // Debug helper function to check if activeSidebarManager is available
@@ -375,31 +373,6 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   }, [theme, applyTheme]);
   // --- End Theme Application Logic ---
 
-  // useEffect(() => {
-  //   // Function to update detected tools
-  //   const updateDetectedTools = () => {
-  //     try {
-  //       const toolDict = getMasterToolDict();
-  //       const mcpTools = Object.values(toolDict) as DetectedTool[];
-
-  //       // Update the detected tools state
-  //       setDetectedTools(mcpTools);
-
-  //       if (mcpTools.length > 0) {
-  //         // logMessage(`[Sidebar] Found ${mcpTools.length} MCP tools`);
-  //       }
-  //     } catch (error) {
-  //       // If getMasterToolDict fails, just log the error
-  //       logger.error("Error updating detected tools:", error);
-  //     }
-  //   };
-
-  //   // Set up interval to check for new tools
-  //   const updateInterval = setInterval(updateDetectedTools, 1000);
-
-  //   // Track URL changes to clear detected tools on navigation
-  //   let lastUrl = window.location.href;
-
   // Apply push mode when settings change - with robust retry mechanism
   useEffect(() => {
     logMessage(`[Sidebar] Push mode effect triggered - visible: ${sidebarVisible}, pushMode: ${isPushMode}, minimized: ${isMinimized}, width: ${sidebarWidth}`);
@@ -634,6 +607,14 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     }
   };
 
+  const tabClass = (active: boolean) =>
+    cn(
+      'py-2 px-3 text-xs font-medium border-b-2 transition-colors duration-150',
+      active
+        ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+        : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+    );
+
   return (
     <div
       ref={sidebarRef}
@@ -656,61 +637,30 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       )}
 
       {/* Header - Adjust content based on isMinimized */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between flex-shrink-0 shadow-sm sidebar-header">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0 sidebar-header">
         {!isMinimized ? (
           <>
-            <div className="flex items-center space-x-2">
-              {/* Always show the header content immediately */}
-              <a
-                href="https://mcpsuperassistant.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Visit MCP Super Assistant Website"
-                className="block">
-                {' '}
-                {/* Make link block for sizing */}
-                <img
-                  src={chrome.runtime.getURL('icon-34.png')}
-                  alt="MCP Logo"
-                  className="w-8 h-8 rounded-md " // Increase size & add rounded corners
-                />
-              </a>
-              <>
-                {/* Wrap title in link */}
-                <a
-                  href="https://mcpsuperassistant.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-slate-800 dark:text-slate-100 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 no-underline"
-                  aria-label="Visit MCP Super Assistant Website">
-                  <Typography variant="h4" className="font-semibold">
-                    MCP SuperAssistant
-                  </Typography>
-                </a>
-                {/* Existing icon link */}
-                <a
-                  href="https://mcpsuperassistant.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors duration-150"
-                  aria-label="Visit MCP Super Assistant Website">
-                  <Icon name="arrow-up-right" size="xs" className="inline-block align-baseline" />
-                </a>
-              </>
-            </div>
-            <div className="flex items-center space-x-2 pr-1">
+            <a
+              href="https://mcpsuperassistant.ai/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Visit MCP Super Assistant Website"
+              className="flex items-center gap-2 no-underline">
+              <img src={chrome.runtime.getURL('icon-34.png')} alt="MCP Logo" className="w-5 h-5 rounded" />
+              <span className="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100">
+                MCP SuperAssistant
+              </span>
+            </a>
+            <div className="flex items-center gap-1">
               {/* Theme Toggle Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleThemeToggle}
                 aria-label={`Toggle theme (current: ${theme})`}
-                className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
-                <Icon
-                  name={getCurrentThemeIcon()}
-                  size="sm"
-                  className="transition-all text-indigo-600 dark:text-indigo-400"
-                />
+                title="Toggle theme"
+                className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
+                <Icon name={getCurrentThemeIcon()} size="sm" />
                 <span className="sr-only">Toggle theme</span>
               </Button>
               {/* Minimize Button */}
@@ -719,21 +669,37 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                 size="icon"
                 onClick={handleToggleMinimize}
                 aria-label="Minimize sidebar"
-                className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
-                <Icon name="chevron-right" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+                title="Minimize sidebar"
+                className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
+                <Icon name="chevron-right" className="h-4 w-4" />
               </Button>
             </div>
           </>
         ) : (
-          // Expand Button when minimized
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleToggleMinimize}
-            aria-label="Expand sidebar"
-            className="mx-auto hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-110">
-            <Icon name="chevron-left" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-          </Button>
+          // Minimized rail: expand chevron, logo, and glanceable status dot
+          <div className="flex flex-col items-center gap-2 w-full">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleToggleMinimize}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
+              <Icon name="chevron-left" className="h-4 w-4" />
+            </Button>
+            <img src={chrome.runtime.getURL('icon-34.png')} alt="MCP Logo" className="w-5 h-5 rounded" />
+            <span
+              className={cn(
+                'w-2 h-2 rounded-full',
+                serverStatus === 'connected'
+                  ? 'bg-emerald-500'
+                  : serverStatus === 'disconnected' || serverStatus === 'error'
+                    ? 'bg-rose-500'
+                    : 'bg-amber-500',
+              )}
+              aria-label={`Server ${serverStatus}`}
+            />
+          </div>
         )}
       </div>
 
@@ -792,85 +758,24 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             )}
 
             {/* Status and Settings section */}
-            <div className="py-4 px-4 space-y-4 overflow-y-auto flex-shrink-0">
+            <div className="py-3 px-3 space-y-3 overflow-y-auto flex-shrink-0">
               <ServerStatus status={serverStatus} />
-
-              {/* Settings */}
-              <Card className="sidebar-card border-slate-200 dark:border-slate-700 dark:bg-slate-800 flex-shrink-0 overflow-hidden rounded-lg shadow-sm transition-shadow duration-300">
-                <CardContent className="p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300 font-medium">
-                      Push Content Mode
-                    </Typography>
-                    <ToggleWithoutLabel
-                      label="Push Content Mode"
-                      checked={isPushMode}
-                      onChange={handlePushModeToggle}
-                    />
-                  </div>
-                  {/* <div className="flex items-center justify-between">
-                    <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300 font-medium">
-                      Auto Submit Tool Results
-                    </Typography>
-                    <ToggleWithoutLabel
-                      label="Auto Submit Tool Results"
-                      checked={autoSubmit}
-                      onChange={handleAutoSubmitToggle}
-                    />
-                  </div> */}
-
-                  {/* DEBUG BUTTON - ONLY FOR DEVELOPMENT - REMOVE IN PRODUCTION */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-2 border-slate-200 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
-                      onClick={() => {
-                        const shadowHost = (window as any).activeSidebarManager?.getShadowHost();
-                        if (shadowHost && shadowHost.shadowRoot) {
-                          logMessage('Shadow DOM debug requested');
-                          // Debug functionality removed - use browser dev tools instead
-                        } else {
-                          logMessage('Cannot debug: Shadow DOM not found');
-                        }
-                      }}>
-                      Debug Styles
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
 
               {/* Tabs for Tools/Instructions */}
               <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
                 <div className="flex">
-                  <button
-                    className={cn(
-                      'py-2 px-4 font-medium text-sm transition-all duration-200',
-                      activeTab === 'availableTools'
-                        ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
+                  <button className={tabClass(activeTab === 'availableTools')} onClick={() => setActiveTab('availableTools')}>
+                    Tools
+                    {availableTools.length > 0 && (
+                      <span className="ml-1.5 text-[10px] px-1.5 rounded-full bg-slate-100 dark:bg-slate-800 tabular-nums">
+                        {availableTools.length}
+                      </span>
                     )}
-                    onClick={() => setActiveTab('availableTools')}>
-                    Available Tools
                   </button>
-                  <button
-                    className={cn(
-                      'py-2 px-4 font-medium text-sm transition-all duration-200',
-                      activeTab === 'instructions'
-                        ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
-                    )}
-                    onClick={() => setActiveTab('instructions')}>
+                  <button className={tabClass(activeTab === 'instructions')} onClick={() => setActiveTab('instructions')}>
                     Instructions
                   </button>
-                  <button
-                    className={cn(
-                      'py-2 px-4 font-medium text-sm transition-all duration-200',
-                      activeTab === 'settings'
-                        ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
-                    )}
-                    onClick={() => setActiveTab('settings')}>
+                  <button className={tabClass(activeTab === 'settings')} onClick={() => setActiveTab('settings')}>
                     Settings
                   </button>
                 </div>
@@ -878,71 +783,39 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             </div>
 
             {/* Tab Content Area - scrollable area with flex-grow to fill available space */}
-            <div className="flex-1 min-h-0 px-4 pb-4 overflow-hidden">
+            <div className="flex-1 min-h-0 px-3 pb-3 overflow-hidden">
               {/* AvailableTools */}
               <div
                 className={cn(
-                  'h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
+                  'h-full overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
                   { hidden: activeTab !== 'availableTools' },
                 )}>
-                <Card className="border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
-                  <CardContent className="p-0">
-                    <AvailableTools
-                      tools={availableTools}
-                      onExecute={sendMessage}
-                      onRefresh={handleRefreshTools}
-                      isRefreshing={isRefreshing}
-                    />
-                  </CardContent>
-                </Card>
+                <AvailableTools
+                  tools={availableTools}
+                  onExecute={sendMessage}
+                  onRefresh={handleRefreshTools}
+                  isRefreshing={isRefreshing}
+                />
               </div>
 
               {/* Instructions */}
               <div
                 className={cn(
-                  'h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
+                  'h-full overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
                   { hidden: activeTab !== 'instructions' },
                 )}>
-                <Card className="border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
-                  <CardContent className="p-0">
-                    <InstructionManager adapter={adapter} tools={formattedTools} />
-                  </CardContent>
-                </Card>
+                <InstructionManager adapter={adapter} tools={formattedTools} />
               </div>
 
               {/* Settings */}
               <div
                 className={cn(
-                  'h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
+                  'h-full overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
                   { hidden: activeTab !== 'settings' },
                 )}>
                 <Settings />
               </div>
             </div>
-
-            {/* Input Area (Always at the bottom) */}
-            {/* <div className="border-t border-slate-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800 shadow-inner">
-              {!isInputMinimized ? (
-                <div className="relative">
-                  <Button variant="ghost" size="sm" onClick={toggleInputMinimize} className="absolute top-2 right-2">
-                    <Icon name="chevron-down" size="sm" />
-                  </Button>
-                  <InputArea
-                    onSubmit={async text => {
-                      await adapter.insertTextIntoInput(text);
-                      await new Promise(resolve => setTimeout(resolve, 300));
-                      await adapter.triggerSubmission();
-                    }}
-                    onToggleMinimize={toggleInputMinimize}
-                  />
-                </div>
-              ) : (
-                <Button variant="default" size="sm" onClick={toggleInputMinimize} className="w-full h-10">
-                  <Icon name="chevron-up" size="sm" className="mr-2" />
-                  Show Input
-                </Button>
-              )}
-            </div> */}
           </div>
         </div>
       </div>

@@ -15,6 +15,7 @@ export interface ExecutedFunction {
   contentSignature: string; // Hash or signature of the function content
   executedAt: number; // Timestamp when the function was executed
   params: Record<string, any>; // Parameters used in the function call
+  paramsOmitted?: true; // Set when params were too large to persist (dropped on store)
 }
 
 // Define the URL-based storage structure
@@ -24,6 +25,42 @@ interface URLBasedFunctionHistory {
 
 // Storage key for the executed functions
 const STORAGE_KEY = 'mcp_url_based_function_history';
+
+// Cleanup / growth-limiting knobs (single source of truth)
+const CLEANUP = {
+  TTL_MS: 14 * 24 * 60 * 60 * 1000, // entries older than 14 days
+  MAX_ENTRIES_PER_URL: 50,
+  MAX_ENTRIES_TOTAL: 500,
+  MAX_TOTAL_BYTES: 512 * 1024, // serialized blob cap
+  MAX_ENTRY_BYTES: 64 * 1024, // single record cap → params omitted
+  PERIODIC_MS: 10 * 60 * 1000, // re-prune while page stays open
+} as const;
+
+// Memoized blob so completed renders don't re-parse the whole thing every time.
+let memo: URLBasedFunctionHistory | null = null;
+
+const parseFromLocalStorage = (): URLBasedFunctionHistory => {
+  try {
+    const storedData = localStorage.getItem(STORAGE_KEY);
+    return storedData ? JSON.parse(storedData) : {};
+  } catch (error) {
+    logger.error('Failed to retrieve URL-based function history:', error);
+    return {};
+  }
+};
+
+// Invalidate the memo when another tab writes the same key.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => {
+    if (e.key === STORAGE_KEY) memo = null;
+  });
+}
+
+// Single write path: persist + keep the memo in sync.
+const writeURLBasedStorage = (storage: URLBasedFunctionHistory): void => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+  memo = storage;
+};
 
 /**
  * Store information about an executed function with race condition prevention
@@ -44,13 +81,19 @@ export const storeExecutedFunction = (
   const url = window.location.href;
 
   // Create the execution record
-  const executionRecord: ExecutedFunction = {
+  let executionRecord: ExecutedFunction = {
     functionName,
     callId,
     contentSignature,
     executedAt: Date.now(),
     params,
   };
+
+  // Cap a single record: if the params blow past the per-entry budget, drop them.
+  // Dedupe still works (key is name:callId:signature); only re-execute loses its args.
+  if (JSON.stringify(executionRecord).length > CLEANUP.MAX_ENTRY_BYTES) {
+    executionRecord = { ...executionRecord, params: {}, paramsOmitted: true };
+  }
 
   // Create a unique key for this function execution
   const executionKey = generateExecutionKey(functionName, callId, contentSignature);
@@ -66,33 +109,138 @@ export const storeExecutedFunction = (
   // Add/update the execution record
   storage[url][executionKey] = executionRecord;
 
-  // Save back to storage with race condition prevention
+  // Save back; on quota errors, prune once (which frees space) and retry.
   try {
-    const maxRetries = 3;
-    let retries = 0;
-    let saved = false;
-
-    while (!saved && retries < maxRetries) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
-        saved = true;
-      } catch (error) {
-        retries++;
-        // Short delay before retrying
-        if (retries < maxRetries) {
-          logger.warn(`Storage write failed, retrying (${retries}/${maxRetries})`);
-        }
-      }
-    }
-
-    if (!saved) {
-      logger.error('Failed to store executed function after multiple attempts');
-    }
+    writeURLBasedStorage(storage);
   } catch (error) {
-    logger.error('Failed to store executed function:', error);
+    logger.warn('Storage write failed, pruning and retrying once:', error);
+    try {
+      pruneFunctionHistory();
+      const pruned = getURLBasedStorage();
+      if (!pruned[url]) pruned[url] = {};
+      pruned[url][executionKey] = executionRecord;
+      writeURLBasedStorage(pruned);
+    } catch (retryError) {
+      logger.error('Failed to store executed function after prune+retry:', retryError);
+    }
   }
 
   return executionRecord;
+};
+
+/**
+ * Prune the function history in place: drop expired entries, cap per-URL and
+ * global entry counts, and cap the serialized blob size (oldest-first eviction).
+ * Exported so cleanup scheduling can call it directly.
+ */
+export const pruneFunctionHistory = (): void => {
+  let storage: URLBasedFunctionHistory;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    storage = JSON.parse(raw);
+  } catch (error) {
+    // Corrupt blob — nuke it rather than let it wedge every future write.
+    logger.error('Function history unparseable, clearing:', error);
+    localStorage.removeItem(STORAGE_KEY);
+    memo = null;
+    return;
+  }
+
+  let changed = false;
+  const cutoff = Date.now() - CLEANUP.TTL_MS;
+
+  // 1. TTL sweep + drop empty buckets.
+  for (const url of Object.keys(storage)) {
+    const bucket = storage[url];
+    for (const key of Object.keys(bucket)) {
+      if (bucket[key].executedAt < cutoff) {
+        delete bucket[key];
+        changed = true;
+      }
+    }
+    if (Object.keys(bucket).length === 0) {
+      delete storage[url];
+      changed = true;
+    }
+  }
+
+  // 2. Per-bucket cap: keep newest MAX_ENTRIES_PER_URL.
+  for (const url of Object.keys(storage)) {
+    const bucket = storage[url];
+    const keys = Object.keys(bucket);
+    if (keys.length > CLEANUP.MAX_ENTRIES_PER_URL) {
+      const survivors = keys
+        .sort((a, b) => bucket[b].executedAt - bucket[a].executedAt)
+        .slice(0, CLEANUP.MAX_ENTRIES_PER_URL);
+      const kept: Record<string, ExecutedFunction> = {};
+      for (const k of survivors) kept[k] = bucket[k];
+      storage[url] = kept;
+      changed = true;
+    }
+  }
+
+  // Flatten to a single oldest-first list for global eviction passes.
+  const flatten = () => {
+    const flat: { url: string; key: string; entry: ExecutedFunction }[] = [];
+    for (const url of Object.keys(storage)) {
+      for (const key of Object.keys(storage[url])) {
+        flat.push({ url, key, entry: storage[url][key] });
+      }
+    }
+    flat.sort((a, b) => a.entry.executedAt - b.entry.executedAt); // oldest first
+    return flat;
+  };
+
+  const evict = ({ url, key }: { url: string; key: string }) => {
+    delete storage[url][key];
+    if (Object.keys(storage[url]).length === 0) delete storage[url];
+    changed = true;
+  };
+
+  // 3. Global entry cap.
+  let flat = flatten();
+  while (flat.length > CLEANUP.MAX_ENTRIES_TOTAL) {
+    evict(flat.shift()!);
+  }
+
+  // 4. Serialized byte cap.
+  if (JSON.stringify(storage).length > CLEANUP.MAX_TOTAL_BYTES) {
+    flat = flat.length ? flat : flatten();
+    while (flat.length > 0 && JSON.stringify(storage).length > CLEANUP.MAX_TOTAL_BYTES) {
+      evict(flat.shift()!);
+    }
+  }
+
+  if (changed) {
+    try {
+      writeURLBasedStorage(storage);
+    } catch (error) {
+      logger.error('Failed to write pruned function history:', error);
+      memo = storage; // keep the in-memory view consistent even if persist failed
+    }
+  }
+};
+
+/**
+ * Run storage cleanup: prune now, sweep the legacy chrome.storage key, and
+ * schedule periodic re-prune once. Idempotent — safe to call on every init.
+ */
+let cleanupScheduled = false;
+export const runStorageCleanup = (): void => {
+  pruneFunctionHistory();
+
+  // Legacy sweep: the old mcp_executed_tools key is dead code now.
+  try {
+    chrome?.storage?.local?.remove?.('mcp_executed_tools');
+  } catch {
+    // chrome.storage may be unavailable; nothing to clean up then.
+  }
+
+  if (!cleanupScheduled) {
+    cleanupScheduled = true;
+    setInterval(pruneFunctionHistory, CLEANUP.PERIODIC_MS);
+  }
 };
 
 /**
@@ -107,15 +255,7 @@ const generateExecutionKey = (functionName: string, callId: string, contentSigna
  *
  * @returns URL-based function history storage
  */
-const getURLBasedStorage = (): URLBasedFunctionHistory => {
-  try {
-    const storedData = localStorage.getItem(STORAGE_KEY);
-    return storedData ? JSON.parse(storedData) : {};
-  } catch (error) {
-    logger.error('Failed to retrieve URL-based function history:', error);
-    return {};
-  }
-};
+const getURLBasedStorage = (): URLBasedFunctionHistory => (memo ??= parseFromLocalStorage());
 
 /**
  * Get all stored executed functions (legacy interface for backward compatibility)

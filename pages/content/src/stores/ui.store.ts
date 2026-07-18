@@ -56,6 +56,8 @@ const initialUserPreferences: UserPreferences = {
   isMinimized: false,
   customInstructions: '',
   customInstructionsEnabled: false,
+  promptMode: 'compact', // Default to the token-efficient compact generator
+  autoDiscovery: true,   // Auto-run discovery meta-tools even when autoExecute is off
   autoInsertDelay: 2,  // Default delay in seconds
   autoExecuteDelay: 2,  // Default delay in seconds
   autoSubmitDelay: 2,   // Default delay in seconds
@@ -309,6 +311,18 @@ export const useUIStore = create<UIState>()(
           theme: state.theme, // Persist theme
           mcpEnabled: state.mcpEnabled, // Persist MCP toggle state across page refreshes
         }),
+        // Deep-merge preferences so newly-added keys (e.g. promptMode, autoDiscovery)
+        // fall back to their defaults for users whose persisted blob predates them.
+        // Zustand's default merge is shallow and would replace the whole preferences
+        // object, dropping any key the persisted blob doesn't contain.
+        merge: (persisted, current) => {
+          const p = (persisted ?? {}) as Partial<UIState>;
+          return {
+            ...current,
+            ...p,
+            preferences: { ...current.preferences, ...(p.preferences ?? {}) },
+          };
+        },
       }
     ),
     { name: 'UIStore', store: 'ui' }
