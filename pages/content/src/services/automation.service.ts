@@ -353,7 +353,7 @@ export class AutomationService {
               // Small delay to ensure file attachment is processed
               setTimeout(async () => {
                 try {
-                  await insertText(detail.confirmationText!);
+                  await insertText(detail.confirmationText!, { source: 'tool-result' });
                 } catch (error) {
                   logger.error('[AutomationService] Error inserting confirmation text:', error);
                 }
@@ -382,7 +382,7 @@ export class AutomationService {
         logger.debug('[AutomationService] Auto inserting text result');
         
         try {
-          const success = await insertText(detail.result);
+          const success = await insertText(detail.result, { source: 'tool-result' });
           
           if (success) {
             logger.debug('[AutomationService] Text inserted successfully via auto insert');

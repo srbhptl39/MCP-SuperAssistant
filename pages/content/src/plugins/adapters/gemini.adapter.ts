@@ -1,7 +1,8 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { adapterConfigManager, type AdapterConfig } from './defaultConfigs';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * Gemini Adapter for Google Gemini (gemini.google.com)
@@ -131,6 +132,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -163,7 +165,8 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Remove injected Gemini styles
     const styleElement = document.getElementById('mcp-gemini-button-styles');
     if (styleElement) {
@@ -182,7 +185,12 @@ export class GeminiAdapter extends BaseAdapterPlugin {
    * Insert text into the Gemini chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into Gemini chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -243,11 +251,27 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    const p = document.querySelector(this.getSelector('chatInput').split(', ')[0].trim())
+      ?? document.querySelector('.ql-editor p, .ql-editor');
+    const input = ((p as HTMLElement | null)?.closest?.('.ql-editor') as HTMLElement | null)
+      ?? (p as HTMLElement | null);
+    if (!input) return null;
+    const container = (input.closest('.text-input-field')
+      ?? input.closest('.input-area-container')
+      ?? input.closest('.input-area')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.getSelector('submitButton') };
+  }
+
   /**
    * Submit the current text in the Gemini chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit Gemini chat input');
 
     let submitButton: HTMLButtonElement | null = null;

@@ -157,7 +157,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
     // Resolve adapter at insert time — the popover may have closed / switched mid-fetch.
     const plugin = useAdapterStore.getState().getActiveAdapter()?.plugin;
     try {
-      await plugin?.insertText?.(header + blocks.join('\n\n'));
+      await plugin?.insertText?.(header + blocks.join('\n\n'), { source: 'tab-content', label: `${blocks.length} browser tab${blocks.length > 1 ? 's' : ''}` });
     } catch (err) {
       logger.error('[TabPicker] insertText failed:', err);
       if (mountedRef.current) {

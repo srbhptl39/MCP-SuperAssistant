@@ -13,7 +13,10 @@ export function useCurrentAdapter() {
   const { activeAdapterName, plugin, status, currentCapabilities, error } = useActiveAdapter();
   const emit = useEventEmitter();
 
-  const insertText = useCallback(async (text: string): Promise<boolean> => {
+  const insertText = useCallback(async (
+    text: string,
+    options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string },
+  ): Promise<boolean> => {
     if (!plugin || !plugin.insertText) {
       logger.warn('[useCurrentAdapter] No active plugin for insertText');
       return false;
@@ -21,7 +24,7 @@ export function useCurrentAdapter() {
 
     try {
       emit('tool:execution-started', { toolName: 'insertText', callId: `adapter-${Date.now()}` });
-      const result = await plugin.insertText(text);
+      const result = await plugin.insertText(text, options);
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

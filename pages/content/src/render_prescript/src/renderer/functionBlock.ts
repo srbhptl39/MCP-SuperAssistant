@@ -4,12 +4,10 @@ import { safelySetContent } from '../utils/index';
 import {
   addRawXmlToggle,
   addExecuteButton,
-  setupAutoScroll,
   extractFunctionParameters,
 } from './components';
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
-import type { ParamValueElement } from '../core/types';
 import { extractJSONFunctionInfo, extractJSONParameters } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
 
@@ -1017,7 +1015,6 @@ const ParamElementUtils = {
         ScrollUtils.setupScrollTracking(paramValueElement);
       }
 
-      setupAutoScroll(paramValueElement as ParamValueElement);
       ScrollUtils.performStreamingScroll(paramValueElement);
       // Streaming state is cleared only when the parser reports the param complete
       // (the else branch below) — no timeout-based teardown that caused collapse/re-expand churn.

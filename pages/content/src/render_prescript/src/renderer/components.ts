@@ -1,4 +1,3 @@
-import type { ParamValueElement } from '../core/types';
 import { CONFIG } from '../core/config';
 import { safelySetContent, scheduleWork } from '../utils/index';
 import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/storage';
@@ -96,6 +95,9 @@ function adapterSupportsCapability(capability: string): boolean {
 
 // Performance optimizations: Cache constants and pre-compile regexes
 const MAX_INSERT_LENGTH = 39000;
+const MAX_RESULT_DISPLAY_CHARS = 20000; // ponytail: hard display cap; raw text stays intact for insert/copy
+
+const formatDuration = (ms: number): string => (ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`);
 const WEBSITE_NAME_FOR_MAX_INSERT_LENGTH_CHECK = ['perplexity'];
 const websiteName = window.location.hostname
   .toLowerCase()
@@ -280,15 +282,6 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
 };
 
 /**
- * Setup auto-scroll functionality for parameter value divs
- *
- * @param paramValueDiv Parameter value div element
- */
-export const setupAutoScroll = (paramValueDiv: ParamValueElement): void => {
-  // Auto scroll disabled.
-};
-
-/**
  * Optimized execute button creation with efficient DOM operations
  * Performance improvements: batch DOM operations, use ElementPool, cache queries
  *
@@ -394,15 +387,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
   // Create optimized loading indicator
   const loadingIndicator = createOptimizedElement('div', {
-    className: 'function-loading',
-    styles: {
-      display: 'none',
-      marginTop: '12px',
-      padding: '10px',
-      borderRadius: '8px',
-      backgroundColor: 'rgba(0, 0, 0, 0.03)',
-      border: '1px solid rgba(0, 0, 0, 0.06)',
-    },
+    className: 'function-results-loading',
+    textContent: 'Running…',
   }) as HTMLDivElement;
 
   // Cache DOM references for performance
@@ -413,6 +399,15 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
     // Batch button state changes
     executeButton.disabled = true;
     buttonText.style.display = 'none';
+
+    const fnBlock = blockDiv.closest('.function-block') as HTMLElement | null;
+    const setStatus = (s: 'running' | 'success' | 'error') => {
+      if (!fnBlock) return;
+      fnBlock.classList.remove('exec-running', 'exec-success', 'exec-error');
+      fnBlock.classList.add(`exec-${s}`);
+    };
+    setStatus('running');
+    const t0 = performance.now();
 
     // Add spinner efficiently
     const spinner = createOptimizedElement('span', {
@@ -447,6 +442,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
       if (!mcpClient) {
         resetButtonState();
+        setStatus('error');
         displayResult(resultsPanel, loadingIndicator, false, 'Error: mcpClient not found');
         resultsPanel.style.display = 'block';
         return;
@@ -455,6 +451,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       // Check if mcpClient is ready
       if (!mcpClient.isReady || !mcpClient.isReady()) {
         resetButtonState();
+        setStatus('error');
         displayResult(resultsPanel, loadingIndicator, false, 'Error: MCP client not ready');
         resultsPanel.style.display = 'block';
         return;
@@ -465,6 +462,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       // Show results panel and loading indicator
       resultsPanel.style.display = 'block';
       resultsPanel.innerHTML = '';
+      loadingIndicator.style.display = '';
       resultsPanel.appendChild(loadingIndicator);
 
       // Call tool using the new mcpClient async API
@@ -472,7 +470,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         const result = await mcpClient.callTool(functionName, parameters);
 
         resetButtonState();
-        displayResult(resultsPanel, loadingIndicator, true, result);
+        setStatus('success');
+        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0);
 
         // Store execution and update history efficiently
         const executionData = storeExecutedFunction(functionName, callId, parameters, contentSignature);
@@ -497,7 +496,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
           errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
 
-        displayResult(resultsPanel, loadingIndicator, false, errorMessage);
+        setStatus('error');
+        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0);
       }
 
     } catch (error: any) {
@@ -507,11 +507,13 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Execute button error:', error);
 
+      setStatus('error');
       displayResult(
         resultsPanel,
         loadingIndicator,
         false,
         `Unexpected error: ${errorMessage}`,
+        performance.now() - t0,
       );
     }
   };
@@ -985,6 +987,7 @@ export const displayResult = (
   loadingIndicator: HTMLDivElement,
   success: boolean,
   result: any,
+  durationMs?: number,
 ): void => {
   // Cache attributes for performance
   const callId = resultsPanel.getAttribute('data-call-id') || '';
@@ -998,7 +1001,7 @@ export const displayResult = (
     }
 
     // Batch remove existing result content
-    const existingResults = resultsPanel.querySelectorAll('.function-result-success, .function-result-error');
+    const existingResults = resultsPanel.querySelectorAll('.function-result-success, .function-result-error, .result-header');
     existingResults.forEach(el => resultsPanel.removeChild(el));
 
     // Remove previous button container
@@ -1043,6 +1046,52 @@ export const displayResult = (
   cleanupPreviousResults();
   loadingIndicator.style.display = 'none';
 
+  const makeResultHeader = (ok: boolean, copyText: string): HTMLDivElement => {
+    const header = createOptimizedElement('div', { className: 'result-header' }) as HTMLDivElement;
+
+    const left = createOptimizedElement('span', { className: 'result-header-left' });
+    left.appendChild(createOptimizedElement('span', { className: `result-status-dot ${ok ? 'ok' : 'err'}` }));
+    left.appendChild(createOptimizedElement('span', { className: 'result-label', textContent: ok ? 'Result' : 'Error' }));
+    if (typeof durationMs === 'number') {
+      left.appendChild(
+        createOptimizedElement('span', { className: 'result-timing', textContent: formatDuration(durationMs) }),
+      );
+    }
+
+    const right = createOptimizedElement('span', { className: 'result-header-right' });
+    const copyBtn = createOptimizedElement('button', {
+      className: 'result-copy-button',
+      textContent: 'Copy',
+      attributes: { title: 'Copy result to clipboard', type: 'button' },
+    }) as HTMLButtonElement;
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(copyText);
+        copyBtn.textContent = 'Copied';
+      } catch {
+        copyBtn.textContent = 'Failed';
+      }
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1500);
+    };
+    right.appendChild(copyBtn);
+
+    const expandBtn = createOptimizedElement('button', {
+      className: 'result-expand-button',
+      textContent: 'Expand',
+      attributes: { title: 'Toggle full height', type: 'button' },
+    }) as HTMLButtonElement;
+    expandBtn.onclick = () => {
+      const expanded = resultsPanel.style.maxHeight === 'none';
+      resultsPanel.style.maxHeight = expanded ? '200px' : 'none';
+      expandBtn.textContent = expanded ? 'Expand' : 'Collapse';
+    };
+    right.appendChild(expandBtn);
+
+    header.appendChild(left);
+    header.appendChild(right);
+    return header;
+  };
+
   if (success) {
     // Optimized success result processing
     let rawResultText = '';
@@ -1052,56 +1101,51 @@ export const displayResult = (
       className: 'function-result-success',
     });
 
-    // Process result data efficiently
-    if (typeof result === 'object') {
-      try {
-        // Check if result has the new format with content array
-        if (result && result.content && Array.isArray(result.content)) {
-          // Extract text from content array
-          const textParts = result.content
-            .filter((item: any) => item.type === 'text' && item.text)
-            .map((item: any) => item.text);
-
-          if (textParts.length > 0) {
-            rawResultText = textParts.join('\n');
-            resultContent.textContent = rawResultText;
-          } else {
-            // Fallback to full JSON if no text content found
-            rawResultText = JSON.stringify(result, null, 2);
-            const pre = createOptimizedElement('pre', {
-              textContent: rawResultText,
-              styles: {
-                fontFamily: 'inherit',
-                fontSize: '13px',
-                lineHeight: '1.5',
-                padding: '0',
-                margin: '0',
-              },
-            });
-            resultContent.appendChild(pre);
-          }
-        } else {
-          // Original object handling for backward compatibility
-          rawResultText = JSON.stringify(result, null, 2);
-          const pre = createOptimizedElement('pre', {
-            textContent: rawResultText,
-            styles: {
-              fontFamily: 'inherit',
-              fontSize: '13px',
-              lineHeight: '1.5',
-              padding: '0',
-              margin: '0',
-            },
-          });
-          resultContent.appendChild(pre);
-        }
-      } catch (e) {
-        rawResultText = String(result);
-        resultContent.textContent = rawResultText;
+    // Raw text: used verbatim for insert/attach/copy and the <function_result> wrapper (contract).
+    if (typeof result === 'object' && result !== null) {
+      if (result.content && Array.isArray(result.content)) {
+        const textParts = result.content
+          .filter((item: any) => item.type === 'text' && item.text)
+          .map((item: any) => item.text);
+        rawResultText = textParts.length > 0 ? textParts.join('\n') : JSON.stringify(result, null, 2);
+      } else {
+        rawResultText = JSON.stringify(result, null, 2);
       }
     } else {
       rawResultText = String(result);
-      resultContent.textContent = rawResultText;
+    }
+
+    // Display text: pretty-print when the raw text itself is JSON.
+    let displayText = rawResultText;
+    const trimmedResult = rawResultText.trim();
+    if (trimmedResult.startsWith('{') || trimmedResult.startsWith('[')) {
+      try {
+        displayText = JSON.stringify(JSON.parse(trimmedResult), null, 2);
+      } catch {
+        /* not JSON — keep as-is */
+      }
+    }
+
+    resultsPanel.appendChild(makeResultHeader(true, rawResultText));
+
+    const isTruncated = displayText.length > MAX_RESULT_DISPLAY_CHARS;
+    const pre = createOptimizedElement('pre', {
+      className: 'result-pre',
+      textContent: isTruncated ? displayText.slice(0, MAX_RESULT_DISPLAY_CHARS) : displayText,
+    });
+    resultContent.appendChild(pre);
+    if (isTruncated) {
+      const showAll = createOptimizedElement('button', {
+        className: 'result-show-all',
+        textContent: `Show all (${displayText.length.toLocaleString()} chars)`,
+        attributes: { type: 'button' },
+      }) as HTMLButtonElement;
+      showAll.onclick = () => {
+        pre.textContent = displayText;
+        showAll.remove();
+        resultsPanel.style.maxHeight = 'none';
+      };
+      resultContent.appendChild(showAll);
     }
 
     // Add result to panel
@@ -1453,6 +1497,7 @@ export const displayResult = (
       textContent: errorMessage,
     });
 
+    resultsPanel.appendChild(makeResultHeader(false, errorMessage));
     resultsPanel.appendChild(resultContent);
   }
 };

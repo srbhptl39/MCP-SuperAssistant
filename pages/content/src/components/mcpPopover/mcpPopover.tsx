@@ -945,7 +945,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     if (isAdapterActive && activePlugin && insertText) {
       try {
         logger.debug(`Attempting to insert text using ${activePlugin.name} adapter`);
-        const success = await insertText(instructions);
+        const success = await insertText(instructions, { source: 'instructions' });
         if (success) {
           setInsertStatus('Inserted!');
           logger.debug(`Text inserted successfully using ${activePlugin.name} adapter`);

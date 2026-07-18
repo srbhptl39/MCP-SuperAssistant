@@ -6,6 +6,7 @@ import { logMessage } from '@src/utils/helpers';
 import { Icon } from '../ui';
 import { cn } from '@src/lib/utils';
 import { createLogger } from '@extension/shared/lib/logger';
+import { META_TOOLS } from '@src/core/metaTools';
 
 
 const logger = createLogger('AvailableTools');
@@ -30,6 +31,17 @@ interface ToolItemProps {
   onToggleExpand: () => void;
   onToggleEnabled: () => void;
 }
+
+const EXPANDED_GROUPS_KEY = 'mcpSuperAssistant.expandedToolGroups';
+
+const loadExpandedGroups = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(EXPANDED_GROUPS_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+};
 
 // Single tool row + expandable schema detail. Local to this file only.
 const ToolItem: React.FC<ToolItemProps> = ({ tool, isEnabled, expanded, onToggleExpand, onToggleEnabled }) => {
@@ -99,6 +111,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(loadExpandedGroups);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Use tools from store if available, fallback to props
@@ -144,50 +157,57 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     setExpandedTools(newExpandedTools);
   };
 
-  // Group tools by server name and filter - memoized to prevent unnecessary recalculations.
-  // Always sorted alphabetically so rows never jump when a tool is toggled.
-  const { groupedTools, ungroupedTools } = useMemo(() => {
+  const toggleGroupExpansion = (groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(groupName) ? next.delete(groupName) : next.add(groupName);
+      try {
+        localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify([...next]));
+      } catch {
+        /* ponytail: persistence is best-effort; session-only if storage blocked */
+      }
+      return next;
+    });
+  };
+
+  // Group tools by category and filter — memoized. Always sorted so rows never jump on toggle.
+  const groupedTools = useMemo(() => {
+    const term = searchTerm.toLowerCase();
     const filtered = (effectiveTools || []).filter(
       tool =>
-        tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (tool.description && tool.description.toLowerCase().includes(searchTerm.toLowerCase())),
+        tool.name.toLowerCase().includes(term) ||
+        (tool.description && tool.description.toLowerCase().includes(term)),
     );
 
     const grouped: Record<string, ExtendedTool[]> = {};
-    const ungrouped: ExtendedTool[] = [];
-
     filtered.forEach(tool => {
+      let groupName: string;
+      let displayName: string;
       const dotIndex = tool.name.indexOf('.');
-      if (dotIndex > 0) {
-        const serverName = tool.name.substring(0, dotIndex);
-        const toolName = tool.name.substring(dotIndex + 1);
-
-        if (!grouped[serverName]) {
-          grouped[serverName] = [];
-        }
-        grouped[serverName].push({
-          ...tool,
-          displayName: toolName, // Store the short name for display
-          originalName: tool.name // Keep original for functionality
-        } as ExtendedTool);
+      if (META_TOOLS.has(tool.name)) {
+        groupName = 'Discovery';
+        displayName = tool.name;
+      } else if (tool.name.startsWith('browser_')) {
+        groupName = 'Browser';
+        displayName = tool.name;
+      } else if (dotIndex > 0) {
+        groupName = tool.name.substring(0, dotIndex);
+        displayName = tool.name.substring(dotIndex + 1);
       } else {
-        ungrouped.push(tool as ExtendedTool);
+        groupName = 'Server';
+        displayName = tool.name;
       }
+      (grouped[groupName] ||= []).push({
+        ...tool,
+        displayName,
+        originalName: tool.name,
+      } as ExtendedTool);
     });
 
-    // Sort tools within each group alphabetically
-    Object.keys(grouped).forEach(serverName => {
-      grouped[serverName].sort((a, b) => {
-        const aName = a.displayName || a.name;
-        const bName = b.displayName || b.name;
-        return aName.localeCompare(bName);
-      });
-    });
-
-    // Sort ungrouped tools alphabetically
-    ungrouped.sort((a, b) => a.name.localeCompare(b.name));
-
-    return { groupedTools: grouped, ungroupedTools: ungrouped };
+    Object.keys(grouped).forEach(g =>
+      grouped[g].sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name)),
+    );
+    return grouped;
   }, [effectiveTools, searchTerm]);
 
   const handleExecute = (tool: Tool) => {
@@ -238,10 +258,10 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
   };
 
   // Calculate total tools count
-  const totalToolsCount = useMemo(() => {
-    const groupedCount = Object.values(groupedTools).reduce((acc, tools) => acc + tools.length, 0);
-    return groupedCount + ungroupedTools.length;
-  }, [groupedTools, ungroupedTools]);
+  const totalToolsCount = useMemo(
+    () => Object.values(groupedTools).reduce((acc, tools) => acc + tools.length, 0),
+    [groupedTools],
+  );
 
   const isGroupEnabled = (tools: ExtendedTool[]) => {
     return tools.every(tool => isToolEnabled(tool.originalName || tool.name));
@@ -341,25 +361,22 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
       {!isRefreshing && !isLoadingEnablement && totalToolsCount > 0 && (
         <div className="space-y-2">
           {/* Render grouped tools */}
-          {Object.entries(groupedTools).map(([serverName, tools]) => {
+          {Object.entries(groupedTools).sort(([a], [b]) => a.localeCompare(b)).map(([serverName, tools]) => {
             const groupEnabled = isGroupEnabled(tools);
             const groupPartiallyEnabled = isGroupPartiallyEnabled(tools);
-            const groupExpanded = expandedTools.has(serverName);
+            const groupExpanded = searchTerm.trim() !== '' || expandedGroups.has(serverName);
 
             return (
               <div key={serverName} className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
                 {/* Group Header */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50">
-                  <button
-                    onClick={() => toggleToolExpansion(serverName)}
-                    className="flex items-center transition-colors"
-                    aria-label={groupExpanded ? 'Collapse group' : 'Expand group'}>
-                    <Icon
-                      name="chevron-right"
-                      size="sm"
-                      className={cn('text-slate-400 transition-transform', groupExpanded ? 'rotate-90' : '')}
-                    />
-                  </button>
+                <div
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 cursor-pointer select-none"
+                  onClick={() => toggleGroupExpansion(serverName)}>
+                  <Icon
+                    name="chevron-right"
+                    size="sm"
+                    className={cn('text-slate-400 transition-transform', groupExpanded ? 'rotate-90' : '')}
+                  />
                   <input
                     type="checkbox"
                     checked={groupEnabled}
@@ -367,10 +384,13 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                       if (el) el.indeterminate = groupPartiallyEnabled;
                     }}
                     onChange={() => handleToggleGroup(serverName, tools)}
+                    onClick={e => e.stopPropagation()}
                     className="h-4 w-4 rounded accent-indigo-600"
                   />
                   <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{serverName}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">· {tools.length}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                    · {tools.filter(t => isToolEnabled(t.originalName || t.name)).length}/{tools.length}
+                  </span>
                 </div>
 
                 {/* Group Tools */}
@@ -394,28 +414,6 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
               </div>
             );
           })}
-
-          {/* Render ungrouped tools */}
-          {ungroupedTools.length > 0 && (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Individual Tools</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">· {ungroupedTools.length}</span>
-              </div>
-              <div className="bg-white dark:bg-slate-900">
-                {ungroupedTools.map(tool => (
-                  <ToolItem
-                    key={tool.name}
-                    tool={tool}
-                    isEnabled={isToolEnabled(tool.name)}
-                    expanded={expandedTools.has(tool.name)}
-                    onToggleExpand={() => toggleToolExpansion(tool.name)}
-                    onToggleEnabled={() => handleToggleTool(tool.name)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

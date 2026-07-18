@@ -69,6 +69,12 @@ export interface PluginUtils {
   getUniqueId: (prefix?: string) => string;
 }
 
+export interface ChipAnchors {
+  input: HTMLElement;
+  container: HTMLElement;
+  submitButtonSelector: string;
+}
+
 export interface AdapterPlugin {
   readonly name: string;
   readonly version: string;
@@ -83,7 +89,9 @@ export interface AdapterPlugin {
   cleanup(): Promise<void>;
 
   // Core functionality
-  insertText?(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean>;
+  insertText?(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean>;
+  /** Pilot adapters return anchors for the input-chip UI; null/undefined = no chip support (raw insert). */
+  getChipAnchors?(): ChipAnchors | null;
   submitForm?(options?: { formElement?: HTMLFormElement }): Promise<boolean>;
   attachFile?(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean>;
 

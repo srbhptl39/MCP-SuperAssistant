@@ -1,12 +1,13 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
-// import { 
-//   findChatInputElement, 
-//   insertTextToChatInput, 
-//   attachFileToChatInput, 
-//   submitChatInput 
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+// import {
+//   findChatInputElement,
+//   insertTextToChatInput,
+//   attachFileToChatInput,
+//   submitChatInput
 // } from '../../components/websites/aistudio/chatInputHandler';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * AI Studio Adapter for Google AI Studio (aistudio.google.com)
@@ -35,7 +36,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   // Simplified since we're using chatInputHandler for most operations
   private readonly selectors = {
     // Primary chat input selector (Jan 2026)
-    CHAT_INPUT: 'textarea.textarea[placeholder="Start typing a prompt"], textarea.textarea[aria-label="Enter a prompt"], .prompt-box-container textarea.textarea',
+    CHAT_INPUT: 'textarea.textarea[aria-label="Enter a prompt"], textarea.textarea[placeholder^="Start typing a prompt"], .prompt-box-container textarea.textarea',
     // Button insertion points (for MCP popover) - looking for buttons-row and button-wrapper
     BUTTON_INSERTION_CONTAINER: '.buttons-row .button-wrapper, .buttons-row, .prompt-box-container .buttons-row, .prompt-input-wrapper, .actions-container',
     // Alternative insertion points
@@ -125,6 +126,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Remove injected adapter styles
     const styleElement = document.getElementById('mcp-aistudio-button-styles');
@@ -171,6 +173,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset all setup flags
     this.storeEventListenersSetup = false;
@@ -352,7 +355,12 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Insert text into the AI Studio chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into AI Studio chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     try {
@@ -382,11 +390,27 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    // Reuse the resilient input finder (many placeholder/aria fallbacks).
+    const input = findChatInputElement();
+    if (!input) return null;
+    // .prompt-box-container wraps both the textarea row and the buttons-row
+    // (overflow: visible), so prepending the chip bar sits it above the input.
+    const container = (input.closest('.prompt-box-container')
+      ?? input.closest('ms-prompt-box')
+      ?? input.closest('footer')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: 'ms-run-button button, button[type="submit"]' };
+  }
+
   /**
    * Submit the current text in the AI Studio chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit AI Studio chat input');
 
     try {
@@ -1517,8 +1541,9 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
 
 export const findChatInputElement = (): HTMLTextAreaElement | null => {
-  // Jan 2026 structure: Primary selector - "Start typing a prompt" placeholder with "Enter a prompt" aria-label
-  let chatInput = document.querySelector('textarea.textarea[placeholder="Start typing a prompt"]');
+  // Jan 2026 structure: Primary selector - "Start typing a prompt…" placeholder with "Enter a prompt" aria-label
+  // (placeholder text now has a trailing suffix, so match by prefix)
+  let chatInput = document.querySelector('textarea.textarea[placeholder^="Start typing a prompt"]');
 
   if (chatInput) {
     logger.debug('Found AiStudio main input with "Start typing a prompt" placeholder');

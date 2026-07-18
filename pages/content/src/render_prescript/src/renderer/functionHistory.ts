@@ -147,14 +147,21 @@ export const updateHistoryPanel = (
     loadingIndicator.textContent = 'Executing...';
     resultsPanel.appendChild(loadingIndicator);
 
+    const fnBlock = historyPanel.closest('.function-block');
+    fnBlock?.classList.remove('exec-success', 'exec-error');
+    fnBlock?.classList.add('exec-running');
+    const t0 = performance.now();
+
     try {
       if (!mcpClient) {
+        fnBlock?.classList.replace('exec-running', 'exec-error');
         displayResult(resultsPanel, loadingIndicator, false, 'Error: mcpClient not found');
         return;
       }
 
       // Check if mcpClient is ready
       if (!mcpClient.isReady || !mcpClient.isReady()) {
+        fnBlock?.classList.replace('exec-running', 'exec-error');
         displayResult(resultsPanel, loadingIndicator, false, 'Error: MCP client not ready');
         return;
       }
@@ -164,8 +171,9 @@ export const updateHistoryPanel = (
       try {
         // Use async/await with the new mcpClient API
         const result = await mcpClient.callTool(executionData.functionName, executionData.params);
-        
-        displayResult(resultsPanel, loadingIndicator, true, result);
+
+        fnBlock?.classList.replace('exec-running', 'exec-success');
+        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0);
 
         // Update the execution record with new timestamp
         // Always use the current URL context when storing execution data
@@ -192,18 +200,21 @@ export const updateHistoryPanel = (
           errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
         
-        displayResult(resultsPanel, loadingIndicator, false, errorMessage);
+        fnBlock?.classList.replace('exec-running', 'exec-error');
+        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0);
       }
 
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Re-execute error:', error);
-      
+
+      fnBlock?.classList.replace('exec-running', 'exec-error');
       displayResult(
         resultsPanel,
         loadingIndicator,
         false,
         `Unexpected error: ${errorMessage}`,
+        performance.now() - t0,
       );
     }
   };

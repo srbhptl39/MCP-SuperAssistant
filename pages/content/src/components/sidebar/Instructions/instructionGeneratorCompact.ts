@@ -16,6 +16,48 @@ import { geminiInstructions } from './website_specific_instruction/gemini';
 // First sentence of a description, truncated to 120 chars.
 const oneLiner = (d?: string): string => (d || '').split(/(?<=[.!?])\s/)[0].slice(0, 120);
 
+// Shared jsonl call-format spec — used by both the full compact instructions and the
+// minimal browser primer so the format text never forks.
+const CALL_FORMAT = `CALL FORMAT
+\`\`\`jsonl
+{"type": "function_call_start", "name": "TOOL_NAME", "call_id": 1}
+{"type": "description", "text": "one line on why"}
+{"type": "parameter", "key": "PARAM", "value": "VALUE"}
+{"type": "function_call_end", "call_id": 1}
+\`\`\`
+Scalar values inline; object/array values must be valid JSON.`;
+
+/**
+ * Minimal primer emitted (invisibly, into the composed input payload) when a user attaches
+ * page/tab content but never inserted the full MCP instructions. Tells the model it can drive
+ * the browser via the same jsonl format, lists only the browser_* tools + the two discovery
+ * meta-tools, and shows one example. Reuses CALL_FORMAT/oneLiner so nothing is forked.
+ */
+export const generateBrowserPrimer = (tools: Array<{ name: string; description?: string }>): string => {
+  const browserTools = (tools || []).filter(t => t.name.startsWith('browser_'));
+  if (browserTools.length === 0) return '';
+  const index = browserTools.map(t => `- ${t.name} — ${oneLiner(t.description)}`).join('\n');
+  const example = browserTools[0].name;
+  return `[SuperAssistant browser tools — provided by the user's browser extension]
+The page/tab content below was attached by the user. You can also DRIVE the user's browser with the tools listed here: to use one, WRITE the jsonl block as plain text in your reply — writing the block IS the action. The extension runs it and pastes back a <function_result>. One call per message, then STOP and wait.
+
+${CALL_FORMAT}
+
+BROWSER TOOL INDEX (schemas fetched on demand)
+${index}
+- get_tool_schema — fetch a tool's exact input schema before calling if unsure of parameters.
+- tool_lookup — search these tools by keyword when you don't know the name.
+
+Example — fetch the schema, then call:
+\`\`\`jsonl
+{"type": "function_call_start", "name": "get_tool_schema", "call_id": 1}
+{"type": "parameter", "key": "names", "value": ["${example}"]}
+{"type": "function_call_end", "call_id": 1}
+\`\`\`
+(wait for the <function_result> with the schema, then call ${example} with call_id 2.)
+`;
+};
+
 export const generateInstructionsCompact = (
   tools: Array<{ name: string; schema: string; description: string }>,
   customInstructions?: string,
@@ -65,14 +107,7 @@ HOW TO CALL A TOOL
   jsonl format below is read by the extension.
 - call_id is an integer starting at 1, incremented by 1 per call.
 
-CALL FORMAT
-\`\`\`jsonl
-{"type": "function_call_start", "name": "TOOL_NAME", "call_id": 1}
-{"type": "description", "text": "one line on why"}
-{"type": "parameter", "key": "PARAM", "value": "VALUE"}
-{"type": "function_call_end", "call_id": 1}
-\`\`\`
-Scalar values inline; object/array values must be valid JSON.
+${CALL_FORMAT}
 
 TOOL INDEX (names + one-line purpose only — schemas are fetched on demand)
 ${index}

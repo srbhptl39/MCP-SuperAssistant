@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * OpenRouter Adapter for OpenRouter (openrouter.ai)
@@ -26,9 +27,9 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
 
   // CSS selectors for OpenRouter's UI elements
   private readonly selectors = {
-    // Primary chat input selector - updated for new structure (Jan 2026)
+    // Primary chat input selector - updated for new structure (Jul 2026)
     CHAT_INPUT:
-      'textarea[data-testid="composer-input"], textarea[placeholder="Start a new message..."], div[contenteditable="true"]',
+      'textarea[data-testid="composer-input"], textarea[placeholder="Ask anything…"], textarea[placeholder="Start a new message..."]',
     // Submit button selectors - updated for new structure
     SUBMIT_BUTTON:
       'button[data-testid="send-button"], button[aria-label="Send message"], button[aria-label="Send prompt"]',
@@ -45,12 +46,14 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // File preview elements - updated for OpenRouter structure
     FILE_PREVIEW:
       '.duration-200.bg-accent\\/80.flex.w-full.shadow-inner.p-2, .bg-background.relative.h-32.w-48, .group.relative.flex.shrink-0, .file-preview, .attachment-preview, .file-attachment',
-    // Button insertion points (for MCP popover) - updated for new button container (Jan 2026)
+    // Button insertion points (for MCP popover) - updated for composer toolbar (Jul 2026)
+    // Toolbar row that holds the send button = div.flex.items-center.gap-1.5,
+    // its left control group = div.flex.shrink-0.items-center.gap-1 (Add/Tools/Memory buttons)
     BUTTON_INSERTION_CONTAINER:
-      '.flex.items-center.gap-1.pl-2, .flex.gap-1.mt-2.items-center.justify-between, .relative.flex.min-w-0.items-center',
+      '.flex.shrink-0.items-center.gap-1, .flex.items-center.gap-1\\.5',
     // Alternative insertion points
     FALLBACK_INSERTION:
-      '.flex.gap-1.mt-2.items-center.justify-between, .flex.items-center.gap-1, .input-area, .chat-input-container',
+      '.flex.items-center.gap-1\\.5, .flex.shrink-0.items-center.gap-1',
   };
 
   // URL patterns for navigation tracking
@@ -135,6 +138,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -167,6 +171,7 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset all setup flags
     this.storeEventListenersSetup = false;
@@ -178,7 +183,12 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
    * Insert text into the OpenRouter chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(
       `Attempting to insert text into OpenRouter chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
     );
@@ -279,11 +289,29 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // Prefer a stable ancestor of the textarea so the chip bar sits above the input.
+    const container = (input.closest('form')
+      ?? input.closest('.rounded-lg.w-full.focus-within\\:bg-accent')
+      ?? input.closest('.rounded-xl.overflow-hidden.p-2.border.border-slate-4')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   /**
    * Submit the current text in the OpenRouter chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit OpenRouter chat input');
 
     try {
@@ -1256,13 +1284,25 @@ export class OpenRouterAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Jan 2026: Look for the container with send button (div.flex.items-center.gap-1.pl-2)
-    const sendButtonContainer = document.querySelector('.flex.items-center.gap-1.pl-2');
-    if (sendButtonContainer) {
-      this.context.logger.debug('Found send button container for insertion');
-      // Insert after the send button
-      const sendButton = sendButtonContainer.querySelector('button[data-testid="send-button"]');
-      return { container: sendButtonContainer, insertAfter: sendButton };
+    // Primary (Jul 2026): anchor on the actual send button and insert into the composer
+    // toolbar's left control group. DOM layout:
+    //   div.flex.items-center.gap-1.5                     <- toolbar row
+    //     div.flex.shrink-0.items-center.gap-1            <- left group (Add/Tools/Memory)  [insert here]
+    //     div.ml-auto.flex.items-center.gap-1             <- right group (mic + send button)
+    const sendButton =
+      document.querySelector('button[data-testid="send-button"]') ||
+      document.querySelector('button[aria-label="Send message"], button[aria-label="Send prompt"]');
+    if (sendButton) {
+      const rightGroup = sendButton.parentElement; // ml-auto group holding mic + send
+      const leftGroup = rightGroup?.previousElementSibling as Element | null; // shrink-0 control group
+      if (leftGroup && leftGroup.querySelector('button')) {
+        this.context.logger.debug('Found composer left control group for insertion');
+        return { container: leftGroup, insertAfter: leftGroup.lastElementChild };
+      }
+      if (rightGroup?.parentElement) {
+        this.context.logger.debug('Falling back to composer toolbar, inserting before send group');
+        return { container: rightGroup.parentElement, insertAfter: rightGroup.previousElementSibling };
+      }
     }
 
     // Try primary selector first - using the configured selectors

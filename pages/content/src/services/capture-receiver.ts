@@ -53,7 +53,7 @@ async function insertCapture(payload: CapturePayload): Promise<void> {
   for (let attempt = 0; attempt < INSERT_RETRIES; attempt++) {
     const plugin = useAdapterStore.getState().getActiveAdapter()?.plugin;
     try {
-      if (plugin?.insertText && (await plugin.insertText(payload.text)) !== false) {
+      if (plugin?.insertText && (await plugin.insertText(payload.text, { source: 'capture' })) !== false) {
         logger.debug('[CaptureReceiver] Capture inserted');
         if (payload.autoSubmit && plugin.submitForm) {
           setTimeout(() => {

@@ -1,8 +1,9 @@
-import type { 
-  AdapterPlugin, 
-  PluginContext, 
-  AdapterCapability, 
-  DetectedTool 
+import type {
+  AdapterPlugin,
+  PluginContext,
+  AdapterCapability,
+  DetectedTool,
+  ChipAnchors
 } from '../plugin-types';
 
 /**
@@ -54,9 +55,13 @@ export abstract class BaseAdapterPlugin implements AdapterPlugin {
   }
 
   // Core functionality - to be implemented by specific adapters if capability is supported
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
     this.context.logger.warn('insertText not implemented by this adapter.');
     return false;
+  }
+
+  getChipAnchors(): ChipAnchors | null {
+    return null; // ponytail: chip support is opt-in per adapter; null = raw-insert fallback
   }
 
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {

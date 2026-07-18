@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * Perplexity Adapter for Perplexity AI (perplexity.ai)
@@ -128,6 +129,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -167,7 +169,8 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -178,7 +181,12 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
    * Insert text into the Perplexity chat input field
    * Enhanced with better selector handling, event integration, and URL-specific methods
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into Perplexity chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -207,9 +215,8 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       // Check if we're on the homepage and use the special method
       const currentUrl = window.location.href;
       if (currentUrl === 'https://www.perplexity.ai/' || currentUrl === 'https://perplexity.ai/' || true) {
-        // this.context.logger.debug('Homepage detected, using InputEvent method for text insertion');
-        this.context.logger.debug('Using InputEvent method for text insertion for all pages');
-        return await this.insertTextViaInputEvent(targetElement, text);
+        this.context.logger.debug('Using Lexical paste method for text insertion for all pages');
+        return await this.insertTextViaLexicalPaste(targetElement, text);
       }
 
       // // For other pages, use the existing method
@@ -253,53 +260,67 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
   }
 
   /**
-   * Special method for inserting text on the homepage using InputEvent
+   * Insert text into Perplexity's Lexical contenteditable composer.
+   *
+   * Perplexity's composer is a Lexical editor. A synthetic InputEvent carrying a `data` payload
+   * (the previous approach) does NOT mutate Lexical's internal state — it silently no-ops, so the
+   * text never reaches the outgoing message even though the DOM briefly looks right. During the
+   * chip-flush-before-submit path this caused the injected payload to vanish while insertText still
+   * reported success. A synthetic `paste` carrying text/plain is processed by Lexical's paste
+   * handler, updates its state, enables the submit button, and preserves newlines.
+   *
+   * We APPEND (cursor to end) rather than replace so an already-typed user query is kept intact:
+   * [existing query] + blank line + [payload]. Lexical reconciles on the next tick, so we wait and
+   * then confirm the content actually grew — returning false on a genuine no-op so the caller
+   * (chip flush) restores the chips instead of silently dropping the payload.
    */
-  private async insertTextViaInputEvent(element: HTMLElement, text: string): Promise<boolean> {
+  private async insertTextViaLexicalPaste(element: HTMLElement, text: string): Promise<boolean> {
     try {
-      const originalValue = this.getElementContent(element);
-      
-      // Focus the element
-      element.focus();
+      const before = this.getElementContent(element);
 
-      // Select all existing content
+      // Focus and collapse the caret to the end of any existing content.
+      element.focus();
       const range = document.createRange();
       range.selectNodeContents(element);
+      range.collapse(false);
       const selection = window.getSelection();
       if (selection) {
         selection.removeAllRanges();
         selection.addRange(range);
       }
 
-      // Prepare text to enter with proper line breaks
-      const textToEnter = originalValue ? originalValue + '\n\n' + text : text;
-
-      // Use InputEvent instead of execCommand
-      element.dispatchEvent(new InputEvent('input', {
-        inputType: 'insertText',
-        data: textToEnter,
+      const toInsert = before ? '\n\n' + text : text;
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('text/plain', toInsert);
+      element.dispatchEvent(new ClipboardEvent('paste', {
         bubbles: true,
-        cancelable: true
+        cancelable: true,
+        clipboardData: dataTransfer
       }));
 
-      // Also dispatch change event for compatibility
-      element.dispatchEvent(new Event('change', { bubbles: true }));
+      // Lexical applies the paste on the next tick — wait, then verify the write landed.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const after = this.getElementContent(element);
+      if (after.length <= before.length) {
+        this.context.logger.error('Perplexity Lexical paste did not change composer content');
+        this.emitExecutionFailed('insertText', 'Composer content unchanged after paste insertion');
+        return false;
+      }
 
-      // Emit success event
       this.emitExecutionCompleted('insertText', { text }, {
         success: true,
-        originalLength: originalValue.length,
+        originalLength: before.length,
         newLength: text.length,
-        totalLength: textToEnter.length,
-        method: 'InputEvent-homepage'
+        totalLength: after.length,
+        method: 'lexical-paste'
       });
 
-      this.context.logger.debug(`Text inserted successfully via InputEvent on homepage. Original: ${originalValue.length}, Added: ${text.length}, Total: ${textToEnter.length}`);
+      this.context.logger.debug(`Text inserted via Lexical paste. Before: ${before.length}, Added: ${text.length}, After: ${after.length}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`InputEvent method failed: ${errorMessage}`);
-      this.emitExecutionFailed('insertText', `InputEvent method failed: ${errorMessage}`);
+      this.context.logger.error(`Lexical paste insertion failed: ${errorMessage}`);
+      this.emitExecutionFailed('insertText', `Lexical paste insertion failed: ${errorMessage}`);
       return false;
     }
   }
@@ -324,11 +345,28 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    const container = (input.closest('form')
+      ?? input.closest('.bg-raised')
+      ?? input.parentElement?.parentElement
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   /**
    * Submit the current text in the Perplexity chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit Perplexity chat input');
 
     // First try to find submit button

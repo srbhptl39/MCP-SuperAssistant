@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useCurrentAdapter } from '@src/hooks/useAdapter';
 import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
 import { useUIStore } from '@src/stores/ui.store';
+import { useToolStore } from '@src/stores';
 import ServerStatus from './ServerStatus/ServerStatus';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
@@ -71,6 +72,8 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   } = useSidebarState();
   const { preferences, updatePreferences } = useUserPreferences();
   const { status: connectionStatus } = useConnectionStatus();
+  const enabledToolsCount = useToolStore(state => state.enabledTools.size);
+  const totalToolsCount = useToolStore(state => state.availableTools.length);
 
   // Error states that could block rendering
   const [initializationError, setInitializationError] = useState<string | null>(null);
@@ -766,9 +769,11 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                 <div className="flex">
                   <button className={tabClass(activeTab === 'availableTools')} onClick={() => setActiveTab('availableTools')}>
                     Tools
-                    {availableTools.length > 0 && (
-                      <span className="ml-1.5 text-[10px] px-1.5 rounded-full bg-slate-100 dark:bg-slate-800 tabular-nums">
-                        {availableTools.length}
+                    {totalToolsCount > 0 && (
+                      <span
+                        title={`${enabledToolsCount} of ${totalToolsCount} tools enabled`}
+                        className="ml-1.5 text-[10px] px-1.5 rounded-full bg-slate-100 dark:bg-slate-800 tabular-nums">
+                        {enabledToolsCount}/{totalToolsCount}
                       </span>
                     )}
                   </button>
