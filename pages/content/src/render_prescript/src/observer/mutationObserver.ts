@@ -59,6 +59,10 @@ export const processUpdateQueue = (): void => {
         streamingObservers.delete(blockId);
       }
       renderedFunctionBlocks.delete(blockId);
+      // Also drop per-segment cards (multi-call blocks render blockId-s1, blockId-s2, …).
+      Array.from(renderedFunctionBlocks.keys())
+        .filter(k => k.startsWith(`${blockId}-s`))
+        .forEach(k => renderedFunctionBlocks.delete(k));
       streamingLastUpdated.delete(blockId);
       if (window._stalledStreams) window._stalledStreams.delete(blockId);
       // Clean up keys starting with blockId- from streamingContentLengths

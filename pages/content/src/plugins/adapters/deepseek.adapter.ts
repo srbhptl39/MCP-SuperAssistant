@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * DeepSeek Adapter for DeepSeek Chat (chat.deepseek.com)
@@ -28,10 +29,13 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   // CSS selectors for DeepSeek's UI elements
   // Updated selectors based on current DeepSeek interface
   private readonly selectors = {
-    // Primary chat input selector - DeepSeek uses textarea elements
-    CHAT_INPUT: 'textarea[spellcheck="false"], textarea[data-gramm="false"], textarea[placeholder*="Ask"], textarea[placeholder*="Message DeepSeek"], textarea.chat-input, div[contenteditable="true"]',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label*="Send"], button[data-testid="send-button"], button.send-button, svg.send-icon',
+    // Primary chat input selector - DeepSeek uses a React-controlled textarea (Jan 2026: no
+    // spellcheck/data-gramm attrs; placeholder is the only stable hook, with composer-scoped fallbacks)
+    CHAT_INPUT: 'textarea[placeholder*="Message DeepSeek"], textarea[placeholder*="Ask"], .aaff8b8f textarea, ._24fad49 textarea, div[contenteditable="true"]',
+    // Submit button selectors. Jan 2026: DeepSeek's send button is a div[role="button"] with the
+    // design-system class `ds-button--primary` (filled circle, bottom-right of composer) — the old
+    // aria-label/data-testid selectors matched nothing (rot). Legacy selectors kept as trailing fallbacks.
+    SUBMIT_BUTTON: '.ec4f5d61 .ds-button--primary, .aaff8b8f .ds-button--primary, .ds-button--primary, button[aria-label*="Send"], button[data-testid="send-button"], button.send-button',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[aria-label*="attach"], button[aria-label*="file"], input[type="file"]',
     FILE_INPUT: 'input[type="file"]',
@@ -223,6 +227,7 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -255,7 +260,8 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -266,7 +272,12 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Insert text into the DeepSeek chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into DeepSeek chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -299,17 +310,36 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       if (targetElement.tagName === 'TEXTAREA') {
         const textarea = targetElement as HTMLTextAreaElement;
         const currentText = textarea.value;
-        
+
         // Append the text to the original value on a new line if there's existing content
         const newContent = currentText ? currentText + '\n\n' + text : text;
-        textarea.value = newContent;
+
+        // DeepSeek's composer is a React-controlled textarea. A plain `textarea.value = ...` is
+        // ignored by React's internal value tracker: the DOM briefly shows the text but the send
+        // button stays disabled and the payload is dropped at submit (silent failure, verified live
+        // Jan 2026). Use the native value setter so React's onChange fires, then verify the write
+        // landed on the next tick, returning false on a no-op so chip flush restores the chips.
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (nativeSetter) {
+          nativeSetter.call(textarea, newContent);
+        } else {
+          textarea.value = newContent;
+        }
 
         // Position cursor at the end
         textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
-        // Trigger input event
+        // Trigger input event (React listens for this to sync state)
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Verify React actually accepted the write (guards the silent-failure trap above)
+        await new Promise(resolve => setTimeout(resolve, 50));
+        if (textarea.value.length < newContent.length) {
+          this.context.logger.error('DeepSeek textarea content reverted after insert (React tracker rejected write)');
+          this.emitExecutionFailed('insertText', 'Composer content unchanged after insertion');
+          return false;
+        }
 
         this.context.logger.debug(`Text inserted into textarea successfully. Original: ${currentText.length}, Added: ${text.length}, Total: ${newContent.length}`);
       } else if (targetElement.getAttribute('contenteditable') === 'true') {
@@ -374,6 +404,8 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit DeepSeek chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -429,6 +461,22 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
       this.emitExecutionFailed('submitForm', errorMessage);
       return false;
     }
+  }
+
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // Container: composer wrapper that holds both the textarea and the button row, with
+    // overflow: visible so the prepended chip bar sits above the input (verified live Jan 2026).
+    const container = (input.closest('.aaff8b8f')
+      ?? input.closest('._020ab5b')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
   }
 
   /**

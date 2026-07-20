@@ -6,9 +6,11 @@
  */
 import { browserBridgeStorage, isDeniedHostname } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
-import { extractReadableContent, extractSelection, snapshotInteractive, doInteract } from './extractor';
+import { extractReadableContent, extractSelection, snapshotInteractive, doInteract, waitInPage } from './extractor';
 
 const logger = createLogger('BrowserTools');
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const DEFAULT_MAX_CHARS = 20000;
 const NEED_PERMISSION_MSG =
@@ -57,12 +59,14 @@ const READ_TOOLS: BrowserTool[] = [
   ),
   defineTool(
     'browser_snapshot_tab',
-    'Snapshot the visible interactive elements (links, buttons, inputs, selects, etc.) of a tab and tag them with stable indices so browser_interact_tab can target them. Pass the tabId from browser_list_tabs. Optional "maxElements" caps how many are returned (default 60). Returns a JSON list of {index, tag, type, label}.',
+    'Snapshot the visible interactive elements (links, buttons, inputs, selects, etc.) of a tab and tag them with stable indices so browser_interact_tab can target them. Pass the tabId from browser_list_tabs. Optional "maxElements" caps how many are returned (default 60). Optional "query" returns only elements whose label matches the substring (case-insensitive); optional "scope" restricts to elements under a CSS selector — both cut token cost on large pages. Returns a JSON list of {index, tag, type, label} where type is the element\'s ARIA role when clearer than the tag.',
     {
       type: 'object',
       properties: {
         tabId: { type: 'number', description: 'From browser_list_tabs.' },
         maxElements: { type: 'number', description: 'Cap (default 60).' },
+        query: { type: 'string', description: 'Case-insensitive label substring filter.' },
+        scope: { type: 'string', description: 'CSS selector to restrict the snapshot root.' },
       },
       required: ['tabId'],
       additionalProperties: false,
@@ -76,6 +80,25 @@ const READ_TOOLS: BrowserTool[] = [
       properties: {
         tabId: { type: 'number', description: 'Tab to read the selection from. Defaults to the active tab.' },
       },
+      additionalProperties: false,
+    },
+  ),
+  defineTool(
+    'browser_wait',
+    "Wait for a condition in a tab before reading or acting on it. `wait` = 'selector' | 'text' | 'url_substring' | 'ms' | 'load'; the target is passed in `value` (a CSS selector, page text, a URL substring, or milliseconds — 'load' needs no value). Optional `timeout` ms (default 6000, max 20000). Use before browser_read_tab / browser_snapshot_tab when a page loads content asynchronously. (Also available as a step inside browser_interact_tab.)",
+    {
+      type: 'object',
+      properties: {
+        tabId: { type: 'number', description: 'From browser_list_tabs.' },
+        wait: {
+          type: 'string',
+          enum: ['selector', 'text', 'url_substring', 'ms', 'load'],
+          description: "What to wait for (default 'load').",
+        },
+        value: { type: 'string', description: 'CSS selector / page text / url substring / ms (not needed for load).' },
+        timeout: { type: 'number', description: 'ms deadline (default 6000, max 20000).' },
+      },
+      required: ['tabId'],
       additionalProperties: false,
     },
   ),
@@ -97,14 +120,15 @@ const ACT_TOOLS: BrowserTool[] = [
   ),
   defineTool(
     'browser_navigate',
-    'Navigate an existing tab (by tabId) to a new http/https URL.',
+    "Navigate a tab (by tabId): load a new http/https URL, or go back/forward/reload. Pass `url` to load, or `action` = 'back' | 'forward' | 'reload' (url then optional).",
     {
       type: 'object',
       properties: {
         tabId: { type: 'number', description: 'The tabId to navigate.' },
         url: { type: 'string', description: 'Absolute http(s) URL to load.' },
+        action: { type: 'string', enum: ['back', 'forward', 'reload'], description: 'History/reload action (url optional).' },
       },
-      required: ['tabId', 'url'],
+      required: ['tabId'],
       additionalProperties: false,
     },
   ),
@@ -130,24 +154,65 @@ const ACT_TOOLS: BrowserTool[] = [
   ),
   defineTool(
     'browser_interact_tab',
-    'Interact with an element in a tab: click, fill, select, scroll, or press Enter. Target an element by "index" (from browser_snapshot_tab) or a CSS "selector". Pass the tabId from browser_list_tabs. Returns a compact summary; call browser_snapshot_tab or browser_read_tab afterward if you need the new page state.',
+    "Interact with a tab: run one action or a batched sequence of actions (click, fill, select, hover, check/uncheck, press a key, scroll, get an element's text/value/attr, or wait for a selector/text/url/load) in a single call. Provide `actions` as an array of step objects, or the legacy single-action params. Target elements by `index` (from browser_snapshot_tab) or CSS `selector`. Steps run in order and stop at the first failure; each step reports its result. Pass the tabId from browser_list_tabs.",
     {
       type: 'object',
       properties: {
         tabId: { type: 'number', description: 'From browser_list_tabs.' },
+        actions: {
+          type: 'array',
+          description: 'Steps run in order, stop on first failure. Preferred over the single-action params.',
+          items: {
+            type: 'object',
+            properties: {
+              action: {
+                type: 'string',
+                enum: ['click', 'fill', 'select', 'hover', 'check', 'uncheck', 'press', 'press_enter', 'scroll', 'get', 'wait'],
+              },
+              index: { type: 'number', description: 'Element index from browser_snapshot_tab.' },
+              selector: { type: 'string', description: 'CSS selector (alternative to index).' },
+              value: {
+                type: 'string',
+                description:
+                  "fill: text; select: option value/label; scroll: px or 'top'/'bottom'; press: key name e.g. 'Enter','Tab','ArrowDown'.",
+              },
+              modifiers: {
+                type: 'array',
+                items: { type: 'string', enum: ['ctrl', 'shift', 'alt', 'meta'] },
+                description: 'For press: modifier keys held with the key.',
+              },
+              get: {
+                type: 'string',
+                enum: ['text', 'value', 'attr', 'exists'],
+                description: 'For action=get: what to read.',
+              },
+              attr: { type: 'string', description: 'For get:attr — attribute name.' },
+              wait: {
+                type: 'string',
+                enum: ['selector', 'text', 'url_substring', 'ms', 'load'],
+                description: "For action=wait: what to wait for. arg comes from 'value'.",
+              },
+              timeout: { type: 'number', description: 'For action=wait: ms deadline (default 6000, max 20000).' },
+            },
+            required: ['action'],
+            additionalProperties: false,
+          },
+        },
         action: {
           type: 'string',
-          enum: ['click', 'fill', 'select', 'scroll', 'press_enter'],
-          description: 'Interaction to perform.',
+          enum: ['click', 'fill', 'select', 'hover', 'check', 'uncheck', 'press', 'press_enter', 'scroll', 'get', 'wait'],
+          description: "Legacy single action (use 'actions' for sequences).",
         },
-        index: { type: 'number', description: 'Element index from browser_snapshot_tab.' },
-        selector: { type: 'string', description: 'CSS selector (alternative to index).' },
-        value: {
-          type: 'string',
-          description: 'Text for fill; option value/label for select; scroll amount (px) or "top"/"bottom".',
-        },
+        index: { type: 'number' },
+        selector: { type: 'string' },
+        value: { type: 'string' },
+        modifiers: { type: 'array', items: { type: 'string' } },
+        get: { type: 'string' },
+        attr: { type: 'string' },
+        wait: { type: 'string' },
+        timeout: { type: 'number' },
       },
-      required: ['tabId', 'action'],
+      required: ['tabId'],
       additionalProperties: false,
     },
   ),
@@ -204,6 +269,43 @@ async function waitForComplete(tabId: number, timeoutMs = 10000): Promise<chrome
 }
 
 /**
+ * Wait for a condition on a tab. Shared by browser_wait and the interact_tab
+ * batch loop. ms = sleep, load = tab status, url_substring = SW poll of tab.url,
+ * selector/text = in-page poll via waitInPage.
+ */
+async function runWait(
+  tabId: number,
+  kind: string,
+  arg: string,
+  timeout: number,
+): Promise<{ note: string; matched: boolean }> {
+  if (kind === 'ms') {
+    await sleep(Math.min(Number(arg) || 1000, 20000));
+    return { note: 'wait ms: done', matched: true };
+  }
+  if (kind === 'load') {
+    const t = await waitForComplete(tabId, timeout);
+    return { note: `wait load: status ${t.status}`, matched: true };
+  }
+  if (kind === 'url_substring') {
+    const deadline = Date.now() + timeout;
+    let matched = false;
+    while (Date.now() < deadline) {
+      const cur = await chrome.tabs.get(tabId);
+      if ((cur.url || '').indexOf(arg) >= 0) {
+        matched = true;
+        break;
+      }
+      await sleep(150);
+    }
+    return { note: `wait url_substring: ${matched ? 'matched' : 'timeout'}`, matched };
+  }
+  const [inj] = await chrome.scripting.executeScript({ target: { tabId }, func: waitInPage, args: [kind, arg, timeout] });
+  const r = inj?.result;
+  return { note: `wait ${kind}: ${r?.note ?? 'no result'}`, matched: !!(r && r.matched) };
+}
+
+/**
  * Execute a browser_* tool. Returns an MCP-style text result (errors included) —
  * never throws, so a tool failure doesn't flip connection state.
  */
@@ -235,6 +337,8 @@ export async function executeBrowserTool(
         return await snapshotTab(args, denylist);
       case 'browser_get_selection':
         return await getSelection(args, denylist);
+      case 'browser_wait':
+        return await waitTab(args, denylist);
       case 'browser_interact_tab':
         return await interactTab(args, denylist, callerTabId);
       case 'browser_open_tab':
@@ -367,11 +471,13 @@ async function snapshotTab(args: Record<string, unknown>, denylist: string[]) {
   }
 
   const maxElements = parseTabId(args.maxElements) ?? 60;
+  const query = args.query != null ? String(args.query) : '';
+  const scope = args.scope != null ? String(args.scope) : '';
 
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
     func: snapshotInteractive,
-    args: [maxElements],
+    args: [maxElements, query, scope],
   });
   const data = injection?.result;
   if (!data) return textResult('Could not snapshot that tab (the page may block content extraction).');
@@ -380,41 +486,114 @@ async function snapshotTab(args: Record<string, unknown>, denylist: string[]) {
   return textResult(header + JSON.stringify(data.elements, null, 2));
 }
 
+// One step of a browser_interact_tab batch (also used to wrap a legacy single-action call).
+interface InteractStep {
+  action?: unknown;
+  index?: unknown;
+  selector?: unknown;
+  value?: unknown;
+  modifiers?: unknown;
+  get?: unknown;
+  attr?: unknown;
+  wait?: unknown;
+  timeout?: unknown;
+}
+
 async function interactTab(args: Record<string, unknown>, denylist: string[], callerTabId?: number) {
   const tabId = parseTabId(args.tabId);
   if (tabId === null) return textResult('browser_interact_tab requires a numeric tabId.');
   if (callerTabId != null && tabId === callerTabId) return textResult('Refusing to interact with the AI chat tab.');
 
-  const action = String(args.action ?? '');
-  const validActions = ['click', 'fill', 'select', 'scroll', 'press_enter'];
-  if (!validActions.includes(action)) {
-    return textResult(`browser_interact_tab "action" must be one of: ${validActions.join(', ')}.`);
+  if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
+
+  // Guards run once before the loop; every step targets the same tabId, so all steps are covered.
+  // ponytail: per-step re-denylist-check skipped; navigation targets are model-chosen selectors, not URLs.
+  const tab = await chrome.tabs.get(tabId);
+  const reason = tabExclusionReason(tab, denylist);
+  if (reason) return textResult(reason);
+
+  const steps: InteractStep[] =
+    Array.isArray(args.actions) && args.actions.length
+      ? (args.actions as InteractStep[])
+      : [
+          {
+            action: args.action,
+            index: args.index,
+            selector: args.selector,
+            value: args.value,
+            modifiers: args.modifiers,
+            get: args.get,
+            attr: args.attr,
+            wait: args.wait,
+            timeout: args.timeout,
+          },
+        ];
+
+  const VALID = ['click', 'fill', 'select', 'hover', 'check', 'uncheck', 'press', 'press_enter', 'scroll', 'get', 'wait'];
+  const results: string[] = [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const action = String(s.action ?? '');
+    if (!VALID.includes(action)) {
+      results.push(`step ${i + 1} ${action || '(none)'}: invalid action`);
+      break;
+    }
+
+    if (action === 'wait') {
+      const kind = String(s.wait ?? 'ms');
+      const arg = s.value != null ? String(s.value) : '';
+      const timeout = Math.min(Number(s.timeout) || 6000, 20000);
+      const w = await runWait(tabId, kind, arg, timeout);
+      results.push(`step ${i + 1} ${w.note}`);
+      if (!w.matched) break;
+      continue;
+    }
+
+    const index = s.index != null ? (parseTabId(s.index) ?? null) : null;
+    const selector = s.selector != null ? String(s.selector) : null;
+    const value = s.value != null ? String(s.value) : null;
+    const modifiers = Array.isArray(s.modifiers) ? s.modifiers.map(String) : [];
+    const getKind = s.get != null ? String(s.get) : null;
+    const attr = s.attr != null ? String(s.attr) : null;
+
+    const [inj] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: doInteract,
+      args: [action, index, selector, value, modifiers, getKind, attr],
+    });
+    const r = inj?.result;
+    if (!r) {
+      results.push(`step ${i + 1} ${action}: page blocked extraction`);
+      break;
+    }
+    results.push(
+      `step ${i + 1} ${action}: ${r.note}${r.value != null ? ' => ' + r.value : ''}${r.urlChanged ? ' (url changed)' : ''}`,
+    );
+    // A click/Enter may navigate — settle before the next step so re-injection hits the new context.
+    if (r.urlChanged) await waitForComplete(tabId, 4000);
+    if (!r.ok) break;
   }
 
+  const finalTab = await chrome.tabs.get(tabId);
+  return textResult(results.join('\n') + `\nFinal URL: ${finalTab.url}`);
+}
+
+async function waitTab(args: Record<string, unknown>, denylist: string[]) {
+  const tabId = parseTabId(args.tabId);
+  if (tabId === null) return textResult('browser_wait requires a numeric tabId.');
   if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
 
   const tab = await chrome.tabs.get(tabId);
   const reason = tabExclusionReason(tab, denylist);
   if (reason) return textResult(reason);
 
-  const index = args.index != null ? (parseTabId(args.index) ?? null) : null;
-  const selector = args.selector != null ? String(args.selector) : null;
-  const value = args.value != null ? String(args.value) : null;
-
-  const [injection] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: doInteract,
-    args: [action, index, selector, value],
-  });
-  const result = injection?.result;
-  if (!result) return textResult('Could not run the interaction (the page may block content extraction).');
-
-  // A click or Enter may trigger navigation — let it settle before reporting.
-  if (result.urlChanged) await waitForComplete(tabId, 4000);
-
-  return textResult(
-    `Action ${action}: ${result.note}\nURL: ${result.url}${result.urlChanged ? ' (changed)' : ''}`,
-  );
+  const kind = String(args.wait ?? 'load');
+  const arg = args.value != null ? String(args.value) : '';
+  const timeout = Math.min(Number(args.timeout) || 6000, 20000);
+  const w = await runWait(tabId, kind, arg, timeout);
+  const finalTab = await chrome.tabs.get(tabId);
+  return textResult(`${w.note}\nURL: ${finalTab.url}`);
 }
 
 async function getSelection(args: Record<string, unknown>, denylist: string[]) {
@@ -457,19 +636,38 @@ async function navigate(args: Record<string, unknown>, denylist: string[], calle
   if (tabId === null) return textResult('browser_navigate requires a numeric tabId.');
   if (callerTabId != null && tabId === callerTabId) return textResult('Refusing to navigate the AI chat tab.');
 
+  const tab = await chrome.tabs.get(tabId);
+  const reason = tabExclusionReason(tab, denylist);
+  if (reason) return textResult(reason);
+
+  const navAction = args.action != null ? String(args.action) : '';
+  if (navAction === 'back' || navAction === 'forward' || navAction === 'reload') {
+    if (navAction === 'reload') {
+      await chrome.tabs.reload(tabId);
+    } else {
+      // chrome.tabs.goBack/goForward misfire ("Cannot find a next page in history")
+      // even with valid history; drive the page's own history API instead.
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (dir: string) => {
+          if (dir === 'forward') history.forward();
+          else history.back();
+        },
+        args: [navAction],
+      });
+    }
+    return textResult(`Tab ${tabId}: ${navAction}.`);
+  }
+
   const raw = String(args.url ?? '');
   let u: URL;
   try {
     u = new URL(raw);
   } catch {
-    return textResult('browser_navigate requires a valid absolute URL.');
+    return textResult('browser_navigate requires a valid absolute URL (or action: back/forward/reload).');
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return textResult('Only http(s) URLs are allowed.');
   if (isDeniedHostname(u.hostname, denylist)) return textResult('That destination is on your denylist.');
-
-  const tab = await chrome.tabs.get(tabId);
-  const reason = tabExclusionReason(tab, denylist);
-  if (reason) return textResult(reason);
 
   await chrome.tabs.update(tabId, { url: raw });
   return textResult(`Navigated tab ${tabId} to ${raw}.`);

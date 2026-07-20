@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * Z Adapter for Z AI (z.ai)
@@ -131,6 +132,7 @@ export class ZAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -170,6 +172,7 @@ export class ZAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset all setup flags
     this.storeEventListenersSetup = false;
@@ -181,7 +184,12 @@ export class ZAdapter extends BaseAdapterPlugin {
    * Insert text into the Z chat input field
    * Enhanced with better selector handling, event integration, and URL-specific methods
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(
       `Attempting to insert text into Z chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
     );
@@ -343,7 +351,26 @@ export class ZAdapter extends BaseAdapterPlugin {
    * Submit the current text in the Z chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // The .rounded-xl wrapper is the flex-column composer box (overflow: visible)
+    // that holds both the textarea row and the button row, so prepending the chip
+    // bar sits it above the input. Fall back to the form, then the parent.
+    const container = (input.closest('.rounded-xl')
+      ?? input.closest('form')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit Z chat input');
 
     // First try to find submit button

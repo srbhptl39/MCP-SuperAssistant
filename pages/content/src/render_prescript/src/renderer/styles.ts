@@ -1326,6 +1326,32 @@ const baseStyles = `
     line-height: 1.5;
   }
   .result-show-all { margin: 4px 10px 10px; }
+
+  /* Compact result: body hidden until expanded */
+  .function-results-panel.collapsed .function-result-success,
+  .function-results-panel.collapsed .function-result-error { display: none; }
+
+  .result-header { cursor: pointer; user-select: none; }
+  .result-callid { opacity: 0.55; font-family: var(--font-mono); font-size: 11px; }
+  .result-meta   { opacity: 0.55; font-size: 11px; }
+  .result-error-inline {
+    color: var(--light-error);
+    font-size: 11px;
+    max-width: 42ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .function-block.theme-dark .result-error-inline { color: var(--dark-error); }
+  .result-toggle {
+    background: none; border: none; padding: 2px; cursor: pointer; color: inherit;
+    display: inline-flex; align-items: center;
+  }
+  .result-toggle .result-chevron { transition: transform .2s ease; }
+  .function-results-panel:not(.collapsed) .result-toggle .result-chevron { transform: rotate(180deg); }
+
+  /* pre now owns the scroll (panel no longer clamps to 200px) */
+  .function-result-success .result-pre { max-height: 320px; overflow: auto; }
 `;
 
 export const styles = baseStyles + (HOST_OVERRIDES[location.hostname] ?? '');

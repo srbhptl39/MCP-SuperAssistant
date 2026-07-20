@@ -47,6 +47,7 @@ const manifest = {
     '*://*.kimi.com/*',
     '*://*.chat.z.ai/*',
     '*://*.chat.qwen.ai/*',
+    '*://*.claude.ai/*',
 
   ],
 
@@ -169,6 +170,12 @@ const manifest = {
     },
     {
       matches: ['*://*.chat.qwen.ai/*'],
+      js: ['content/index.iife.js'],
+      run_at: 'document_idle',
+    },
+    // Specific content script for Claude.ai tool call parsing
+    {
+      matches: ['*://*.claude.ai/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

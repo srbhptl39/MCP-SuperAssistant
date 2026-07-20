@@ -97,6 +97,10 @@ export class AutomationService {
   private static instance: AutomationService | null = null;
   private isInitialized = false;
   private eventListener: ((event: Event) => void) | null = null;
+  // Coalesced auto-submit: one message can produce N tool results (multi-call).
+  // We submit ONCE after the whole batch settles instead of once per result.
+  private pendingSubmitTimer: number | null = null;
+  private submitDeferStart = 0;
 
   // Private constructor for singleton pattern
   private constructor() {}
@@ -229,9 +233,9 @@ export class AutomationService {
         const insertSuccess = await this.handleAutoInsert(detail);
         
         // Only proceed with auto submit if auto insert was successful
-        // and auto submit is enabled
+        // and auto submit is enabled. Coalesce so a multi-call batch submits once.
         if (insertSuccess && automationState.autoSubmit) {
-          await this.handleAutoSubmit(detail);
+          this.scheduleCoalescedSubmit(detail, automationState.autoSubmitDelay);
         }
       } else {
         logger.debug('[AutomationService] Auto Insert disabled, skipping insert and submit actions');
@@ -418,6 +422,68 @@ export class AutomationService {
       logger.error('[AutomationService] Error during auto insert:', error);
       return false;
     }
+  }
+
+  /**
+   * Coalesce auto-submit across a batch of tool results. Each result resets a
+   * quiet-period timer; the submit fires only once nothing is still running,
+   * queued, or streaming — so a message with several function calls produces a
+   * single reply containing every <function_result> block.
+   */
+  private scheduleCoalescedSubmit(detail: ToolExecutionCompleteDetail, autoSubmitDelay: number): void {
+    if (this.pendingSubmitTimer !== null) {
+      clearTimeout(this.pendingSubmitTimer);
+      this.pendingSubmitTimer = null;
+    } else {
+      // First result of a new batch — start the hard-cap clock.
+      this.submitDeferStart = Date.now();
+    }
+
+    const baseDelay = 1000 + (autoSubmitDelay || 0) * 1000;
+
+    const check = () => {
+      const running = !!document.querySelector('.function-block.exec-running');
+      const pending = ((window as any).__mcpExecPending || 0) > 0;
+      const streaming = !!document.querySelector('.function-block.function-loading');
+
+      // Expected-vs-done: a card is "done" once its result body is rendered.
+      // Only count a panel toward "expected" if its block actually ENTERED execution
+      // (exec-running/success/error or still function-loading). A deduped, never-run
+      // card renders a panel that stays empty forever and carries none of those
+      // classes — excluding it stops that stale panel poisoning the gate and holding
+      // the submit hostage until the 60s cap. A just-finished card (exec-success set
+      // before its body inserts) is still counted-not-done, so no-skip is preserved;
+      // historical cards carry both class + body and cancel out.
+      const panels = document.querySelectorAll('.function-results-panel[data-call-id]');
+      let expected = 0;
+      let done = 0;
+      panels.forEach(p => {
+        const hasBody = !!p.querySelector('.function-result-success, .function-result-error');
+        const block = p.closest('.function-block');
+        const active = !!block && (
+          block.classList.contains('exec-running') ||
+          block.classList.contains('exec-success') ||
+          block.classList.contains('exec-error') ||
+          block.classList.contains('function-loading')
+        );
+        if (hasBody) done++;
+        if (active || hasBody) expected++; // || hasBody keeps done <= expected invariant
+      });
+      const resultsPending = done < expected;
+
+      // ponytail: hard cap so a stuck spinner / un-run manual card can't hold the reply hostage
+      const deferredTooLong = Date.now() - this.submitDeferStart > 60000;
+
+      if ((running || pending || streaming || resultsPending) && !deferredTooLong) {
+        this.pendingSubmitTimer = window.setTimeout(check, 500);
+        return;
+      }
+
+      this.pendingSubmitTimer = null;
+      void this.handleAutoSubmit(detail);
+    };
+
+    this.pendingSubmitTimer = window.setTimeout(check, baseDelay);
   }
 
   /**

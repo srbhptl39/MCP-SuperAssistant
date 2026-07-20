@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+import { inputChips } from '../../services/input-chips';
 import { createLogger } from '@extension/shared/lib/logger';
 
 /**
@@ -31,7 +32,9 @@ export class KimiAdapter extends BaseAdapterPlugin {
     // Primary chat input selector - Kimi uses contenteditable div
     CHAT_INPUT: '.chat-input-editor[contenteditable="true"], div[contenteditable="true"][data-lexical-editor="true"], .chat-input-editor, .chat-input, textarea[placeholder*="Ask"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: '.send-button, .send-icon, svg.send-icon, button[aria-label*="Send"], .send-button-container:not(.disabled) .send-button',
+    // Live DOM (kimi.com): the clickable is div.send-button-container (has .disabled when empty);
+    // the old `.send-button` class no longer exists (0 matches = selector rot).
+    SUBMIT_BUTTON: '.send-button-container:not(.disabled), .send-button-container, .send-button, .send-icon, svg.send-icon, button[aria-label*="Send"]',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: '.attachment-button, .attachment-icon, input[type="file"], label.attachment-button',
     FILE_INPUT: 'input[type="file"]',
@@ -124,6 +127,7 @@ export class KimiAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -156,7 +160,8 @@ export class KimiAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -167,7 +172,12 @@ export class KimiAdapter extends BaseAdapterPlugin {
    * Insert text into the Kimi chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into Kimi chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -512,7 +522,27 @@ export class KimiAdapter extends BaseAdapterPlugin {
    * Submit the current text in the Kimi chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // Live DOM (kimi.com): .chat-editor-content wraps both the input (.chat-input) and the
+    // button row (.chat-editor-action), overflow: visible — prepending the chip bar there puts
+    // it above the input. Fall back up the composer chain, then to parentElement.
+    const container = (input.closest('.chat-editor-content')
+      ?? input.closest('.chat-editor')
+      ?? input.closest('.chat-box')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit Kimi chat input');
 
     let submitButton: HTMLButtonElement | null = null;

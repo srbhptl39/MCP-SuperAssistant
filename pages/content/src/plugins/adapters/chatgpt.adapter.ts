@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * ChatGPT Adapter for OpenAI ChatGPT (chatgpt.com)
@@ -30,8 +31,10 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   private readonly selectors = {
     // Primary chat input selector (ProseMirror contenteditable)
     CHAT_INPUT: '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"]',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid="fruitjuice-send-button"], button:has(svg) + button:has(svg[viewBox="0 0 20 20"])',
+    // Submit button selectors (multiple fallbacks). Verified live Jan 2026: the send button only
+    // renders once the composer has text (an empty composer shows a dictation button instead).
+    // Kept selectors are combinator-free so they're safe inside inputChips' target.closest() interceptor.
+    SUBMIT_BUTTON: 'button[data-testid="send-button"], button#composer-submit-button, button[aria-label="Send prompt"], button[aria-label*="Send"]',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: '#upload-file-btn, button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
     FILE_INPUT: 'input[type="file"][multiple]',
@@ -131,6 +134,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -163,7 +167,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Remove injected ChatGPT styles
     const styleElement = document.getElementById('mcp-chatgpt-button-styles');
     if (styleElement) {
@@ -182,7 +187,12 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
    * Insert text into the ChatGPT chat input field (ProseMirror editor)
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into ChatGPT chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -208,53 +218,55 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     }
 
     try {
-      // Store the original content
-      const originalContent = targetElement.textContent || '';
+      const before = targetElement.textContent || '';
 
-      // Focus the input element
+      // ChatGPT's composer is a ProseMirror contenteditable. A synthetic InputEvent or direct
+      // innerHTML write is NOT reliably reconciled into ProseMirror's internal document state
+      // (it can look right in the DOM yet submit empty). Instead we drive PM's native paste
+      // handler: move the caret to the end (so we append after any user-typed text), let PM's
+      // selectionchange observer adopt the DOM caret, then dispatch a paste ClipboardEvent.
+      // Verified live Jan 2026.
       targetElement.focus();
-
-      // For ProseMirror editor, we need to handle the content differently
-      // Remove placeholder if present
-      const placeholder = targetElement.querySelector('[data-placeholder]');
-      if (placeholder) {
-        placeholder.remove();
-      }
-
-      // Create a new paragraph element with the text
-      const newContent = originalContent ? originalContent + '\n' + text : text;
-      
-      // Clear existing content and insert new content
-      targetElement.innerHTML = '';
-      const paragraph = document.createElement('p');
-      paragraph.textContent = newContent;
-      targetElement.appendChild(paragraph);
-
-      // Position cursor at the end of the inserted text
       const range = document.createRange();
+      range.selectNodeContents(targetElement);
+      range.collapse(false); // caret at the very end
       const selection = window.getSelection();
-      if (selection && paragraph.firstChild) {
-        range.setStartAfter(paragraph.lastChild || paragraph);
-        range.collapse(true);
+      if (selection) {
         selection.removeAllRanges();
         selection.addRange(range);
+        document.dispatchEvent(new Event('selectionchange'));
+        // Give ProseMirror a tick to adopt the DOM caret before we paste into it.
+        await new Promise(r => setTimeout(r, 40));
       }
 
-      // Dispatch events to simulate user typing for better compatibility
-      targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-      targetElement.dispatchEvent(new Event('change', { bubbles: true }));
-      targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-      targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('text/plain', text);
+      targetElement.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dataTransfer,
+      }));
+
+      // Verify on the next tick that content actually grew. ProseMirror can silently ignore a
+      // synthetic write; returning false lets the chip flush restore the chips rather than drop them.
+      await new Promise(r => setTimeout(r, 50));
+      const after = targetElement.textContent || '';
+      if (after.length <= before.length) {
+        this.context.logger.error('ChatGPT insertText no-op: ProseMirror content did not grow after paste');
+        this.emitExecutionFailed('insertText', 'ProseMirror did not accept inserted text');
+        return false;
+      }
 
       // Emit success event to the new event system
       this.emitExecutionCompleted('insertText', { text }, {
         success: true,
-        originalLength: originalContent.length,
+        method: 'prosemirror-paste',
+        originalLength: before.length,
         newLength: text.length,
-        totalLength: newContent.length
+        totalLength: after.length
       });
 
-      this.context.logger.debug(`Text inserted successfully. Original: ${originalContent.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      this.context.logger.debug(`Text inserted successfully. Original: ${before.length}, Added: ${text.length}, Total: ${after.length}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -264,11 +276,27 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // The <form> wraps both the ProseMirror input and the action buttons (plus/send) and has
+    // overflow: visible, so prepending the chip bar sits it above the input without being clipped.
+    const container = (input.closest('form') ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   /**
    * Submit the current text in the ChatGPT chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit ChatGPT chat input');
 
     let submitButton: HTMLButtonElement | null = null;

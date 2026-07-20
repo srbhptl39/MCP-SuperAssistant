@@ -222,6 +222,88 @@ function reconstructJSONObjects(lines: string[]): string[] {
 }
 
 /**
+ * Normalize raw JSONL content into one-object-per-line strings.
+ * Handles the three wire formats the model/UI produce: newline-delimited,
+ * multiple objects on a single line, and pretty-printed multi-line objects.
+ * Extracted so both containsJSONFunctionCalls and splitJSONFunctionSegments
+ * share the exact same line reconstruction (no forked logic).
+ */
+export const normalizeJSONLines = (content: string): string[] => {
+  let lines = content.split(/\r?\n|\u2028|\u2029/);
+
+  const isSingleLineFormat = lines.length === 1 && (content.match(/\{/g) || []).length > 1;
+  const isPrettyPrinted =
+    lines.length > 1 &&
+    (content.includes('{\n') || content.includes('{ \n') || lines.some(line => line.trim() === '{'));
+
+  if (isSingleLineFormat) {
+    const splitContent = content.split(/\}\s*\{/);
+    lines = splitContent.map((part, index, array) => {
+      if (index === 0) return part + '}';
+      if (index === array.length - 1) return '{' + part;
+      return '{' + part + '}';
+    });
+  } else if (isPrettyPrinted) {
+    lines = reconstructJSONObjects(lines);
+  }
+
+  return lines;
+};
+
+/**
+ * Split a block that may contain MULTIPLE function-call groups into one string
+ * per group. A segment opens at a `function_call_start` line and closes at the
+ * next `function_call_end` (inclusive). A trailing still-open group (streaming)
+ * is returned as the last, incomplete segment. Lines before the first start are
+ * dropped. Single-group blocks yield a single segment (back-compat).
+ */
+export const splitJSONFunctionSegments = (content: string): string[] => {
+  const lines = normalizeJSONLines(content);
+  const segments: string[] = [];
+  let current: string[] | null = null;
+
+  for (const line of lines) {
+    const parsed = parseJSONLine(line);
+    const type = parsed?.type;
+
+    if (type === 'function_call_start') {
+      // Defensive: a new start without a preceding end closes the prior open group.
+      if (current) segments.push(current.join('\n'));
+      current = [line];
+    } else if (current) {
+      // Include every line (even unparseable streaming fragments) in the open group.
+      current.push(line);
+      if (type === 'function_call_end') {
+        segments.push(current.join('\n'));
+        current = null;
+      }
+    }
+    // Lines before the first start (current === null) are dropped.
+  }
+
+  if (current) segments.push(current.join('\n'));
+
+  return segments;
+};
+
+/**
+ * Analyze a single function-call segment (built on parseJSONLine — no forked regexes).
+ */
+export const analyzeJSONSegment = (
+  segment: string,
+): { functionName: string | null; callId: string | null; description: string | null; isComplete: boolean } => {
+  const info = extractJSONFunctionInfo(segment);
+  let isComplete = false;
+  for (const line of segment.split('\n')) {
+    if (parseJSONLine(line)?.type === 'function_call_end') {
+      isComplete = true;
+      break;
+    }
+  }
+  return { functionName: info.functionName, callId: info.callId, description: info.description, isComplete };
+};
+
+/**
  * Check if content contains JSON-style function calls
  * Returns detailed information about the JSON function call state
  */
@@ -370,60 +452,13 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
     lines: [],
   };
 
-  // Parse line by line - enhanced to handle Unicode line separators
-  let lines = content.split(/\r?\n|\u2028|\u2029/);
+  // Parse line by line - shared normalization (newline / single-line / pretty-printed)
+  const lines = normalizeJSONLines(content);
   let hasPartialJSON = false;
 
-  // Detect if JSON objects are on a single line (multiple objects without newlines)
-  // Example: json {"type": "function_call_start"} {"type": "description"} {"type": "parameter"}
-  const isSingleLineFormat = lines.length === 1 && (content.match(/\{/g) || []).length > 1;
-
-  // Detect pretty-printed JSON (objects span multiple lines with indentation)
-  // Example:
-  // {
-  //   "type": "function_call_start",
-  //   "name": "foo"
-  // }
-  const isPrettyPrinted =
-    lines.length > 1 &&
-    (content.includes('{\n') || content.includes('{ \n') || lines.some(line => line.trim() === '{'));
-
-  if (isSingleLineFormat) {
-    if (CONFIG.debug) {
-      logger.debug('[JSON Parser] Detected single-line multiple JSON objects format');
-    }
-
-    // Split by "} {" pattern to separate individual JSON objects
-    // Use regex to handle optional whitespace between objects
-    const splitContent = content.split(/\}\s*\{/);
-
-    lines = splitContent.map((part, index, array) => {
-      // First object: add closing brace
-      if (index === 0) return part + '}';
-      // Last object: add opening brace
-      if (index === array.length - 1) return '{' + part;
-      // Middle objects: add both braces
-      return '{' + part + '}';
-    });
-
-    if (CONFIG.debug) {
-      logger.debug('[JSON Parser] Split into', lines.length, 'separate JSON objects');
-    }
-  } else if (isPrettyPrinted) {
-    if (CONFIG.debug) {
-      logger.debug('[JSON Parser] Detected pretty-printed multi-line JSON format');
-    }
-
-    // Reconstruct complete JSON objects from multi-line format
-    lines = reconstructJSONObjects(lines);
-
-    if (CONFIG.debug) {
-      logger.debug('[JSON Parser] Reconstructed into', lines.length, 'compact JSON objects');
-      if (lines.length > 0) {
-        logger.debug('[JSON Parser] First reconstructed object:', lines[0].substring(0, 100));
-      }
-    }
-  }
+  // Count starts vs ends so multi-group blocks report completion correctly.
+  let startCount = 0;
+  let endCount = 0;
 
   for (const line of lines) {
     const parsed = parseJSONLine(line);
@@ -446,6 +481,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
         state.hasFunctionStart = true;
         state.functionName = parsed.name || null;
         state.callId = parsed.call_id?.toString() || null;
+        startCount++;
         break;
 
       case 'description':
@@ -458,6 +494,7 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
 
       case 'function_call_end':
         state.hasFunctionEnd = true;
+        endCount++;
         break;
     }
   }
@@ -470,7 +507,8 @@ export const containsJSONFunctionCalls = (block: HTMLElement): FunctionInfo => {
     result.hasInvoke = state.hasFunctionStart;
     result.hasParameters = state.parameterCount > 0;
     result.hasClosingTags = state.hasFunctionEnd;
-    result.isComplete = state.hasFunctionStart && state.hasFunctionEnd;
+    // Multi-group aware: complete only once every started group has been closed.
+    result.isComplete = startCount > 0 && endCount >= startCount;
     result.invokeName = state.functionName || undefined;
     result.textContent = state.description || undefined;
     result.partialTagDetected = hasPartialJSON;

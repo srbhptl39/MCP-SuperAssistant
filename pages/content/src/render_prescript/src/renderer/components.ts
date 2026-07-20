@@ -373,11 +373,10 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
   // Create optimized results panel
   const resultsPanel = createOptimizedElement('div', {
-    className: 'function-results-panel',
+    className: 'function-results-panel collapsed',
     styles: {
       display: 'none',
-      maxHeight: '200px',
-      overflow: 'auto',
+      overflow: 'hidden',
     },
     attributes: {
       'data-call-id': callId,
@@ -498,6 +497,20 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
         setStatus('error');
         displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0);
+
+        // Return the failure to the model too, as its own tool-result chip, so a
+        // partially-failing multi-call batch still reports every call's outcome.
+        // (Pre-flight failures above — no mcpClient / not ready — deliberately do not.)
+        scheduleWork(() => {
+          document.dispatchEvent(
+            new CustomEvent('mcp:tool-execution-complete', {
+              detail: {
+                result: `<function_result call_id="${callId}">\nERROR: ${errorMessage}\n</function_result>`,
+                skipAutoInsertCheck: false,
+              },
+            }),
+          );
+        });
       }
 
     } catch (error: any) {
@@ -1045,18 +1058,31 @@ export const displayResult = (
   // Clean up previous results
   cleanupPreviousResults();
   loadingIndicator.style.display = 'none';
+  resultsPanel.classList.add('collapsed');   // start compact on every (re)render
 
-  const makeResultHeader = (ok: boolean, copyText: string): HTMLDivElement => {
+  const CHEVRON =
+    '<svg class="result-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+    'xmlns="http://www.w3.org/2000/svg"><path d="M8 10l4 4 4-4" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  const makeSummaryHeader = (ok: boolean, copyText: string, charCount: number, errorInline?: string): HTMLDivElement => {
     const header = createOptimizedElement('div', { className: 'result-header' }) as HTMLDivElement;
 
     const left = createOptimizedElement('span', { className: 'result-header-left' });
     left.appendChild(createOptimizedElement('span', { className: `result-status-dot ${ok ? 'ok' : 'err'}` }));
-    left.appendChild(createOptimizedElement('span', { className: 'result-label', textContent: ok ? 'Result' : 'Error' }));
-    if (typeof durationMs === 'number') {
-      left.appendChild(
-        createOptimizedElement('span', { className: 'result-timing', textContent: formatDuration(durationMs) }),
-      );
+    // Label: function name (or Result/Error), plus #callId when present.
+    const label = ok ? (functionName || 'Result') : 'Error';
+    left.appendChild(createOptimizedElement('span', { className: 'result-label', textContent: label }));
+    if (callId) {
+      left.appendChild(createOptimizedElement('span', { className: 'result-callid', textContent: `#${callId}` }));
     }
+    if (!ok && errorInline) {
+      left.appendChild(createOptimizedElement('span', { className: 'result-error-inline', textContent: errorInline }));
+    }
+    const metaBits: string[] = [];
+    metaBits.push(`${charCount.toLocaleString()} chars`);
+    if (typeof durationMs === 'number') metaBits.push(formatDuration(durationMs));
+    left.appendChild(createOptimizedElement('span', { className: 'result-meta', textContent: metaBits.join(' · ') }));
 
     const right = createOptimizedElement('span', { className: 'result-header-right' });
     const copyBtn = createOptimizedElement('button', {
@@ -1064,28 +1090,28 @@ export const displayResult = (
       textContent: 'Copy',
       attributes: { title: 'Copy result to clipboard', type: 'button' },
     }) as HTMLButtonElement;
-    copyBtn.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(copyText);
-        copyBtn.textContent = 'Copied';
-      } catch {
-        copyBtn.textContent = 'Failed';
-      }
+    copyBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try { await navigator.clipboard.writeText(copyText); copyBtn.textContent = 'Copied'; }
+      catch { copyBtn.textContent = 'Failed'; }
       setTimeout(() => (copyBtn.textContent = 'Copy'), 1500);
     };
     right.appendChild(copyBtn);
 
-    const expandBtn = createOptimizedElement('button', {
-      className: 'result-expand-button',
-      textContent: 'Expand',
-      attributes: { title: 'Toggle full height', type: 'button' },
+    const toggleBtn = createOptimizedElement('button', {
+      className: 'result-toggle',
+      innerHTML: CHEVRON,
+      attributes: { title: 'Show details', type: 'button' },
     }) as HTMLButtonElement;
-    expandBtn.onclick = () => {
-      const expanded = resultsPanel.style.maxHeight === 'none';
-      resultsPanel.style.maxHeight = expanded ? '200px' : 'none';
-      expandBtn.textContent = expanded ? 'Expand' : 'Collapse';
+    const toggle = (e: Event) => {
+      e.stopPropagation();
+      const nowCollapsed = resultsPanel.classList.toggle('collapsed');
+      toggleBtn.title = nowCollapsed ? 'Show details' : 'Hide details';
     };
-    right.appendChild(expandBtn);
+    toggleBtn.onclick = toggle;
+    // whole summary row is clickable to expand/collapse (matches function-name pattern)
+    header.onclick = toggle;
+    right.appendChild(toggleBtn);
 
     header.appendChild(left);
     header.appendChild(right);
@@ -1126,7 +1152,7 @@ export const displayResult = (
       }
     }
 
-    resultsPanel.appendChild(makeResultHeader(true, rawResultText));
+    resultsPanel.appendChild(makeSummaryHeader(true, rawResultText, displayText.length));
 
     const isTruncated = displayText.length > MAX_RESULT_DISPLAY_CHARS;
     const pre = createOptimizedElement('pre', {
@@ -1143,7 +1169,6 @@ export const displayResult = (
       showAll.onclick = () => {
         pre.textContent = displayText;
         showAll.remove();
-        resultsPanel.style.maxHeight = 'none';
       };
       resultContent.appendChild(showAll);
     }
@@ -1491,13 +1516,14 @@ export const displayResult = (
   } else {
     // Optimized error result handling
     const errorMessage = processErrorMessage(result);
+    const inline = errorMessage.length > 120 ? errorMessage.slice(0, 120) + '…' : errorMessage;
 
     const resultContent = createOptimizedElement('div', {
       className: 'function-result-error',
       textContent: errorMessage,
     });
 
-    resultsPanel.appendChild(makeResultHeader(false, errorMessage));
+    resultsPanel.appendChild(makeSummaryHeader(false, errorMessage, errorMessage.length, inline));
     resultsPanel.appendChild(resultContent);
   }
 };

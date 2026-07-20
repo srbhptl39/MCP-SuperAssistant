@@ -60,10 +60,15 @@ export function extractReadableContent(
 
   let root: Element = document.body;
   if (mode === 'article') {
-    const article = document.querySelector('article');
+    const articles = document.querySelectorAll('article');
     const main = document.querySelector('main') || document.querySelector('[role="main"]');
-    if (article) {
-      root = article;
+    if (articles.length === 1) {
+      root = articles[0];
+    } else if (articles.length > 1) {
+      // Feed pages (X/Threads/Mastodon) wrap every post AND reply in its own
+      // <article>; the first one is just the head post. Use the shared
+      // container so replies are included, in DOM order.
+      root = main || document.body;
     } else if (main) {
       root = main;
     } else {
@@ -125,9 +130,17 @@ export interface InteractiveSnapshot {
  * Attributes persist in the page so a later doInteract() can target by index
  * across executeScript round trips. Runs in the page — self-contained.
  */
-export function snapshotInteractive(maxElements: number): InteractiveSnapshot {
+export function snapshotInteractive(maxElements: number, query: string, scope: string): InteractiveSnapshot {
   // Clear stale indices from any previous snapshot before re-tagging.
   document.querySelectorAll('[data-mcp-idx]').forEach(el => el.removeAttribute('data-mcp-idx'));
+  let root: Document | Element = document;
+  if (scope) {
+    try {
+      root = document.querySelector(scope) || document;
+    } catch (e) {
+      root = document;
+    }
+  }
   const sel =
     'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="tab"],[role="checkbox"],[contenteditable="true"]';
   const isVisible = (el: Element): boolean => {
@@ -135,12 +148,24 @@ export function snapshotInteractive(maxElements: number): InteractiveSnapshot {
     const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
+  // Role-aware type: prefer explicit ARIA role, else map the tag/input to an implicit role.
+  const typeOf = (el: Element): string => {
+    const role = el.getAttribute('role');
+    if (role) return role;
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'a' && el.hasAttribute('href')) return 'link';
+    if (tag === 'button') return 'button';
+    if (tag === 'input') return el.getAttribute('type') || 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'textarea') return 'textbox';
+    if (el.getAttribute('contenteditable') === 'true') return 'textbox';
+    return el.getAttribute('type') || '';
+  };
+  const q = (query || '').toLowerCase();
   const rows: SnapshotRow[] = [];
   let i = 0;
-  document.querySelectorAll(sel).forEach(el => {
+  root.querySelectorAll(sel).forEach(el => {
     if (i >= maxElements || !isVisible(el)) return;
-    el.setAttribute('data-mcp-idx', String(i));
-    const tag = el.tagName.toLowerCase();
     const label = (
       el.getAttribute('aria-label') ||
       el.getAttribute('placeholder') ||
@@ -152,7 +177,9 @@ export function snapshotInteractive(maxElements: number): InteractiveSnapshot {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 80);
-    rows.push({ index: i, tag, type: el.getAttribute('type') || el.getAttribute('role') || '', label });
+    if (q && label.toLowerCase().indexOf(q) < 0) return;
+    el.setAttribute('data-mcp-idx', String(i));
+    rows.push({ index: i, tag: el.tagName.toLowerCase(), type: typeOf(el), label });
     i++;
   });
   return { title: document.title, url: location.href, elements: rows };
@@ -164,6 +191,7 @@ export interface InteractResult {
   url: string;
   title: string;
   urlChanged?: boolean;
+  value?: string;
 }
 
 /**
@@ -175,6 +203,9 @@ export function doInteract(
   index: number | string | null,
   selector: string | null,
   value: string | null,
+  modifiers: string[] | null,
+  getKind: string | null,
+  attrName: string | null,
 ): InteractResult {
   const before = location.href;
   let el: Element | null = null;
@@ -186,7 +217,8 @@ export function doInteract(
       /* invalid selector */
     }
   }
-  const need = action !== 'scroll';
+  // Elements NOT required for: scroll, press (falls back to activeElement/body), get:exists.
+  const need = !(action === 'scroll' || action === 'press' || action === 'press_enter' || (action === 'get' && getKind === 'exists'));
   if (need && !el) {
     return {
       ok: false,
@@ -227,17 +259,54 @@ export function doInteract(
         top: value === 'top' || value === 'bottom' ? to : window.scrollY + to,
         behavior: 'instant' as ScrollBehavior,
       });
-    } else if (action === 'press_enter') {
-      const tgt = (el as HTMLElement) || (document.activeElement as HTMLElement);
-      ['keydown', 'keyup'].forEach(t =>
-        tgt.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true })),
+    } else if (action === 'hover') {
+      (el as HTMLElement).scrollIntoView({ block: 'center' });
+      ['pointerover', 'mouseover', 'pointerenter', 'mouseenter', 'mousemove'].forEach(t =>
+        el!.dispatchEvent(new MouseEvent(t, { bubbles: true })),
       );
-      const form = (tgt as HTMLInputElement).form;
-      if (form && typeof form.requestSubmit === 'function') {
-        try {
-          form.requestSubmit();
-        } catch (e) {
-          /* form submission blocked */
+    } else if (action === 'check' || action === 'uncheck') {
+      const want = action === 'check';
+      if ('checked' in (el as HTMLElement)) {
+        if ((el as HTMLInputElement).checked !== want) {
+          (el as HTMLInputElement).checked = want;
+          fire(el as EventTarget, 'input');
+          fire(el as EventTarget, 'change');
+        }
+      } else {
+        return { ok: false, note: 'Element is not checkable.', url: before, title: document.title };
+      }
+    } else if (action === 'get') {
+      let v = '';
+      if (getKind === 'exists') v = String(!!el);
+      else if (!el) return { ok: false, note: 'No element matched.', url: before, title: document.title };
+      else if (getKind === 'value') v = ('value' in (el as HTMLElement) ? (el as HTMLInputElement).value : el.textContent || '').trim();
+      else if (getKind === 'attr') v = el.getAttribute(attrName || '') || '';
+      else v = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+      return { ok: true, note: 'get:' + getKind, value: v, url: before, title: document.title };
+    } else if (action === 'press' || action === 'press_enter') {
+      const key = action === 'press_enter' ? 'Enter' : value || 'Enter';
+      const tgt = (el as HTMLElement) || (document.activeElement as HTMLElement) || document.body;
+      const mods = modifiers || [];
+      const opts: KeyboardEventInit = {
+        key,
+        code: key.length === 1 ? 'Key' + key.toUpperCase() : key,
+        keyCode: key === 'Enter' ? 13 : key === 'Tab' ? 9 : key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0,
+        bubbles: true,
+        ctrlKey: mods.indexOf('ctrl') >= 0,
+        shiftKey: mods.indexOf('shift') >= 0,
+        altKey: mods.indexOf('alt') >= 0,
+        metaKey: mods.indexOf('meta') >= 0,
+      };
+      if (tgt.focus) tgt.focus();
+      ['keydown', 'keypress', 'keyup'].forEach(t => tgt.dispatchEvent(new KeyboardEvent(t, opts)));
+      if (key === 'Enter') {
+        const form = (tgt as HTMLInputElement).form;
+        if (form && typeof form.requestSubmit === 'function') {
+          try {
+            form.requestSubmit();
+          } catch (e) {
+            /* form submission blocked */
+          }
         }
       }
     }
@@ -260,6 +329,40 @@ export function doInteract(
     note: action + (el ? ' on [' + (index ?? selector) + '] ' + label : ''),
     url: location.href,
     urlChanged: location.href !== before,
+    title: document.title,
+  };
+}
+
+/**
+ * Poll the page for a selector/text/url_substring match up to a deadline.
+ * Runs in the page — self-contained, no imports/closures. ms/load waits are
+ * handled service-worker-side and never reach this func.
+ */
+export async function waitInPage(
+  kind: string,
+  arg: string,
+  timeoutMs: number,
+): Promise<{ ok: boolean; matched: boolean; note: string; url: string; title: string }> {
+  const deadline = Date.now() + Math.min(Math.max(timeoutMs || 6000, 100), 20000);
+  const test = (): boolean => {
+    try {
+      if (kind === 'selector') return !!document.querySelector(arg);
+      if (kind === 'text') return (document.body.innerText || '').toLowerCase().indexOf((arg || '').toLowerCase()) >= 0;
+      if (kind === 'url_substring') return location.href.indexOf(arg || '') >= 0;
+    } catch (e) {
+      return false;
+    }
+    return false;
+  };
+  while (Date.now() < deadline) {
+    if (test()) return { ok: true, matched: true, note: 'matched ' + kind, url: location.href, title: document.title };
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return {
+    ok: false,
+    matched: false,
+    note: 'timeout waiting for ' + kind + ' "' + arg + '"',
+    url: location.href,
     title: document.title,
   };
 }

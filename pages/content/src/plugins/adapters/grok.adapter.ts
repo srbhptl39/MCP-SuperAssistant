@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * Grok Adapter for X.com/Grok (x.com, grok.com)
@@ -29,9 +30,12 @@ export class GrokAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current Grok interface
   private readonly selectors = {
     // Primary chat input selector
-    CHAT_INPUT: 'textarea[aria-label="Ask Grok anything"], textarea[placeholder="Ask anything"], textarea[placeholder], textarea[spellcheck="false"], textarea[data-gramm="false"], div.css-146c3p1 textarea, textarea.r-30o5oe, div[contenteditable="true"]',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label="Submit"], button.send-button, button[aria-label="Send message"], button.chat-submit, button[data-testid="send-button"], svg.send-icon, button.submit-button',
+    // grok.com (Jan 2026) uses a TipTap/ProseMirror contenteditable, not a textarea; the textarea
+    // selectors are kept as trailing fallbacks for x.com/twitter grok.
+    CHAT_INPUT: 'div.tiptap.ProseMirror[contenteditable="true"], div[contenteditable="true"], textarea[aria-label="Ask Grok anything"], textarea[placeholder="Ask anything"], textarea[placeholder], textarea[spellcheck="false"], textarea[data-gramm="false"], div.css-146c3p1 textarea, textarea.r-30o5oe',
+    // Submit button selectors (multiple fallbacks). grok.com send button is
+    // button[type="submit"][aria-label="Submit"][data-testid="chat-submit"].
+    SUBMIT_BUTTON: 'button[aria-label="Submit"], button[data-testid="chat-submit"], button[type="submit"], button.send-button, button[aria-label="Send message"], button.chat-submit, button[data-testid="send-button"], svg.send-icon, button.submit-button',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[aria-label*="attach"], button[aria-label*="file"], button[data-testid="file-upload"]',
     FILE_INPUT: 'input[type="file"]',
@@ -41,10 +45,14 @@ export class GrokAdapter extends BaseAdapterPlugin {
     DROP_ZONE: '.chat-input-container, .input-area, textarea, div[contenteditable="true"]',
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, .file-attachment',
-    // Button insertion points (for MCP popover)
-    BUTTON_INSERTION_CONTAINER: '.chat-input-actions, .input-actions, .chat-controls',
+    // Button insertion points (for MCP popover). grok.com (Jan 2026) composer toolbar row is
+    // div.grow.flex.items-center.gap-1.5, holding a left control group (Attach button) and a right
+    // group (Model/DeepSearch/Think, + Submit only when text is present). We anchor on the
+    // always-present Attach button in findButtonInsertionPoint; these class selectors are structural
+    // fallbacks (the legacy .chat-* selectors below are dead but harmless).
+    BUTTON_INSERTION_CONTAINER: '.grow.flex.items-center.gap-1\\.5, .chat-input-actions, .input-actions, .chat-controls',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.chat-input-container, .input-area, .chat-interface'
+    FALLBACK_INSERTION: '.grow.flex.items-center, .chat-input-container, .input-area, .chat-interface'
   };
 
   // URL patterns for navigation tracking
@@ -130,6 +138,7 @@ export class GrokAdapter extends BaseAdapterPlugin {
     // Clean up UI integration
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
+    inputChips.teardown();
 
     // Reset setup flags
     this.storeEventListenersSetup = false;
@@ -169,7 +178,8 @@ export class GrokAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+    inputChips.teardown();
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -180,7 +190,12 @@ export class GrokAdapter extends BaseAdapterPlugin {
    * Insert text into the Grok chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into Grok chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -223,10 +238,13 @@ export class GrokAdapter extends BaseAdapterPlugin {
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
         
       } else if (targetElement.getAttribute('contenteditable') === 'true') {
-        // Handle contenteditable elements
-        const currentText = targetElement.textContent || '';
-        
-        // Move cursor to end and insert text
+        // grok.com is a TipTap/ProseMirror editor. A synthetic InputEvent is ignored by ProseMirror
+        // (its internal state never updates and the payload vanishes at submit), so we dispatch a
+        // native paste ClipboardEvent — ProseMirror handles it and preserves paragraph structure —
+        // then verify on the next tick, returning false on a no-op so chip-flush restores the chips.
+        const before = targetElement.textContent || '';
+        const toInsert = before.trim() !== '' ? '\n\n' + text : text;
+
         const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(targetElement);
@@ -234,17 +252,19 @@ export class GrokAdapter extends BaseAdapterPlugin {
         selection?.removeAllRanges();
         selection?.addRange(range);
 
-        // Insert newlines if there's existing content
-        if (currentText && currentText.trim() !== '') {
-          document.execCommand('insertText', false, '\n\n');
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text/plain', toInsert);
+        targetElement.dispatchEvent(
+          new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dataTransfer })
+        );
+
+        await new Promise(r => setTimeout(r, 50));
+        if ((targetElement.textContent || '').length <= before.length) {
+          this.context.logger.warn('Grok contenteditable paste was a no-op (ProseMirror ignored insert)');
+          this.emitExecutionFailed('insertText', 'Text insertion had no effect');
+          return false;
         }
 
-        // Insert the new text
-        document.execCommand('insertText', false, text);
-
-        // Dispatch events
-        targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
-        
       } else {
         // Fallback for other element types
         const currentText = targetElement.textContent || '';
@@ -273,11 +293,29 @@ export class GrokAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    let input: HTMLElement | null = null;
+    for (const sel of this.selectors.CHAT_INPUT.split(', ')) {
+      input = document.querySelector(sel.trim()) as HTMLElement | null;
+      if (input) break;
+    }
+    if (!input) return null;
+    // The composer <form> (overflow: visible) wraps both the input row and the button row, while the
+    // inner .query-bar clips overflow — so anchor the bar on the form to keep chips from being clipped.
+    const container = (input.closest('form')
+      ?? input.closest('.query-bar')
+      ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
+  }
+
   /**
    * Submit the current text in the Grok chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
+
     this.context.logger.debug('Attempting to submit Grok chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -914,27 +952,43 @@ export class GrokAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // First priority: Find the submit button container and insert before it
-    const submitButton = document.querySelector('button[aria-label="Submit"], button[type="submit"], button[aria-label="Enter voice mode"]');
-    if (submitButton) {
-      // Look for the flex container that holds the submit button
-      const submitContainer = submitButton.closest('.ml-auto.flex.flex-row.items-end.gap-1') || 
-                             submitButton.closest('.flex.flex-row.items-end') ||
-                             submitButton.closest('.flex.items-end') ||
-                             submitButton.parentElement;
-      
-      if (submitContainer) {
-        this.context.logger.debug('Found insertion point: submit button container');
-        // Insert before the submit button (insertAfter: null means insert at beginning)
-        return { container: submitContainer, insertAfter: null };
+    // Primary (grok.com, Jan 2026): anchor on the always-present Attach button and insert into the
+    // composer toolbar row, between the left control group and the right group. Grok renders the
+    // Submit button only when the composer has text, so it CANNOT be the anchor on an empty composer.
+    // DOM layout:
+    //   div.grow.flex.items-center.gap-1.5              <- toolbar row (container)
+    //     div.flex.items-center        (Attach button)  <- left group  [insert after this]
+    //     div.ms-auto.flex.flex-row.items-end.gap-1     <- right group (Model/DeepSearch/Think + Submit)
+    const attachButton = document.querySelector('button[data-testid="attach-button"], button[aria-label="Attach"]');
+    if (attachButton) {
+      const leftGroup = attachButton.parentElement;            // div.flex.items-center wrapping Attach
+      const row = leftGroup?.parentElement;                    // div.grow.flex.items-center.gap-1.5
+      if (row && leftGroup && leftGroup.parentNode === row) {
+        this.context.logger.debug('Found insertion point: composer toolbar row via Attach button');
+        return { container: row, insertAfter: leftGroup };
+      }
+      if (leftGroup?.parentElement) {
+        this.context.logger.debug('Found insertion point: after Attach button wrapper');
+        return { container: leftGroup.parentElement, insertAfter: leftGroup };
       }
     }
 
-    // Second priority: Try to find the Think button in the bottom control bar (Grok-specific)
-    const thinkButton = document.querySelector('button[aria-label="Think"]');
-    if (thinkButton && thinkButton.parentElement) {
-      this.context.logger.debug('Found insertion point relative to Think button');
-      return { container: thinkButton.parentElement, insertAfter: thinkButton };
+    // Second priority: when the composer has text, anchor on the Submit button's right group and
+    // insert before it (i.e. after the left control group).
+    const submitButton = document.querySelector('button[aria-label="Submit"], button[type="submit"], button[data-testid="chat-submit"], button[aria-label="Enter voice mode"]');
+    if (submitButton) {
+      const rightGroup = submitButton.closest('.ms-auto.flex.flex-row.items-end') ||
+                         submitButton.closest('.flex.flex-row.items-end') ||
+                         submitButton.parentElement;
+      const row = rightGroup?.parentElement;
+      if (row && rightGroup && rightGroup.parentNode === row) {
+        this.context.logger.debug('Found insertion point: composer toolbar row via Submit button');
+        return { container: row, insertAfter: rightGroup.previousElementSibling };
+      }
+      if (rightGroup) {
+        this.context.logger.debug('Found insertion point: submit button group');
+        return { container: rightGroup, insertAfter: null };
+      }
     }
 
     // Third priority: Try primary selector first

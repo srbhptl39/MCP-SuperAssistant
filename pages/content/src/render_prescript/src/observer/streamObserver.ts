@@ -241,12 +241,11 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
     const hasOpenParameterTags =
       (currentContent.match(/<parameter[^>]*>/g) || []).length > (currentContent.match(/<\/parameter>/g) || []).length;
 
-    // Check for incomplete JSON
-    const hasJSONStart = currentContent.includes('"type"') && currentContent.includes('function_call_start');
-    const hasJSONEnd =
-      currentContent.includes('"type"') &&
-      (currentContent.includes('"function_call_end"') || currentContent.includes('"type": "function_call_end"'));
-    const hasIncompleteJSON = hasJSONStart && !hasJSONEnd;
+    // Check for incomplete JSON — count starts vs ends so a stalled SECOND call is
+    // still detected once the first call's function_call_end already exists.
+    const jsonStarts = (currentContent.match(/function_call_start/g) || []).length;
+    const jsonEnds = (currentContent.match(/function_call_end/g) || []).length;
+    const hasIncompleteJSON = jsonStarts > jsonEnds;
 
     // Detect incomplete tags (XML or JSON)
     if (hasOpenFunctionCallsTag || hasOpenInvokeTag || hasOpenParameterTags || hasIncompleteJSON) {

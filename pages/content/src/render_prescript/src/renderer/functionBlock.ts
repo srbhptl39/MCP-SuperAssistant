@@ -8,7 +8,12 @@ import {
 } from './components';
 import { applyThemeClass } from '../utils/themeDetector';
 import { getPreviousExecution, getPreviousExecutionLegacy, generateContentSignature } from '../mcpexecute/storage';
-import { extractJSONFunctionInfo, extractJSONParameters } from '../parser/jsonFunctionParser';
+import {
+  extractJSONFunctionInfo,
+  extractJSONParameters,
+  splitJSONFunctionSegments,
+  analyzeJSONSegment,
+} from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
 
 // Define custom property for tracking scroll state
@@ -29,6 +34,32 @@ declare global {
 const STREAMING_DEBOUNCE_MS = 16; // ~60fps for smooth updates
 const MAX_AUTO_EXECUTE_ATTEMPTS = 3;
 const CACHE_TTL = 1000; // 1 second cache TTL
+
+// Sequential auto-execution queue. Multiple complete cards (one message with N
+// calls) would otherwise click Run in the same tick and race the insert/submit
+// path. Chaining serializes them; __mcpExecPending lets the automation service
+// hold its coalesced submit until the whole queue drains.
+// ponytail: enqueue order = card completion order = call_id order within a block; DOM order across blocks.
+let execChain: Promise<void> = Promise.resolve();
+if (typeof window !== 'undefined') (window as any).__mcpExecPending = 0;
+
+// Resolve once a card finishes executing (success or error class set by
+// components.ts), or after a hard timeout so one stuck call can't wedge the queue.
+// ponytail: 250ms class poll, MutationObserver if it ever matters
+const waitForSettled = (blockEl: HTMLElement): Promise<void> =>
+  new Promise(resolve => {
+    const start = Date.now();
+    const poll = window.setInterval(() => {
+      if (
+        blockEl.classList.contains('exec-success') ||
+        blockEl.classList.contains('exec-error') ||
+        Date.now() - start > 35000 // mcp-client tool timeout is 30s; resolve anyway past that
+      ) {
+        clearInterval(poll);
+        resolve();
+      }
+    }, 250);
+  });
 
 // Performance optimizations: Pre-compiled regex patterns
 const REGEX_CACHE = {
@@ -1111,8 +1142,21 @@ const AutoExecutionUtils = {
 
           const executeButton = currentBlock.querySelector<HTMLButtonElement>('.execute-button');
           if (executeButton) {
-            logger.debug(`Auto-execute: Executing function ${functionDetails.functionName}`);
-            executeButton.click();
+            logger.debug(`Auto-execute: Enqueuing function ${functionDetails.functionName}`);
+            const blockToSettle = currentBlock;
+            (window as any).__mcpExecPending = ((window as any).__mcpExecPending || 0) + 1;
+            execChain = execChain
+              .then(async () => {
+                try {
+                  blockToSettle.querySelector<HTMLButtonElement>('.execute-button')?.click();
+                  await waitForSettled(blockToSettle);
+                } catch (e) {
+                  logger.error('Auto-execute chain error:', e);
+                }
+              })
+              .finally(() => {
+                (window as any).__mcpExecPending = Math.max(0, ((window as any).__mcpExecPending || 1) - 1);
+              });
             executionTracker.cleanupBlock(blockId);
           } else {
             logger.debug(`Auto-execute: Execute button not found (attempt ${attempts}/${MAX_AUTO_EXECUTE_ATTEMPTS})`);
@@ -1162,6 +1206,244 @@ const AutoExecutionUtils = {
 if (typeof window !== 'undefined') {
   configureMonacoEditorForCSP();
 }
+
+/**
+ * Render ONE function-call card for a jsonl segment. Used only for multi-call
+ * blocks (a message with >1 function-call group). It mirrors the single-card
+ * JSON path of renderFunctionCall but is keyed on a per-card `cardId` and its own
+ * segment string, so each call gets its own name/call_id/params, execute button
+ * and auto-exec. Card 0 reuses the base blockId for rendering/execution continuity.
+ */
+const renderCard = (
+  block: HTMLPreElement,
+  cardId: string,
+  cardContent: string,
+  cardInfo: { functionName: string | null; callId: string | null; description: string | null; isComplete: boolean },
+  isPreExistingIncomplete: boolean,
+): void => {
+  const isComplete = cardInfo.isComplete;
+
+  let existingDiv = renderedFunctionBlocks.get(cardId);
+  if (!existingDiv) {
+    existingDiv = document.querySelector<HTMLDivElement>(`.function-block[data-block-id="${cardId}"]`) || undefined;
+    if (existingDiv) renderedFunctionBlocks.set(cardId, existingDiv);
+  }
+
+  let isNewRender = false;
+  let previousCompletionStatus: boolean | null = null;
+  if (!existingDiv) {
+    isNewRender = true;
+  } else {
+    previousCompletionStatus = existingDiv.classList.contains('function-complete');
+  }
+
+  const rawContent = cardContent;
+  const functionName = cardInfo.functionName || 'function';
+  const callId = cardInfo.callId || `block-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const description = cardInfo.description;
+  const partialParameters = extractJSONParameters(rawContent);
+
+  const blockDiv = existingDiv || DOMUtils.createElement<HTMLDivElement>('div');
+
+  if (isNewRender) {
+    blockDiv.className = 'function-block';
+    blockDiv.setAttribute('data-block-id', cardId);
+    applyThemeClass(blockDiv);
+    renderedFunctionBlocks.set(cardId, blockDiv);
+    blockDiv.classList.remove('expanded', 'auto-expanded');
+  }
+
+  if (!isNewRender) {
+    const justCompleted = previousCompletionStatus === false && isComplete;
+    const justBecameIncomplete = previousCompletionStatus === true && !isComplete;
+    if (justCompleted) {
+      blockDiv.classList.remove('function-loading');
+      blockDiv.classList.add('function-complete');
+      const spinner = blockDiv.querySelector('.spinner');
+      if (spinner) spinner.remove();
+    } else if (justBecameIncomplete && !blockDiv.classList.contains('function-complete')) {
+      blockDiv.classList.remove('function-complete');
+      blockDiv.classList.add('function-loading');
+    }
+  } else {
+    if (!isComplete && !isPreExistingIncomplete) {
+      blockDiv.classList.add('function-loading');
+    }
+  }
+
+  const cachedElements = CacheUtils.getCachedElements(blockDiv);
+
+  let functionNameElement = cachedElements.functionNameElement;
+  if (!functionNameElement) {
+    functionNameElement = BlockElementUtils.createFunctionNameSection(
+      functionName,
+      callId,
+      isComplete,
+      isPreExistingIncomplete,
+    );
+    blockDiv.appendChild(functionNameElement);
+    cachedElements.functionNameElement = functionNameElement;
+    elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
+  } else {
+    const nameText = functionNameElement.querySelector<HTMLSpanElement>('.function-name-text');
+    if (nameText) DOMUtils.updateTextIfChanged(nameText, functionName);
+
+    const callIdElement = functionNameElement.querySelector<HTMLSpanElement>('.call-id');
+    if (callId) {
+      if (callIdElement) {
+        DOMUtils.updateTextIfChanged(callIdElement, callId);
+      } else {
+        const newCallId = DOMUtils.createElement<HTMLSpanElement>('span', 'call-id');
+        newCallId.textContent = callId;
+        functionNameElement.appendChild(newCallId);
+      }
+    }
+  }
+
+  let expandButton = functionNameElement?.querySelector('.expand-button') as HTMLButtonElement | null;
+  let expandableContent = blockDiv.querySelector('.expandable-content') as HTMLDivElement | null;
+
+  if (!expandButton && functionNameElement) {
+    expandButton = BlockElementUtils.createExpandButton();
+    const rightSection = functionNameElement.querySelector('.function-name-right');
+    if (rightSection) {
+      rightSection.appendChild(expandButton);
+    } else {
+      functionNameElement.appendChild(expandButton);
+    }
+  }
+
+  if (!expandableContent) {
+    expandableContent = BlockElementUtils.createExpandableContent();
+    blockDiv.appendChild(expandableContent);
+    if (isNewRender) {
+      DOMUtils.applyStyles(expandableContent, {
+        display: 'none',
+        maxHeight: '0px',
+        opacity: '0',
+        paddingTop: '0',
+        paddingBottom: '0',
+      });
+    }
+  }
+
+  if (expandButton && expandableContent) {
+    BlockElementUtils.setupExpandCollapse(blockDiv, expandButton, expandableContent);
+  }
+
+  if (description && functionNameElement) {
+    const leftSection = functionNameElement.querySelector('.function-name-left') as HTMLDivElement;
+    if (leftSection && !leftSection.querySelector('.function-description')) {
+      DOMUtils.applyStyles(leftSection, {
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+      });
+
+      const descriptionElement = DOMUtils.createElement<HTMLDivElement>('div', 'function-description');
+      descriptionElement.textContent = description;
+      DOMUtils.applyStyles(descriptionElement, {
+        fontSize: '12px',
+        color: 'inherit',
+        marginTop: '4px',
+        fontStyle: 'bold',
+        lineHeight: '1.4',
+        display: 'block',
+        opacity: '0.8',
+      });
+
+      leftSection.appendChild(descriptionElement);
+    }
+  }
+
+  let paramsContainer = cachedElements.paramsContainer;
+  if (!paramsContainer) {
+    paramsContainer = DOMUtils.createElement<HTMLDivElement>('div', 'function-params');
+    DOMUtils.applyStyles(paramsContainer, STREAMING_STYLES.paramsContainer);
+    expandableContent!.appendChild(paramsContainer);
+
+    cachedElements.paramsContainer = paramsContainer;
+    elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
+  }
+
+  Object.entries(partialParameters).forEach(([paramName, extractedValue]) => {
+    // JSON param streams until this segment's function_call_end arrives.
+    const isParamStreaming = !isComplete;
+    const paramId = `${cardId}-${paramName}`;
+    PerformanceUtils.batchStreamingUpdate(paramId, () => {
+      createOrUpdateParamElement(paramsContainer!, paramName, extractedValue, cardId, isNewRender, isParamStreaming);
+    });
+  });
+
+  let completeParameters: Record<string, any> | null = null;
+  if (isComplete) {
+    completeParameters = extractJSONParameters(rawContent);
+    if (blockDiv.classList.contains('auto-expanded')) {
+      AutoExpandUtils.scheduleAutoCollapse(blockDiv, 1500);
+    }
+  }
+
+  let contentSignature: string | null = null;
+  if (isComplete && completeParameters) {
+    contentSignature = generateContentSignature(functionName, completeParameters);
+  }
+
+  if (isNewRender) {
+    if (block.parentNode) {
+      // insertBefore(card, block) in segment order stacks card0..cardN above the hidden pre.
+      block.parentNode.insertBefore(blockDiv, block);
+      block.style.display = 'none';
+    } else {
+      return;
+    }
+  }
+
+  let buttonContainer = cachedElements.buttonContainer;
+  if (!buttonContainer) {
+    buttonContainer = DOMUtils.createElement<HTMLDivElement>('div', 'function-buttons');
+    buttonContainer.style.marginTop = '12px';
+    blockDiv.appendChild(buttonContainer);
+
+    cachedElements.buttonContainer = buttonContainer;
+    elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
+  }
+
+  if (isComplete) {
+    if (!blockDiv.querySelector('.raw-toggle')) {
+      addRawXmlToggle(buttonContainer!, rawContent);
+    }
+
+    if (!blockDiv.querySelector('.execute-button')) {
+      if (!completeParameters) completeParameters = extractJSONParameters(rawContent);
+      // Pass the SEGMENT string so the button parses its own name/callId/params.
+      addExecuteButton(buttonContainer!, rawContent);
+
+      const automationState = getAutomationState();
+      const autoExecuteEnabled = automationState.autoExecute;
+      const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
+      const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
+      if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
+        if (autoExecuteEnabled !== true && !(isMeta && autoDiscovery)) {
+          return;
+        }
+        if (executionTracker.isBlockExecuted(cardId) === true) {
+          return;
+        }
+
+        executionTracker.markFunctionExecuted(callId, contentSignature, functionName);
+        executionTracker.markBlockExecuted(cardId);
+
+        const functionDetails = {
+          functionName,
+          callId,
+          contentSignature,
+          params: completeParameters || {},
+        };
+
+        AutoExecutionUtils.setupOptimizedAutoExecution(cardId, functionDetails);
+      }
+    }
+  }
+};
 
 /**
  * Main function to render a function call block
@@ -1214,13 +1496,38 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   }
 
   const existingFunctionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
-  if (existingFunctionBlock && existingFunctionBlock.classList.contains('function-complete')) {
+  // AND with the whole-block completion (now count-based) so a multi-call block whose
+  // FIRST card completed but whose later cards are still streaming is not frozen.
+  // For single-call blocks this is unchanged: the completing render still runs (the
+  // div is not yet .function-complete at that point), later renders skip.
+  if (
+    existingFunctionBlock &&
+    existingFunctionBlock.classList.contains('function-complete') &&
+    functionInfo.isComplete
+  ) {
     if (CONFIG.debug) logger.debug(`Skipping render for completed block ${blockId}`);
     return false;
   }
 
   const preExistingIncompleteBlocks = (window as any).preExistingIncompleteBlocks || new Set<string>();
   const isPreExistingIncomplete = preExistingIncompleteBlocks.has(blockId);
+
+  // Multi-call block (jsonl only): one message may carry several function-call
+  // groups. Render one card per group and stop; the single-card path below stays
+  // byte-identical for XML and single-group JSON (this branch is never entered there).
+  if (functionInfo.detectedBlockType === 'json') {
+    const rawContentForSplit = block.textContent?.trim() || '';
+    const segments = splitJSONFunctionSegments(rawContentForSplit);
+    if (segments.length > 1) {
+      processedElements.add(block);
+      block.setAttribute('data-block-id', blockId);
+      segments.forEach((seg, i) => {
+        const cardId = i === 0 ? blockId : `${blockId}-s${i}`;
+        renderCard(block, cardId, seg, analyzeJSONSegment(seg), isPreExistingIncomplete);
+      });
+      return true;
+    }
+  }
 
   let existingDiv = renderedFunctionBlocks.get(blockId);
   let isNewRender = false;
