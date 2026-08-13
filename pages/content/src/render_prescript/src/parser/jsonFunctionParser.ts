@@ -560,14 +560,31 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
     return parameters;
   }
 
+  // Parse complete JSON objects before falling back to physical JSONL lines.
+  // A parameter record may be pretty-printed across multiple lines when its
+  // value is an array or nested object. The old line-by-line parser discarded
+  // those records because no individual line was valid JSON.
+  const jsonObjects = extractJSONObjects(content);
+  for (const jsonObject of jsonObjects) {
+    const parsed = parseJSONLine(jsonObject);
+    if (parsed?.type === 'parameter' && parsed.key) {
+      parameters[parsed.key] = parsed.value ?? '';
+    }
+  }
+
   const lines = content.split('\n');
 
-  // First pass: Extract from complete, parseable JSON lines
+  // Preserve the fast path for ordinary one-record-per-line JSONL and for
+  // completed records observed while the surrounding call is still streaming.
   for (const line of lines) {
     const parsed = parseJSONLine(line);
     if (!parsed) continue;
 
-    if (parsed.type === 'parameter' && parsed.key) {
+    if (
+      parsed.type === 'parameter' &&
+      parsed.key &&
+      !Object.prototype.hasOwnProperty.call(parameters, parsed.key)
+    ) {
       parameters[parsed.key] = parsed.value ?? ''; // Ensure value is never undefined
     }
   }
@@ -586,7 +603,7 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
 
     // Only use regex-extracted value if we don't already have this parameter
     // (prefer complete values from successfully parsed JSON lines)
-    if (!parameters.hasOwnProperty(key)) {
+    if (!Object.prototype.hasOwnProperty.call(parameters, key)) {
       // Unescape the value (handle \n, \t, \", etc.)
       const unescapedValue = value
         .replace(/\\n/g, '\n')
