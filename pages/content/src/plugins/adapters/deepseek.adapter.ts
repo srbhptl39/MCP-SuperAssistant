@@ -29,9 +29,9 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current DeepSeek interface
   private readonly selectors = {
     // Primary chat input selector - DeepSeek uses textarea elements
-    CHAT_INPUT: 'textarea[spellcheck="false"], textarea[data-gramm="false"], textarea[placeholder*="Ask"], textarea[placeholder*="Message DeepSeek"], textarea.chat-input, div[contenteditable="true"]',
-    // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label*="Send"], button[data-testid="send-button"], button.send-button, svg.send-icon',
+    CHAT_INPUT: 'textarea#chat-input, #chat-input, textarea[spellcheck="false"], textarea[data-gramm="false"], textarea[placeholder*="Ask"], textarea[placeholder*="Message DeepSeek"], textarea.chat-input, div[contenteditable="true"]',
+    // Submit button selectors (multiple fallbacks - handles button and div[role="button"], specifically excluding floating scroll buttons)
+    SUBMIT_BUTTON: 'div[role="button"]:has(svg path[d*="M8.3125"]), div[role="button"]._52c986b:not(.ds-button--floating), div[role="button"].ds-button--primary.ds-button--circle:not(.ds-button--floating), .ds-button.ds-button--primary.ds-button--circle:not(.ds-button--floating), div[role="button"].ds-button--circle:not(.ds-button--floating), button[aria-label*="Send"], button[data-testid="send-button"], button.send-button, svg.send-icon',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[aria-label*="attach"], button[aria-label*="file"], input[type="file"]',
     FILE_INPUT: 'input[type="file"]',
@@ -302,14 +302,32 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         
         // Append the text to the original value on a new line if there's existing content
         const newContent = currentText ? currentText + '\n\n' + text : text;
-        textarea.value = newContent;
+
+        // Use native value setter so React's internal value tracker registers the change
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          'value'
+        )?.set;
+
+        // Reset React's internal _valueTracker if present so React is forced to see a diff
+        const tracker = (textarea as any)._valueTracker;
+        if (tracker) {
+          tracker.setValue(currentText || '');
+        }
+
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(textarea, newContent);
+        } else {
+          textarea.value = newContent;
+        }
 
         // Position cursor at the end
         textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
-        // Trigger input event
-        textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        // Trigger input and change events
+        textarea.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: text }));
+        textarea.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
         this.context.logger.debug(`Text inserted into textarea successfully. Original: ${currentText.length}, Added: ${text.length}, Total: ${newContent.length}`);
       } else if (targetElement.getAttribute('contenteditable') === 'true') {
@@ -331,8 +349,8 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         document.execCommand('insertText', false, text);
 
         // Trigger input event for contenteditable
-        targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
-        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+        targetElement.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+        targetElement.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
         this.context.logger.debug(`Text inserted into contenteditable successfully`);
       } else {
@@ -347,8 +365,8 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         }
 
         // Dispatch events
-        targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
-        targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+        targetElement.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+        targetElement.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
         this.context.logger.debug(`Text inserted using fallback method`);
       }
@@ -371,64 +389,87 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
 
   /**
    * Submit the current text in the DeepSeek chat input
-   * Enhanced with multiple selector fallbacks and better error handling
+   * Enhanced with multiple selector fallbacks, polling for enabled state, and Enter key fallback
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
     this.context.logger.debug('Attempting to submit DeepSeek chat input');
 
-    let submitButton: HTMLButtonElement | null = null;
+    // Polling retry mechanism: React might take a few hundred ms to enable the submit button
+    const maxWaitMs = 3000;
+    const pollIntervalMs = 100;
+    const startTime = Date.now();
 
-    // Try multiple selectors for better compatibility
     const selectors = this.selectors.SUBMIT_BUTTON.split(', ');
-    for (const selector of selectors) {
-      submitButton = document.querySelector(selector.trim()) as HTMLButtonElement;
+    let submitButton: HTMLElement | null = null;
+    let buttonEnabled = false;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      for (const selector of selectors) {
+        submitButton = document.querySelector(selector.trim()) as HTMLElement;
+        if (submitButton) {
+          break;
+        }
+      }
+
       if (submitButton) {
-        this.context.logger.debug(`Found submit button using selector: ${selector.trim()}`);
-        break;
+        const isDisabled =
+          (submitButton as HTMLButtonElement).disabled === true ||
+          submitButton.getAttribute('aria-disabled') === 'true' ||
+          submitButton.classList.contains('ds-button--disabled') ||
+          submitButton.getAttribute('tabindex') === '-1';
+
+        const rect = submitButton.getBoundingClientRect();
+        const isVisible = rect.width > 0 && rect.height > 0;
+
+        if (!isDisabled && isVisible) {
+          buttonEnabled = true;
+          break;
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    if (submitButton && buttonEnabled) {
+      try {
+        // Ensure button is in view even if user was scrolled up
+        try {
+          submitButton.scrollIntoView({ block: 'nearest' });
+        } catch (_) {}
+        submitButton.focus();
+
+        // Dispatch pointer and mouse events
+        const eventOptions = { bubbles: true, cancelable: true, composed: true, view: window };
+        if (typeof PointerEvent !== 'undefined') {
+          submitButton.dispatchEvent(new PointerEvent('pointerdown', eventOptions));
+        }
+        submitButton.dispatchEvent(new MouseEvent('mousedown', eventOptions));
+        if (typeof PointerEvent !== 'undefined') {
+          submitButton.dispatchEvent(new PointerEvent('pointerup', eventOptions));
+        }
+        submitButton.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+        submitButton.click();
+
+        // Emit success event to the new event system
+        this.emitExecutionCompleted('submitForm', {
+          formElement: options?.formElement?.tagName || 'unknown'
+        }, {
+          success: true,
+          method: 'submitButton.click',
+          buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
+        });
+
+        this.context.logger.debug('DeepSeek chat input submitted successfully');
+        return true;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.context.logger.error(`Error clicking DeepSeek submit button: ${errorMessage}`);
       }
     }
 
-    if (!submitButton) {
-      this.context.logger.warn('Could not find DeepSeek submit button, trying Enter key press');
-      return this.tryEnterKeySubmission();
-    }
-
-    try {
-      // Check if the button is disabled
-      if (submitButton.disabled) {
-        this.context.logger.warn('DeepSeek submit button is disabled');
-        this.emitExecutionFailed('submitForm', 'Submit button is disabled');
-        return false;
-      }
-
-      // Check if the button is visible and clickable
-      const rect = submitButton.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) {
-        this.context.logger.warn('DeepSeek submit button is not visible');
-        this.emitExecutionFailed('submitForm', 'Submit button is not visible');
-        return false;
-      }
-
-      // Click the submit button to send the message
-      submitButton.click();
-
-      // Emit success event to the new event system
-      this.emitExecutionCompleted('submitForm', {
-        formElement: options?.formElement?.tagName || 'unknown'
-      }, {
-        success: true,
-        method: 'submitButton.click',
-        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
-      });
-
-      this.context.logger.debug('DeepSeek chat input submitted successfully');
-      return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.context.logger.error(`Error submitting DeepSeek chat input: ${errorMessage}`);
-      this.emitExecutionFailed('submitForm', errorMessage);
-      return false;
-    }
+    // Fallback: If button was not found, disabled after timeout, or click threw an error
+    this.context.logger.warn('DeepSeek submit button unavailable or disabled after wait, falling back to Enter key submission');
+    return this.tryEnterKeySubmission();
   }
 
   /**
@@ -437,7 +478,14 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
   private async tryEnterKeySubmission(): Promise<boolean> {
     try {
       // Find the chat input element
-      const chatInput = document.querySelector(this.selectors.CHAT_INPUT.split(', ')[0].trim()) as HTMLElement;
+      const selectors = this.selectors.CHAT_INPUT.split(', ');
+      let chatInput: HTMLElement | null = null;
+      for (const selector of selectors) {
+        chatInput = document.querySelector(selector.trim()) as HTMLElement;
+        if (chatInput) {
+          break;
+        }
+      }
       
       if (!chatInput) {
         this.context.logger.error('Cannot find chat input for Enter key submission');
@@ -445,18 +493,25 @@ export class DeepSeekAdapter extends BaseAdapterPlugin {
         return false;
       }
 
-      // Create and dispatch Enter key event
-      const enterKeyEvent = new KeyboardEvent('keydown', {
+      try {
+        chatInput.scrollIntoView({ block: 'nearest' });
+      } catch (_) {}
+      chatInput.focus();
+
+      // Create and dispatch Enter key events (both keydown, keypress, and keyup)
+      const keyEventInit: KeyboardEventInit = {
         key: 'Enter',
         code: 'Enter',
         keyCode: 13,
         which: 13,
         bubbles: true,
         cancelable: true,
-      });
+        composed: true,
+      };
 
-      chatInput.focus();
-      chatInput.dispatchEvent(enterKeyEvent);
+      chatInput.dispatchEvent(new KeyboardEvent('keydown', keyEventInit));
+      chatInput.dispatchEvent(new KeyboardEvent('keypress', keyEventInit));
+      chatInput.dispatchEvent(new KeyboardEvent('keyup', keyEventInit));
 
       // Emit success event
       this.emitExecutionCompleted('submitForm', {}, {
