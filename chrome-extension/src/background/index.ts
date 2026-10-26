@@ -205,6 +205,8 @@ function categorizeToolError(error: Error): { isConnectionError: boolean; isTool
     /connection failed/i,
     /transport error/i,
     /fetch failed/i,
+    /failed to fetch/i,
+    /sse error/i,
   ];
 
   // Check tool errors first (highest priority)

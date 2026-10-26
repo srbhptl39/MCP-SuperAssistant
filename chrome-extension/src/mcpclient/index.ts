@@ -111,7 +111,7 @@ function setupGlobalClientEventListeners(client: McpClient): void {
   });
 
   client.on('client:error', (event) => {
-    logger.error('[Global Client] Client error:', event);
+    logger.error('[Global Client] Client error:', event.error);
   });
 }
 

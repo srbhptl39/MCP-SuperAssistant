@@ -1051,20 +1051,29 @@ export function startThemeMonitoring(): void {
     let lastBgColor = lastComputedStyle.backgroundColor;
     let lastTextColor = lastComputedStyle.color;
 
+    let rafPending = false;
     const variableObserver = new ResizeObserver(() => {
-      const currentStyle = window.getComputedStyle(themeVariableWatcher);
-      const currentBgColor = currentStyle.backgroundColor;
-      const currentTextColor = currentStyle.color;
+      // Coalesce multiple rapid resize notifications into a single deferred DOM
+      // read to avoid "ResizeObserver loop completed with undelivered notifications"
+      // errors while still capturing the latest theme state.
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        const currentStyle = window.getComputedStyle(themeVariableWatcher);
+        const currentBgColor = currentStyle.backgroundColor;
+        const currentTextColor = currentStyle.color;
 
-      if (currentBgColor !== lastBgColor || currentTextColor !== lastTextColor) {
-        logThemeDetection('CSS variable change detected', {
-          bgColor: { old: lastBgColor, new: currentBgColor },
-          textColor: { old: lastTextColor, new: currentTextColor },
-        });
-        lastBgColor = currentBgColor;
-        lastTextColor = currentTextColor;
-        checkThemeChange();
-      }
+        if (currentBgColor !== lastBgColor || currentTextColor !== lastTextColor) {
+          logThemeDetection('CSS variable change detected', {
+            bgColor: { old: lastBgColor, new: currentBgColor },
+            textColor: { old: lastTextColor, new: currentTextColor },
+          });
+          lastBgColor = currentBgColor;
+          lastTextColor = currentTextColor;
+          checkThemeChange();
+        }
+      });
     });
 
     // Trigger observation by changing a property

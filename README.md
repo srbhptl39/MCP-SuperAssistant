@@ -278,6 +278,25 @@ pnpm build
 pnpm zip
 ```
 
+### MV3 CSP (`unsafe-eval`) note
+
+Chrome Manifest V3 forbids `eval` / `new Function()` in the extension service worker. Some transitive dependencies (commonly Ajv via the MCP SDK) can trigger this and crash the background script.
+
+- The background build aliases `ajv` imports to a CSP-compatible validator adapter in `chrome-extension/src/shims/ajv.ts`. It uses `@cfworker/json-schema` to **reject** invalid tool data without runtime code generation. Unknown dynamic Ajv formats/keywords fail closed rather than silently passing validation.
+- To guard against regressions in bundled output, run:
+
+```bash
+pnpm scan:unsafe-eval
+```
+
+If `pnpm`/Corepack activation is blocked by permissions on your machine, you can still validate the bundle using npm:
+
+```powershell
+npm install --legacy-peer-deps
+npm run build
+npm run scan:unsafe-eval
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
