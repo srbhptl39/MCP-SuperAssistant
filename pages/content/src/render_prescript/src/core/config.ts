@@ -122,9 +122,11 @@ export const WEBSITE_CONFIGS: Array<{
     {
       urlPattern: 'chatgpt.com',
       config: {
-        targetSelectors: ['pre'],
-        streamingContainerSelectors: ['pre'],
-        function_result_selector: ['div[data-message-author-role="user"]'],
+        // ChatGPT now renders code blocks as <code> inside div[data-code-block] (no <pre>)
+        targetSelectors: ['pre', 'code'],
+        streamingContainerSelectors: ['pre', 'code'],
+        // data-user-message-bubble is the current marker; data-message-author-role is the older one
+        function_result_selector: ['div[data-user-message-bubble]', 'div[data-message-author-role="user"]'],
       },
     },
     {

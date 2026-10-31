@@ -969,7 +969,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Finding button insertion point for MCP popover next to plus button');
 
     // Try to find the plus button first
-    const plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
+    // composer-plus-btn was removed from ChatGPT's markup; the plus button is now identified by its aria-label
+    const plusButton = document.querySelector('[data-testid="composer-plus-btn"], button[aria-label="Add files and more"]');
     if (plusButton && plusButton.parentElement) {
       this.context.logger.debug('Found plus button, inserting MCP button after it');
       return { container: plusButton.parentElement, insertAfter: plusButton };
