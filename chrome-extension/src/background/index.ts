@@ -44,7 +44,7 @@ const logger = createLogger('BACKGROUND');
 
 const DEFAULT_SSE_URL = 'http://localhost:3006/sse';
 const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3006/message';
-const DEFAULT_STREAMABLE_HTTP_URL = 'http://localhost:3006';
+const DEFAULT_STREAMABLE_HTTP_URL = 'http://localhost:3006/mcp';
 
 // Connection type management
 type ConnectionType = TransportType;
@@ -814,7 +814,11 @@ async function handleMcpMessage(
 
       case 'mcp:get-server-config': {
         const stored = await chrome.storage.local.get(['mcpServerUrl', 'mcpConnectionType']);
-        const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
+        const defaultUrl = connectionType === 'websocket'
+          ? DEFAULT_WEBSOCKET_URL
+          : connectionType === 'streamable-http'
+            ? DEFAULT_STREAMABLE_HTTP_URL
+            : DEFAULT_SSE_URL;
         result = { 
           uri: stored.mcpServerUrl || defaultUrl,
           connectionType: stored.mcpConnectionType || connectionType
