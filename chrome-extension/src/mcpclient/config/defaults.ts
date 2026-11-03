@@ -1,6 +1,6 @@
 export const DEFAULT_WEBSOCKET_URI = 'ws://localhost:3006/message';
 export const DEFAULT_SSE_URI = 'http://localhost:3006/sse';
-export const DEFAULT_STREAMABLE_HTTP_URI = 'http://localhost:3006';
+export const DEFAULT_STREAMABLE_HTTP_URI = 'http://localhost:3006/mcp';
 
 export const CONNECTION_DEFAULTS = {
   websocket: {
