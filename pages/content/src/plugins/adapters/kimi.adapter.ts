@@ -1079,6 +1079,15 @@ export class KimiAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
+    // Current Kimi UI: the "+" (toolkit) button lives in .left-area; place the MCP button right after it.
+    const toolkitBtn = document.querySelector('.chat-editor-action .left-area .toolkit-trigger-btn');
+    const leftArea = toolkitBtn?.closest('.left-area');
+    if (toolkitBtn && leftArea) {
+      let anchor: Element = toolkitBtn;
+      while (anchor.parentElement && anchor.parentElement !== leftArea) anchor = anchor.parentElement;
+      return { container: leftArea, insertAfter: anchor };
+    }
+
     // Try Kimi-specific button container first (.right-area)
     const buttonContainer = document.querySelector('.chat-editor-action .right-area');
     if (buttonContainer) {

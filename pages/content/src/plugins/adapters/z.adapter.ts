@@ -361,7 +361,10 @@ export class ZAdapter extends BaseAdapterPlugin {
     // The .rounded-xl wrapper is the flex-column composer box (overflow: visible)
     // that holds both the textarea row and the button row, so prepending the chip
     // bar sits it above the input. Fall back to the form, then the parent.
-    const container = (input.closest('.rounded-xl')
+    // Live DOM: FORM.flex (row!) > DIV.flex-col.rounded-[24px] (the composer box). Prepending to the
+    // form itself put the chip beside the composer, so target the form's direct child box.
+    const container = (input.closest('form > div')
+      ?? input.closest('.rounded-xl')
       ?? input.closest('form')
       ?? input.parentElement) as HTMLElement | null;
     if (!container) return null;

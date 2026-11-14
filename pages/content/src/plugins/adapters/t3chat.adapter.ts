@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * T3Chat Adapter for T3 Chat (t3.chat)
@@ -163,7 +164,12 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
    * Insert text into the T3Chat chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into T3Chat chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -263,11 +269,20 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    const input = document.querySelector<HTMLElement>('textarea#chat-input');
+    // The composer <form> is a flex-col; prepending adds a chip row above the input row.
+    const container = (input?.closest('form') ?? input?.parentElement) as HTMLElement | null | undefined;
+    if (!input || !container) return null;
+    return { input, container, submitButtonSelector: 'button[type="submit"]' };
+  }
+
   /**
    * Submit the current text in the T3Chat chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
     this.context.logger.debug('Attempting to submit T3Chat chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -728,6 +743,13 @@ export class T3ChatAdapter extends BaseAdapterPlugin {
 
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
+
+    // Preferred: right after the "Attach" control in the toolbar (hidden on narrow widths -> fall through)
+    const attach = [...document.querySelectorAll<HTMLElement>('form button[aria-label*="ttach"]')].find(b => b.offsetParent);
+    const attachWrap = attach?.parentElement;
+    if (attachWrap?.parentElement) {
+      return { container: attachWrap.parentElement, insertAfter: attachWrap };
+    }
 
     // Try primary selector first - T3Chat message actions
     const messageActions = document.querySelector('div[aria-label="Message actions"]');

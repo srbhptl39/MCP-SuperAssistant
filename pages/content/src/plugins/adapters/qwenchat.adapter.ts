@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * Qwen Adapter for Qwen Chat (chat.qwen.ai)
@@ -184,7 +185,12 @@ export class QwenAdapter extends BaseAdapterPlugin {
    * Insert text into the Qwen chat input field
    * Enhanced with better selector handling, event integration, and URL-specific methods
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(
       `Attempting to insert text into Qwen chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
     );
@@ -298,7 +304,16 @@ export class QwenAdapter extends BaseAdapterPlugin {
    * Submit the current text in the Qwen chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
+  /** .message-input-container has a JS-pinned inline height + overflow:hidden (chip there clips the composer row), so the chip goes in the wrapper, above the rounded pill. */
+  getChipAnchors(): ChipAnchors | null {
+    const input = document.querySelector<HTMLElement>(this.selectors.CHAT_INPUT);
+    const container = (input?.closest('.message-input-wrapper') ?? input?.parentElement?.parentElement) as HTMLElement | null | undefined;
+    if (!input || !container) return null;
+    return { input, container, submitButtonSelector: 'button.send-button' };
+  }
+
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
     this.context.logger.debug('Attempting to submit Qwen chat input');
 
     // First try to find submit button

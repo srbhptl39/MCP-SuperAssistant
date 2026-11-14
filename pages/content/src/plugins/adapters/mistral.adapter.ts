@@ -1,5 +1,6 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
+import { inputChips } from '../../services/input-chips';
 import { createLogger } from '@extension/shared/lib/logger';
 
 /**
@@ -31,7 +32,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Primary chat input selector - supports both textarea and ProseMirror variants
     CHAT_INPUT: 'textarea[name="message.text"], textarea[placeholder="Ask Le Chat anything"], div.ProseMirror[contenteditable="true"][data-placeholder="Ask Le Chat anything"], div.ProseMirror[contenteditable="true"]',
     // Submit button selectors (multiple fallbacks) - looking for dictation/mic button as send button
-    SUBMIT_BUTTON: 'button[aria-label="Dictation"], .ms-auto .flex.gap-2 button[type="submit"], button.bg-state-primary',
+    SUBMIT_BUTTON: 'button[type="submit"][aria-label="Send"], button[aria-label="Dictation"], .ms-auto .flex.gap-2 button[type="submit"], button.bg-state-primary',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attach-file-button"], button[aria-label="Add files"]',
     FILE_INPUT: 'input[name="file-upload"], input[type="file"][multiple]',
@@ -169,7 +170,12 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Insert text into the Mistral chat input field
    * Enhanced with better selector handling and supports both textarea and ProseMirror editors
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -334,11 +340,22 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
   }
 
+  getChipAnchors(): ChipAnchors | null {
+    const input = document.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"], textarea[name="message.text"]');
+    if (!input) return null;
+    // Vibe UI: the input row sits in a flex-col (gap-3); prepending adds a chip row above it. Older UI: the form.
+    const row = input.closest('[class*="chat-input-row"]');
+    const container = (row?.parentElement?.parentElement ?? input.closest('form') ?? input.parentElement) as HTMLElement | null;
+    if (!container) return null;
+    return { input, container, submitButtonSelector: 'button[type="submit"][aria-label="Send"], button[aria-label="Send"]' };
+  }
+
   /**
    * Submit the current text in the Mistral chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
     this.context.logger.debug('Attempting to submit Mistral chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -830,6 +847,13 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
+
+    // Current "Vibe" composer: one row [settings "+" | editor | model | voice]. Put MCP right after the "+" wrapper.
+    const row = document.querySelector('.ProseMirror[contenteditable="true"]')?.closest('[class*="chat-input-row"]');
+    const plusWrap = row?.firstElementChild;
+    if (row && plusWrap && plusWrap.querySelector('button[aria-label="Open settings menu"]')) {
+      return { container: row, insertAfter: plusWrap };
+    }
 
     // First, try to find the "Tools" button specifically using the correct selector
     const toolsButton = document.querySelector(this.selectors.TOOLS_BUTTON);
