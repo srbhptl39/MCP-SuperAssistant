@@ -890,7 +890,7 @@ export function startThemeMonitoring(): void {
     return; // Already monitoring
   }
 
-  let debounceTimeout: number;
+  let debounceTimeout: ReturnType<typeof setTimeout>;
 
   const checkThemeChange = () => {
     clearTimeout(debounceTimeout);

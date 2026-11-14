@@ -19,7 +19,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ESNext",
-    "lib": ["DOM", "ESNext"],
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "types": ["node", "chrome"]
   }
 }

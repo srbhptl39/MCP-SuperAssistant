@@ -91,7 +91,7 @@ const PATTERN_CACHE = {
 };
 
 // Debounced rendering to prevent rapid-fire updates
-const renderingDebouncer = new Map<string, number>();
+const renderingDebouncer = new Map<string, ReturnType<typeof setTimeout>>();
 const RENDER_DEBOUNCE_MS = 50; // 50ms debounce for smooth rendering
 
 // Make resyncingBlocks globally accessible to prevent re-rendering during resync

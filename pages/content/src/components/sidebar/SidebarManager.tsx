@@ -4,36 +4,17 @@ import { BaseSidebarManager } from './base/BaseSidebarManager';
 import { logMessage } from '@src/utils/helpers';
 import Sidebar from './Sidebar';
 import type { UserPreferences } from '@src/types/stores';
-import { useUIStore } from '@src/stores/ui.store';
+import { initialUserPreferences, useUIStore } from '@src/stores/ui.store';
 
 // Helper function to get preferences from Zustand store
 const getZustandPreferences = (): UserPreferences => {
   try {
     const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
-    if (zustandState.state && zustandState.state.preferences) {
-      return zustandState.state.preferences;
-    }
+    return { ...initialUserPreferences, ...zustandState.state?.preferences };
   } catch (error) {
     logMessage(`[SidebarManager] Error reading Zustand store: ${error}`);
   }
-  
-  // Return default preferences
-  return {
-    autoSubmit: false,
-    autoInsert: false,
-    autoExecute: false,
-    autoInsertDelay: 500,
-    autoSubmitDelay: 1000,
-    autoExecuteDelay: 500,
-    notifications: true,
-    theme: 'system',
-    language: navigator.language || 'en-US',
-    isPushMode: false,
-    sidebarWidth: 320,
-    isMinimized: false,
-    customInstructions: '',
-    customInstructionsEnabled: false,
-  };
+  return { ...initialUserPreferences };
 };
 
 // Declare a global Window interface extension to include activeSidebarManager property

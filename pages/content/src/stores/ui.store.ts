@@ -44,7 +44,7 @@ const initialSidebarState: SidebarState = {
   width: 320, // Default width from app.store, could be synced or independent
 };
 
-const initialUserPreferences: UserPreferences = {
+export const initialUserPreferences: UserPreferences = {
   autoSubmit: false,
   autoInsert: false,   // New automation field
   autoExecute: false,  // New automation field
