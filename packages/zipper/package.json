@@ -23,8 +23,8 @@
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@extension/tsconfig": "workspace:*",
     "@extension/env": "workspace:*",
-    "fflate": "^0.8.2"
+    "@extension/tsconfig": "workspace:*",
+    "fflate": "^0.8.3"
   }
 }

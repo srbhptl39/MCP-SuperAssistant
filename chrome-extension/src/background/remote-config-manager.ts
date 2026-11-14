@@ -408,7 +408,7 @@ export class RemoteConfigManager {
   }
 
   private async getLastFetchTime(): Promise<number | null> {
-    const result = await chrome.storage.local.get(['remoteConfigLastFetch']);
+    const result = await chrome.storage.local.get<{ remoteConfigLastFetch?: number }>(['remoteConfigLastFetch']);
     return result?.remoteConfigLastFetch || null;
   }
 

@@ -276,7 +276,7 @@ class ContextBridge {
   /**
    * Handle tab updates
    */
-  private handleTabUpdated(tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab): void {
+  private handleTabUpdated(tabId: number, changeInfo: chrome.tabs.OnUpdatedInfo, tab: chrome.tabs.Tab): void {
     if (changeInfo.status === 'complete' && tab.url) {
       eventBus.emit('context:tab-updated', {
         tabId,

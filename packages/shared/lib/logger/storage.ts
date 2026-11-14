@@ -3,6 +3,8 @@ import { LogLevel } from './types.js';
 
 const STORAGE_KEY = 'mcp_logger_config';
 
+type LoggerConfig = { level?: LogLevel; componentLevels?: Record<string, LogLevel> };
+
 /**
  * Chrome Storage-based logger persistence
  */
@@ -22,7 +24,7 @@ export class LoggerStorage implements ILoggerStorage {
         return null;
       }
 
-      const result = await chrome.storage.local.get(this.storageKey);
+      const result = await chrome.storage.local.get<Record<string, LoggerConfig | undefined>>(this.storageKey);
       const config = result[this.storageKey];
 
       if (config && typeof config.level === 'number') {
@@ -45,7 +47,7 @@ export class LoggerStorage implements ILoggerStorage {
         return;
       }
 
-      const existing = await chrome.storage.local.get(this.storageKey);
+      const existing = await chrome.storage.local.get<Record<string, LoggerConfig | undefined>>(this.storageKey);
       const config = existing[this.storageKey] || {};
 
       config.level = level;
@@ -65,7 +67,7 @@ export class LoggerStorage implements ILoggerStorage {
         return {};
       }
 
-      const result = await chrome.storage.local.get(this.storageKey);
+      const result = await chrome.storage.local.get<Record<string, LoggerConfig | undefined>>(this.storageKey);
       const config = result[this.storageKey];
 
       if (config && config.componentLevels) {
@@ -88,7 +90,7 @@ export class LoggerStorage implements ILoggerStorage {
         return;
       }
 
-      const existing = await chrome.storage.local.get(this.storageKey);
+      const existing = await chrome.storage.local.get<Record<string, LoggerConfig | undefined>>(this.storageKey);
       const config = existing[this.storageKey] || {};
 
       if (!config.componentLevels) {

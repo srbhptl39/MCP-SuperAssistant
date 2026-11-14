@@ -69,7 +69,7 @@ let isInitialized: boolean = false;
  */
 async function initializeServerConfig(): Promise<void> {
   try {
-    const result = await chrome.storage.local.get(['mcpServerUrl', 'mcpConnectionType']);
+    const result = await chrome.storage.local.get<{ mcpServerUrl?: string; mcpConnectionType?: ConnectionType }>(['mcpServerUrl', 'mcpConnectionType']);
     
     // Load connection type first to determine default URL
     connectionType = (result.mcpConnectionType as ConnectionType) || DEFAULT_CONNECTION_TYPE;
@@ -887,7 +887,7 @@ async function handleMcpMessage(
       }
 
       case 'mcp:get-server-config': {
-        const stored = await chrome.storage.local.get(['mcpServerUrl', 'mcpConnectionType']);
+        const stored = await chrome.storage.local.get<{ mcpServerUrl?: string; mcpConnectionType?: ConnectionType }>(['mcpServerUrl', 'mcpConnectionType']);
         const defaultUrl = connectionType === 'websocket' ? DEFAULT_WEBSOCKET_URL : DEFAULT_SSE_URL;
         result = { 
           uri: stored.mcpServerUrl || defaultUrl,

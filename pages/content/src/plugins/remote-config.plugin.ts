@@ -368,7 +368,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   }
 
   private async getLastFetchTime(): Promise<number | null> {
-    const result = await this.context?.chrome.storage.local.get(['remoteConfigLastFetch']);
+    const result = await this.context?.chrome.storage.local.get<{ remoteConfigLastFetch?: number }>(['remoteConfigLastFetch']);
     return result?.remoteConfigLastFetch || null;
   }
 
@@ -377,7 +377,7 @@ export class RemoteConfigPlugin implements AdapterPlugin {
   }
 
   private async getInstallDate(): Promise<string> {
-    const result = await this.context?.chrome.storage.local.get(['installDate']);
+    const result = await this.context?.chrome.storage.local.get<{ installDate?: string }>(['installDate']);
     if (result?.installDate) {
       return result.installDate;
     } else {

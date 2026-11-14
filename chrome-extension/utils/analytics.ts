@@ -36,7 +36,7 @@ const isWindowContext = typeof window !== 'undefined';
 // --- Client ID Management ---
 async function getOrCreateClientId(): Promise<string> {
   try {
-    const result = await chrome.storage.local.get('clientId');
+    const result = await chrome.storage.local.get<{ clientId?: string }>('clientId');
     let clientId = result.clientId;
     if (!clientId) {
       // Generate a unique client ID, the actual value is not relevant
@@ -57,7 +57,7 @@ async function getOrCreateClientId(): Promise<string> {
 async function getOrCreateSessionId(): Promise<string> {
   try {
     // Use session storage to keep session ID alive while browser is open
-    let { sessionData } = await chrome.storage.session.get('sessionData');
+    let { sessionData } = await chrome.storage.session.get<{ sessionData?: { session_id: string; timestamp: number } | null }>('sessionData');
     const currentTimeInMs = Date.now();
 
     if (sessionData && sessionData.timestamp) {

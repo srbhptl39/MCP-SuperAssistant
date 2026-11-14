@@ -320,7 +320,7 @@ constructor() {
 
   private async loadCachedConfig(): Promise<void> {
     try {
-      const result = await chrome.storage.local.get(['firebaseRemoteConfig', 'firebaseRemoteConfigLastFetch']);
+      const result = await chrome.storage.local.get<{ firebaseRemoteConfig?: Record<string, RemoteConfigValue>; firebaseRemoteConfigLastFetch?: number }>(['firebaseRemoteConfig', 'firebaseRemoteConfigLastFetch']);
       
       if (result.firebaseRemoteConfig) {
         this.cachedConfig = result.firebaseRemoteConfig;
@@ -347,7 +347,7 @@ constructor() {
 
   private async getInstallationId(): Promise<string> {
     try {
-      const result = await chrome.storage.local.get(['firebaseInstallationId']);
+      const result = await chrome.storage.local.get<{ firebaseInstallationId?: string }>(['firebaseInstallationId']);
       
       if (result.firebaseInstallationId) {
         return result.firebaseInstallationId;
