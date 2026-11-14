@@ -191,6 +191,8 @@ export class GrokAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    // Selected for all of x.com (registry matches by hostname); never touch non-Grok pages such as the post composer.
+    if (this.isSupported() !== true) return false;
     if (inputChips.tryCapture(this, text, options)) {
       this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
       return true;
@@ -318,6 +320,8 @@ export class GrokAdapter extends BaseAdapterPlugin {
    * Enhanced with multiple selector fallbacks and better error handling
    */
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    // Selected for all of x.com (registry matches by hostname); never touch non-Grok pages such as the post composer.
+    if (this.isSupported() !== true) return false;
     await inputChips.flushBeforeSubmit(this);
 
     this.context.logger.debug('Attempting to submit Grok chat input');
@@ -417,6 +421,8 @@ export class GrokAdapter extends BaseAdapterPlugin {
    * Enhanced with better error handling and integration with new architecture
    */
   async attachFile(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean> {
+    // Selected for all of x.com (registry matches by hostname); never touch non-Grok pages such as the post composer.
+    if (this.isSupported() !== true) return false;
     this.context.logger.debug(`Attempting to attach file: ${file.name} (${file.size} bytes, ${file.type})`);
 
     try {
