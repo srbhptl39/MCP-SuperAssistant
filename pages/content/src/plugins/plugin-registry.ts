@@ -947,7 +947,7 @@ class PluginRegistry {
         name: 'kimi-adapter',
         version: '2.0.0',
         type: 'website-adapter',
-        hostnames: ['kimi.com'],
+        hostnames: ['kimi.com', 'kimi.ai'],
         capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
         create: () => new KimiAdapter(),
         config: {

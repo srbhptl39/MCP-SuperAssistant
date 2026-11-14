@@ -18,7 +18,7 @@ const logger = createLogger('KimiAdapter');
 export class KimiAdapter extends BaseAdapterPlugin {
   readonly name = 'KimiAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
-  readonly hostnames = ['kimi.com'];
+  readonly hostnames = ['kimi.com', 'kimi.ai'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
@@ -231,9 +231,21 @@ export class KimiAdapter extends BaseAdapterPlugin {
         targetElement.focus();
         
         let insertionSuccess = false;
-        
-        // Method 1: Try clipboard simulation first (often works best with Lexical)
-        try {
+
+        // Method 0: a synthetic paste needs no clipboard permission (navigator.clipboard read/write can be
+        // refused or stall without focus, which left chip flushes hanging). Kimi handles it natively —
+        // long text becomes an uploaded TXT attachment. Count it as done if the editor reacted.
+        const snapshot = () => `${targetElement!.textContent?.length}|${document.querySelectorAll('.file-card-container').length}`;
+        const beforePaste = snapshot();
+        const pasteData = new DataTransfer();
+        pasteData.setData('text/plain', text);
+        const syntheticPaste = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: pasteData });
+        targetElement.dispatchEvent(syntheticPaste);
+        await new Promise(r => setTimeout(r, 150));
+        if (syntheticPaste.defaultPrevented || snapshot() !== beforePaste) insertionSuccess = true;
+
+        // Method 1: Try clipboard simulation (often works best with Lexical)
+        if (!insertionSuccess) try {
           // Firefox has stricter clipboard security, check for proper permissions
           const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
           
@@ -543,6 +555,16 @@ export class KimiAdapter extends BaseAdapterPlugin {
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
     await inputChips.flushBeforeSubmit(this);
 
+    // Kimi turns a long paste (the flushed chip payload) into an uploading TXT attachment and keeps
+    // the send button .disabled until the upload finishes (~1s), so a click right away is dropped.
+    // ponytail: 15s cap; past that the click below is attempted anyway.
+    for (let waited = 0; waited < 15000; waited += 250) {
+      const uploading = document.querySelector('.file-card-container.uploading');
+      const sendDisabled = document.querySelector('.send-button-container.disabled');
+      if (!uploading && !sendDisabled) break;
+      await new Promise(r => setTimeout(r, 250));
+    }
+
     this.context.logger.debug('Attempting to submit Kimi chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -813,8 +835,8 @@ export class KimiAdapter extends BaseAdapterPlugin {
 
     // Check if we're on a supported Kimi page
     const supportedPatterns = [
-      /^https?:\/\/(?:www\.)?kimi\.com\/.*/,  // Main chat pages
-      /^https?:\/\/(?:www\.)?kimi\.com$/      // Base chat page
+      /^https?:\/\/(?:www\.)?kimi\.(?:com|ai)\/.*/,  // Main chat pages
+      /^https?:\/\/(?:www\.)?kimi\.(?:com|ai)$/      // Base chat page
     ];
 
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));

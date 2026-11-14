@@ -45,6 +45,7 @@ const manifest = {
     '*://*.github.com/*',
     '*://*.copilot.github.com/*',
     '*://*.kimi.com/*',
+    '*://*.kimi.ai/*',
     '*://*.chat.z.ai/*',
     '*://*.chat.qwen.ai/*',
     '*://*.claude.ai/*',
@@ -158,7 +159,7 @@ const manifest = {
     },
     // Specific content script for Kimi
     {
-      matches: ['*://*.kimi.com/*'],
+      matches: ['*://*.kimi.com/*', '*://*.kimi.ai/*'],
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },

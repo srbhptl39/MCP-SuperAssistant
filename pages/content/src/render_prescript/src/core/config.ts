@@ -193,7 +193,7 @@ export const WEBSITE_CONFIGS: Array<{
       },
     },
     {
-      urlPattern: 'kimi.com',
+      urlPattern: /kimi\.(com|ai)/,
       config: {
         targetSelectors: ['pre'],
         streamingContainerSelectors: ['pre'],
