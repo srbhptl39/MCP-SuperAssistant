@@ -1,6 +1,7 @@
 import { BaseAdapterPlugin } from './base.adapter';
-import type { AdapterCapability, PluginContext } from '../plugin-types';
+import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { inputChips } from '../../services/input-chips';
 
 /**
  * GitHub Copilot Adapter for GitHub Copilot (github.com/copilot)
@@ -29,9 +30,9 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current GitHub Copilot interface
   private readonly selectors = {
     // Primary chat input selector
-    CHAT_INPUT: '#copilot-chat-textarea, .ChatInput-module__input--iApWs, textarea[placeholder*="How can I help"]',
+    CHAT_INPUT: 'textarea[data-testid="chat-composer-input"], #copilot-chat-textarea, .ChatInput-module__input--iApWs, textarea[placeholder*="How can I help"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-labelledby*="Send"], button:has(.octicon-paper-airplane), .ChatInput-module__toolbarRight--PiQJn button[type="button"]:last-child',
+    SUBMIT_BUTTON: 'button[data-testid="chat-composer-submit"], button[aria-labelledby*="Send"], button:has(.octicon-paper-airplane), .ChatInput-module__toolbarRight--PiQJn button[type="button"]:last-child',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attachment-menu-button"], button[aria-label*="Attach"], button:has(.octicon-paperclip)',
     FILE_INPUT: '#image-uploader, input[type="file"][accept*=".md"], input[type="file"][accept*=".txt"], input[type="file"][hidden], input[type="file"][multiple]',
@@ -184,7 +185,12 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
    * Insert text into the GitHub Copilot chat input field
    * Enhanced with better selector handling and event integration
    */
-  async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
+  async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
+    if (inputChips.tryCapture(this, text, options)) {
+      this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
+      return true;
+    }
+
     this.context.logger.debug(`Attempting to insert text into GitHub Copilot chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 
     let targetElement: HTMLElement | null = null;
@@ -257,7 +263,15 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
    * Submit the current text in the GitHub Copilot chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
+  getChipAnchors(): ChipAnchors | null {
+    const input = document.querySelector<HTMLElement>('textarea[data-testid="chat-composer-input"], #copilot-chat-textarea');
+    const container = (input?.closest('form') ?? input?.parentElement) as HTMLElement | null | undefined;
+    if (!input || !container) return null;
+    return { input, container, submitButtonSelector: 'button[data-testid="chat-composer-submit"]' };
+  }
+
   async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
+    await inputChips.flushBeforeSubmit(this);
     this.context.logger.debug('Attempting to submit GitHub Copilot chat input');
 
     let submitButton: HTMLButtonElement | null = null;
@@ -818,12 +832,17 @@ export class GitHubCopilotAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
-    // Try primary selector first - GitHub Copilot's toolbar left section
-    const toolbar = document.querySelector('button[data-testid="attachment-menu-button"]');
-    if (toolbar) {
-      this.context.logger.debug('Found insertion point: div#copilot-chat-textarea-preview');
-      const attachButton = toolbar.querySelector('button[data-testid="attachment-menu-button"]');
-      return { container: toolbar, insertAfter: attachButton };
+    // Primary (2026 composer): leading toolbar group, insert right after the attach button
+    const leading = document.querySelector('[data-testid="chat-composer-toolbar-leading"]');
+    if (leading) {
+      const attach = leading.querySelector('button[data-testid="chat-composer-attach-menu"]');
+      return { container: leading, insertAfter: attach };
+    }
+
+    // Legacy: attach button was the anchor; insert as its sibling
+    const legacyAttach = document.querySelector('button[data-testid="attachment-menu-button"]');
+    if (legacyAttach?.parentElement) {
+      return { container: legacyAttach.parentElement, insertAfter: legacyAttach };
     }
 
     // Try fallback selector - general toolbar

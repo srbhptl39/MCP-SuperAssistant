@@ -813,7 +813,8 @@ class PluginRegistry {
         name: 'grok-adapter',
         version: '2.0.0',
         type: 'website-adapter',
-        hostnames: ['grok.com', /x\.com.*grok/, /twitter\.com.*grok/],
+        // Matching is by hostname only, so x.com must match as a whole; GrokAdapter gates on the /i/grok path itself.
+        hostnames: ['grok.com', /^(www\.)?(x|twitter)\.com$/],
         capabilities: ['text-insertion', 'form-submission', 'file-attachment'],
         create: () => new GrokAdapter(),
         config: {

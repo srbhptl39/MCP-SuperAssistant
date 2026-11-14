@@ -35,7 +35,7 @@ export class GrokAdapter extends BaseAdapterPlugin {
     CHAT_INPUT: 'div.tiptap.ProseMirror[contenteditable="true"], div[contenteditable="true"], textarea[aria-label="Ask Grok anything"], textarea[placeholder="Ask anything"], textarea[placeholder], textarea[spellcheck="false"], textarea[data-gramm="false"], div.css-146c3p1 textarea, textarea.r-30o5oe',
     // Submit button selectors (multiple fallbacks). grok.com send button is
     // button[type="submit"][aria-label="Submit"][data-testid="chat-submit"].
-    SUBMIT_BUTTON: 'button[aria-label="Submit"], button[data-testid="chat-submit"], button[type="submit"], button.send-button, button[aria-label="Send message"], button.chat-submit, button[data-testid="send-button"], svg.send-icon, button.submit-button',
+    SUBMIT_BUTTON: 'button[aria-label="Submit"], button[data-testid="chat-submit"], button[type="submit"], button.send-button, button[aria-label="Send message"], button[aria-label="Send"], button.chat-submit, button[data-testid="send-button"], svg.send-icon, button.submit-button',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[aria-label*="attach"], button[aria-label*="file"], button[data-testid="file-upload"]',
     FILE_INPUT: 'input[type="file"]',
@@ -302,7 +302,11 @@ export class GrokAdapter extends BaseAdapterPlugin {
     if (!input) return null;
     // The composer <form> (overflow: visible) wraps both the input row and the button row, while the
     // inner .query-bar clips overflow — so anchor the bar on the form to keep chips from being clipped.
-    const container = (input.closest('form')
+    // x.com: the fieldset stacks the composer box in a flex column, so the bar sits above the box (inside,
+    // it would overlap the absolutely-positioned placeholder). grok.com: the form is a grid with a fixed
+    // first row, so prepending into it displaces the toolbar — anchor on the form's flex-column parent.
+    const container = (input.closest('fieldset')
+      ?? input.closest('form')?.parentElement
       ?? input.closest('.query-bar')
       ?? input.parentElement) as HTMLElement | null;
     if (!container) return null;
@@ -825,6 +829,8 @@ export class GrokAdapter extends BaseAdapterPlugin {
   }
 
   private setupUIIntegration(): void {
+    // The adapter is selected for all of x.com; only touch the page on Grok URLs.
+    if (this.isSupported() !== true) return;
     // Allow multiple calls for UI integration (for re-injection after page changes)
     // but log it for debugging
     if (this.uiIntegrationSetup) {
@@ -959,6 +965,12 @@ export class GrokAdapter extends BaseAdapterPlugin {
     //   div.grow.flex.items-center.gap-1.5              <- toolbar row (container)
     //     div.flex.items-center        (Attach button)  <- left group  [insert after this]
     //     div.ms-auto.flex.flex-row.items-end.gap-1     <- right group (Model/DeepSearch/Think + Submit)
+    // x.com/i/grok (2026): flat toolbar row; the Attach button is a direct child, next to div.ms-auto.
+    const xAttach = document.querySelector('button[aria-label^="Add files"]');
+    if (xAttach?.parentElement) {
+      return { container: xAttach.parentElement, insertAfter: xAttach };
+    }
+
     const attachButton = document.querySelector('button[data-testid="attach-button"], button[aria-label="Attach"]');
     if (attachButton) {
       const leftGroup = attachButton.parentElement;            // div.flex.items-center wrapping Attach

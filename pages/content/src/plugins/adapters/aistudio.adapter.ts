@@ -1830,6 +1830,7 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
       // Define a function to find the submit button
       const findSubmitButton = (): HTMLButtonElement | null => {
         const submitButton =
+          document.querySelector('ms-run-button button') || // Nov 2026: "Run" button, no aria-label
           document.querySelector('button[aria-label="Submit"]') ||
           document.querySelector('button[aria-label="Send"]') ||
           document.querySelector('button[type="submit"]') ||

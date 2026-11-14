@@ -30,7 +30,7 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
     // Submit button selectors - No explicit submit button in new UI, Enter key is primary
     SUBMIT_BUTTON: 'button[aria-label="Submit"], button[aria-label="Send"], button[type="submit"]',
     // File upload related selectors - New "Add files or tools" button
-    FILE_UPLOAD_BUTTON: 'button[aria-label="Add files or tools"], button[aria-label*="Attach"], button[aria-label*="attach"]',
+    FILE_UPLOAD_BUTTON: 'button[aria-label^="Add files"], button[aria-label*="Attach"], button[aria-label*="attach"]',
     FILE_INPUT: 'input[type="file"][multiple][style="display: none;"], input[type="file"][multiple]',
     // Main panel and container selectors - New grid-based layout with bg-raised
     MAIN_PANEL: '.bg-raised, .main-content, .chat-container, .conversation-container',
@@ -352,7 +352,11 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
       if (input) break;
     }
     if (!input) return null;
-    const container = (input.closest('form')
+    // Current UI: the rounded composer box (parent of the group/composer-row grid) is a vertical grid,
+    // so prepending adds a row above the input inside the box. Older fallbacks below would put the bar
+    // inside the flex input row and push the placeholder sideways.
+    const container = (input.closest('[class*="group/composer-row"]')?.parentElement
+      ?? input.closest('form')
       ?? input.closest('.bg-raised')
       ?? input.parentElement?.parentElement
       ?? input.parentElement) as HTMLElement | null;
@@ -990,6 +994,16 @@ export class PerplexityAdapter extends BaseAdapterPlugin {
 
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
+
+    // Current UI (Nov 2026): "Add files, plugins, and more" button sits in the col-start-1 row-start-2 row,
+    // wrapped in a span. Insert after that wrapper so the MCP button lands beside it.
+    const addButton = document.querySelector('button[aria-label^="Add files"]');
+    const addRow = addButton?.closest('div.col-start-1.row-start-2');
+    if (addButton && addRow) {
+      let wrapper: Element = addButton;
+      while (wrapper.parentElement && wrapper.parentElement !== addRow) wrapper = wrapper.parentElement;
+      return { container: addRow, insertAfter: wrapper };
+    }
 
     // New UI: Look for the left side action buttons container (gap-sm flex col-start-1 row-start-2)
     // This is where the "Add files or tools" button is located

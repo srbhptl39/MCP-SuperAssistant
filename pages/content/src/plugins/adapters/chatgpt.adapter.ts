@@ -34,18 +34,18 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Submit button selectors (multiple fallbacks). Verified live Jan 2026: the send button only
     // renders once the composer has text (an empty composer shows a dictation button instead).
     // Kept selectors are combinator-free so they're safe inside inputChips' target.closest() interceptor.
-    SUBMIT_BUTTON: 'button[data-testid="send-button"], button#composer-submit-button, button[aria-label="Send prompt"], button[aria-label*="Send"]',
+    SUBMIT_BUTTON: 'button[data-testid="send-button"], button#composer-submit-button, button[aria-label="Send"], button[aria-label="Send prompt"], button[aria-label*="Send"]',
     // File upload related selectors
-    FILE_UPLOAD_BUTTON: '#upload-file-btn, button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
+    FILE_UPLOAD_BUTTON: '#upload-file-btn, button[aria-label^="Add files"], button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
     FILE_INPUT: 'input[type="file"][multiple]',
     // Main panel and container selectors
-    MAIN_PANEL: 'main, .chat-container, [data-testid="conversation-turn-wrapper"]',
+    MAIN_PANEL: 'main, [role="region"][aria-label="Conversation"], .chat-container, [data-testid="conversation-turn-wrapper"]',
     // Drop zones for file attachment
-    DROP_ZONE: '#prompt-textarea, .ProseMirror, [data-testid="composer-text-input"], .composer-parent',
+    DROP_ZONE: '#prompt-textarea, .ProseMirror, [data-composer-body], [data-testid="composer-text-input"], .composer-parent',
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, [data-testid="file-attachment"]',
     // Button insertion points (for MCP popover) - targeting leading area next to plus button
-    BUTTON_INSERTION_CONTAINER: '[grid-area="leading"], .composer-leading-actions, [data-testid="composer-plus-btn"]',
+    BUTTON_INSERTION_CONTAINER: '[grid-area="leading"], .composer-leading-actions, [data-testid="composer-plus-btn"], button[aria-label^="Add files"]',
     // Alternative insertion points
     FALLBACK_INSERTION: '.composer-parent, .relative.flex.w-full.items-end, [data-testid="composer-trailing-actions"]'
   };
@@ -997,7 +997,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Finding button insertion point for MCP popover next to plus button');
 
     // Try to find the plus button first
-    const plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
+    // Nov 2026 UI dropped the data-testid; the button is now labelled "Add files and more".
+    const plusButton = document.querySelector('[data-testid="composer-plus-btn"], button[aria-label^="Add files"]');
     if (plusButton && plusButton.parentElement) {
       this.context.logger.debug('Found plus button, inserting MCP button after it');
       return { container: plusButton.parentElement, insertAfter: plusButton };
