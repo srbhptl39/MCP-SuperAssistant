@@ -135,6 +135,14 @@ export const processFunctionCalls = (): number => {
 export const checkForUnprocessedFunctionCalls = (): number => {
   let processedCount = 0;
 
+  // Sites that swap a code block's element after hydration (ChatGPT renders a placeholder, then the
+  // final data-code-block node) leave the first card behind with no source; the new node gets its own
+  // card below, so drop cards whose source is gone. Multi-call cards use `${blockId}-s${i}`.
+  document.querySelectorAll<HTMLElement>('.function-block[data-block-id^="block-"]').forEach(card => {
+    const sourceId = card.getAttribute('data-block-id')!.replace(/-s\d+$/, '');
+    if (!document.querySelector(`[data-block-id="${sourceId}"]:not(.function-block)`)) card.remove();
+  });
+
   // Get all pre/code elements in the document that might contain function calls
   const getTargetElements = (): HTMLElement[] => {
     const elements: HTMLElement[] = [];

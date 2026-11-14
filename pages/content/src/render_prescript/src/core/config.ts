@@ -71,7 +71,8 @@ export const WEBSITE_CONFIGS: Array<{
         // <div _ngcontent-ng-c1514118342="" msheightchanged="" class="turn-content">
         // <div _ngcontent-ng-c1514118342="" class="virtual-scroll-container user-prompt-container" data-turn-role="User">
         // <ms-text-chunk _ngcontent-ng-c66683564="" _nghost-ng-c3631226313="" class="ng-star-inserted">
-        function_result_selector: ['ms-text-chunk.ng-star-inserted'],
+        // Scoped to the user turn: bare 'ms-text-chunk' also matches assistant chunks.
+        function_result_selector: ['[data-turn-role="User"] ms-text-chunk'],
       },
     },
     {
@@ -79,7 +80,7 @@ export const WEBSITE_CONFIGS: Array<{
       config: {
         targetSelectors: ['pre'],
         streamingContainerSelectors: ['.pre'],
-        function_result_selector: ['div.group\\/query', '.group\\/query', 'div[class*="group/query"]'],
+        function_result_selector: ['[data-message-bubble="right"]', 'div.group\\/query', '.group\\/query', 'div[class*="group/query"]'],
       },
     },
     {
@@ -97,7 +98,19 @@ export const WEBSITE_CONFIGS: Array<{
       config: {
         targetSelectors: ['code'],
         streamingContainerSelectors: ['code'],
+        // Do not target the React-managed user bubble (data-testid=user-message): replacing its children
+        // blanks the transcript on route change. Auto-run is still blocked via USER_MESSAGE_SELECTOR.
         function_result_selector: ['div.relative.items-end'],
+      },
+    },
+    {
+      // Grok on X (x.com/i/grok); the grok.com pattern does not match x.com URLs.
+      urlPattern: 'x.com/i/grok',
+      config: {
+        targetSelectors: ['pre'],
+        streamingContainerSelectors: ['pre'],
+        // Same React-bubble risk as grok.com; user-message calls are still kept from auto-running.
+        function_result_selector: [],
       },
     },
     {
@@ -122,17 +135,21 @@ export const WEBSITE_CONFIGS: Array<{
     {
       urlPattern: 'chatgpt.com',
       config: {
-        targetSelectors: ['pre'],
-        streamingContainerSelectors: ['pre'],
-        function_result_selector: ['div[data-message-author-role="user"]'],
+        // Nov 2026 UI renders code blocks as div[data-code-block] (no <pre>) and marks turns with
+        // data-content-search-unit-key="…:user|:assistant" instead of data-message-author-role.
+        targetSelectors: ['pre', 'div[data-code-block="true"]'],
+        streamingContainerSelectors: ['pre', 'div[data-code-block="true"]'],
+        function_result_selector: ['div[data-message-author-role="user"]', '[data-content-search-unit-key$=":user"]'],
       },
     },
     {
       urlPattern: 'chat.openai.com',
       config: {
-        targetSelectors: ['pre'],
-        streamingContainerSelectors: ['pre'],
-        function_result_selector: ['div[data-message-author-role="user"]'],
+        // Nov 2026 UI renders code blocks as div[data-code-block] (no <pre>) and marks turns with
+        // data-content-search-unit-key="…:user|:assistant" instead of data-message-author-role.
+        targetSelectors: ['pre', 'div[data-code-block="true"]'],
+        streamingContainerSelectors: ['pre', 'div[data-code-block="true"]'],
+        function_result_selector: ['div[data-message-author-role="user"]', '[data-content-search-unit-key$=":user"]'],
       },
     },
     {
@@ -172,7 +189,7 @@ export const WEBSITE_CONFIGS: Array<{
       config: {
         targetSelectors: ['pre'],
         streamingContainerSelectors: ['pre'],
-        function_result_selector: ['.UserMessage-module__container--cAvvK', '.ChatMessage-module__userMessage--xvIFp'],
+        function_result_selector: ['div[class*="UserMessage"]'],
       },
     },
     {

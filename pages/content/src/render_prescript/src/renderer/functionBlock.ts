@@ -20,6 +20,30 @@ import { createLogger } from '@extension/shared/lib/logger';
 
 const logger = createLogger('FunctionBlockRenderer');
 
+// Calls quoted in the user's own message (e.g. the examples inside injected instructions) must never
+// auto-run; only assistant output may. One selector per site's user-turn container.
+const USER_MESSAGE_SELECTOR = [
+  '[data-message-author-role="user"]', // ChatGPT (legacy) and others
+  '[data-content-search-unit-key$=":user"]', // ChatGPT (Nov 2026)
+  '[data-testid="user-message"]', // Claude, OpenRouter
+  '[data-message-bubble="right"]', // Perplexity
+  'user-query', // Gemini
+  '[data-turn-role="User"]', // AI Studio
+  '[class*="UserMessage__"]', // GitHub Copilot
+  '[class*="group/user"]', // Grok on X
+  'div._9663006', // DeepSeek (hashed class; no stable attribute exists)
+].join(', ');
+const isInUserMessage = (el: Element): boolean => !!el.closest(USER_MESSAGE_SELECTOR);
+
+// Grok on X renders each code line as <span class="block"> with no newline characters, so textContent
+// glues the JSONL lines together and line-based name/call-id parsing fails. Rebuild the line breaks.
+const getBlockText = (block: HTMLElement): string => {
+  const text = block.textContent || '';
+  if (text.includes('\n')) return text.trim();
+  const lines = block.querySelectorAll('code > span.block');
+  return (lines.length > 1 ? Array.from(lines, l => l.textContent).join('\n') : text).trim();
+};
+
 declare global {
   interface HTMLElement {
     _userHasScrolled?: boolean;
@@ -1422,7 +1446,7 @@ const renderCard = (
       const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
       const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
-        if (autoExecuteEnabled !== true && !(isMeta && autoDiscovery)) {
+        if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
           return;
         }
         if (executionTracker.isBlockExecuted(cardId) === true) {
@@ -1449,6 +1473,10 @@ const renderCard = (
  * Main function to render a function call block
  */
 export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { current: boolean }): boolean => {
+  // With the default ['pre', 'code'] targets a <code> inside a <pre> is a second target for the same
+  // call; rendering both stacks duplicate cards (and the outer pre then re-parses the inner card's text).
+  if (block.parentElement?.closest(CONFIG.targetSelectors.join(', '))) return false;
+
   injectStreamingStyles();
 
   const functionInfo = containsFunctionCalls(block);
@@ -1516,7 +1544,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   // groups. Render one card per group and stop; the single-card path below stays
   // byte-identical for XML and single-group JSON (this branch is never entered there).
   if (functionInfo.detectedBlockType === 'json') {
-    const rawContentForSplit = block.textContent?.trim() || '';
+    const rawContentForSplit = getBlockText(block);
     const segments = splitJSONFunctionSegments(rawContentForSplit);
     if (segments.length > 1) {
       processedElements.add(block);
@@ -1557,7 +1585,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     previousCompletionStatus = existingDiv.classList.contains('function-complete');
   }
 
-  const rawContent = block.textContent?.trim() || '';
+  const rawContent = getBlockText(block);
   const { tag, content } = extractLanguageTag(rawContent);
 
   // Determine if JSON or XML format
@@ -1814,7 +1842,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
       const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
-        if (autoExecuteEnabled !== true && !(isMeta && autoDiscovery)) {
+        if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
           logger.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
           return true;
         }
