@@ -1,4 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
@@ -186,7 +187,8 @@ export class McpClient extends EventEmitter<AllEvents> {
           name: `mcp-client-${type}`,
           version: '1.0.0',
         },
-        { capabilities: {} },
+        // MV3 CSP forbids eval; the SDK's default Ajv validator compiles schemas with new Function.
+        { capabilities: {}, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
       );
 
       // Set up logging notification handler

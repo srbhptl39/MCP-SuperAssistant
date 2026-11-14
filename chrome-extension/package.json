@@ -18,6 +18,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
     "@extension/env": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
