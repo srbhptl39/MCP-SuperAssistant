@@ -342,7 +342,7 @@ export async function executeBrowserTool(
       case 'browser_interact_tab':
         return await interactTab(args, denylist, callerTabId);
       case 'browser_open_tab':
-        return await openTab(args);
+        return await openTab(args, denylist);
       case 'browser_navigate':
         return await navigate(args, denylist, callerTabId);
       case 'browser_focus_tab':
@@ -506,10 +506,9 @@ async function interactTab(args: Record<string, unknown>, denylist: string[], ca
 
   if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
 
-  // Guards run once before the loop; every step targets the same tabId, so all steps are covered.
-  // ponytail: per-step re-denylist-check skipped; navigation targets are model-chosen selectors, not URLs.
-  const tab = await chrome.tabs.get(tabId);
-  const reason = tabExclusionReason(tab, denylist);
+  // Re-checked before every step: a click or Enter can navigate the tab onto a blocked site.
+  const blocked = async () => tabExclusionReason(await chrome.tabs.get(tabId), denylist);
+  const reason = await blocked();
   if (reason) return textResult(reason);
 
   const steps: InteractStep[] =
@@ -535,6 +534,13 @@ async function interactTab(args: Record<string, unknown>, denylist: string[], ca
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const action = String(s.action ?? '');
+    if (i > 0) {
+      const now = await blocked();
+      if (now) {
+        results.push(`step ${i + 1}: stopped. ${now}`);
+        break;
+      }
+    }
     if (!VALID.includes(action)) {
       results.push(`step ${i + 1} ${action || '(none)'}: invalid action`);
       break;
@@ -618,7 +624,7 @@ async function getSelection(args: Record<string, unknown>, denylist: string[]) {
   return textResult(`Selection from "${data.title}" (${data.url}):\n\n${data.selection}`);
 }
 
-async function openTab(args: Record<string, unknown>) {
+async function openTab(args: Record<string, unknown>, denylist: string[]) {
   const raw = String(args.url ?? '');
   let u: URL;
   try {
@@ -627,6 +633,9 @@ async function openTab(args: Record<string, unknown>) {
     return textResult('browser_open_tab requires a valid absolute URL.');
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return textResult('Only http(s) URLs can be opened.');
+  const host = u.hostname;
+  if (EXCLUDED_HOSTS.some(h => host === h || host.endsWith(`.${h}`))) return textResult('Browser store pages cannot be opened.');
+  if (isDeniedHostname(host, denylist)) return textResult('That destination is on your denylist.');
   const tab = await chrome.tabs.create({ url: raw, active: !args.background });
   return textResult(JSON.stringify({ tabId: tab.id, url: raw }, null, 2));
 }
