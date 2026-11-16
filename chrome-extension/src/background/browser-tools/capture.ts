@@ -7,6 +7,7 @@
 import { AI_PLATFORMS, browserBridgeStorage, platformForUrl } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
 import { extractReadableContent } from './extractor';
+import { telemetry } from '../../../utils/telemetry';
 
 const logger = createLogger('CaptureFlow');
 
@@ -87,6 +88,7 @@ async function handleCapture(): Promise<void> {
     .replace(/{content}/g, () => data.content);
 
   await routeToTarget(text, settings.autoSubmitCapture, settings.defaultAiPlatform, settings.openBehavior);
+  void telemetry.record('capture', settings.defaultAiPlatform);
 }
 
 async function routeToTarget(

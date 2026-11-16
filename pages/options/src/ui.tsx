@@ -11,11 +11,20 @@ export const buttonClass =
   'disabled:cursor-not-allowed disabled:opacity-50 ' +
   'dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700 dark:focus:ring-neutral-600';
 
-export const Card = ({ title, children }: { title: string; children: ReactNode }) => (
+export const Card = ({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) => (
   <section className="rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-    <h2 className="border-b border-neutral-100 px-5 py-3.5 text-sm font-semibold text-neutral-900 dark:border-neutral-800 dark:text-neutral-100">
-      {title}
-    </h2>
+    <div className="border-b border-neutral-100 px-5 py-3.5 dark:border-neutral-800">
+      <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h2>
+      {description ? <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{description}</p> : null}
+    </div>
     <div className="flex flex-col gap-6 p-5">{children}</div>
   </section>
 );
@@ -105,3 +114,9 @@ export const SavedTag = ({ show }: { show: boolean }) => (
     Saved
   </span>
 );
+
+export const primaryButtonClass =
+  'inline-flex items-center justify-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-medium ' +
+  'text-white transition hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-300 ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 dark:focus:ring-neutral-600';

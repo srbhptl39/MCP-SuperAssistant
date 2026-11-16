@@ -32,17 +32,6 @@ const createThemedContentArea = (className: string): HTMLDivElement => {
   contentArea.style.whiteSpace = 'pre-wrap';
   contentArea.style.wordBreak = 'break-word';
 
-  // Apply theme-specific styles
-  if (isDarkTheme()) {
-    contentArea.style.backgroundColor = '#2d2d2d';
-    contentArea.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-    contentArea.style.color = '#e8eaed';
-  } else {
-    contentArea.style.backgroundColor = '#f8f9fa';
-    contentArea.style.border = '1px solid rgba(0, 0, 0, 0.1)';
-    contentArea.style.color = '#202124';
-  }
-
   return contentArea;
 };
 
@@ -224,7 +213,7 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     const config: ExpandableConfig = {
       blockId,
       className: 'system-message-container',
-      headerText: 'MCP SuperAssistant',
+      headerText: 'MCP SuperAssistant context',
       expandTitle: 'Expand system message',
       collapseTitle: 'Collapse system message',
     };
@@ -233,13 +222,6 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     const expandableContent = createExpandableContent();
     const contentArea = createThemedContentArea('param-value system-message-content');
 
-    // Fix border style for system messages
-    if (isDarkTheme()) {
-      contentArea.style.border = 'solid rgba(255, 255, 255, 0.1)';
-    } else {
-      contentArea.style.border = 'solid rgba(0, 0, 0, 0.1)';
-    }
-
     // Add the system message content with proper newline handling
     // Force proper text formatting to override any website CSS
     contentArea.style.whiteSpace = 'pre-wrap';
@@ -247,18 +229,33 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     contentArea.style.overflowWrap = 'break-word';
     contentArea.style.fontFamily =
       'var(--font-system), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    contentArea.textContent = content;
+    // Chip flush sends "<user text>\n\n---\n<instructions/context>": keep the user's own words
+    // visible and fold only the appended part behind the toggle.
+    // Use the separator right before the instructions, not a "---" the user typed themselves.
+    const sysIdx = content.search(/\[SuperAssistant tools|<system>/i);
+    const sep = sysIdx < 0 ? content.indexOf('\n---\n') : content.lastIndexOf('\n---\n', sysIdx);
+    const userText = sep > 0 ? content.slice(0, sep).trim() : '';
+    contentArea.textContent = userText ? content.slice(sep + 5).trim() : content;
     expandableContent.appendChild(contentArea);
 
     // Setup expand/collapse functionality
     setupExpandCollapse(systemContainer, expandableContent, expandButton, config);
+    header.onclick = expandButton.onclick;
 
     // Add components to container
     systemContainer.appendChild(header);
     systemContainer.appendChild(expandableContent);
 
-    // Replace the original block with our rendered version
-    replaceBlockContent(block, systemContainer);
+    if (userText) {
+      const wrapper = document.createElement('div');
+      const text = document.createElement('div');
+      text.className = 'system-message-user-text';
+      text.textContent = userText;
+      wrapper.append(text, systemContainer);
+      replaceBlockContent(block, wrapper);
+    } else {
+      replaceBlockContent(block, systemContainer);
+    }
   } catch (e) {
     logger.error('[renderSystemMessageBox] Error rendering system message:', e);
   }
@@ -352,6 +349,7 @@ const createExpandableBlock = (config: ExpandableConfig, contentArea: HTMLDivEle
 
   expandableContent.appendChild(contentArea);
   setupExpandCollapse(container, expandableContent, expandButton, config);
+  header.onclick = expandButton.onclick;
 
   container.appendChild(header);
   container.appendChild(expandableContent);
@@ -418,7 +416,7 @@ export const renderFunctionResult = (block: HTMLElement, isProcessingRef: { curr
       const config: ExpandableConfig = {
         blockId,
         className: 'function-result-container',
-        headerText: 'Function Result',
+        headerText: 'Tool result',
         expandTitle: 'Expand function result',
         collapseTitle: 'Collapse function result',
         callId,

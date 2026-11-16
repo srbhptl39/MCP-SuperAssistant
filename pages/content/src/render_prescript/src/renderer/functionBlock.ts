@@ -15,6 +15,7 @@ import {
   analyzeJSONSegment,
 } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
+import { telemetry } from '../../../utils/telemetry';
 
 // Define custom property for tracking scroll state
 
@@ -50,6 +51,7 @@ declare global {
     _scrollInitialized?: boolean;
     _scrollCleanup?: () => void;
     _scrollHandlersInitialized?: boolean;
+    _mcpSource?: HTMLElement; // card -> the element it renders (orphan check in mutationObserver)
     value?: string; // For compatibility with input elements
   }
 }
@@ -1172,6 +1174,7 @@ const AutoExecutionUtils = {
             execChain = execChain
               .then(async () => {
                 try {
+                  telemetry('auto_execute');
                   blockToSettle.querySelector<HTMLButtonElement>('.execute-button')?.click();
                   await waitForSettled(blockToSettle);
                 } catch (e) {
@@ -1415,6 +1418,7 @@ const renderCard = (
     if (block.parentNode) {
       // insertBefore(card, block) in segment order stacks card0..cardN above the hidden pre.
       block.parentNode.insertBefore(blockDiv, block);
+      blockDiv._mcpSource = block;
       block.style.display = 'none';
     } else {
       return;
@@ -1424,8 +1428,11 @@ const renderCard = (
   let buttonContainer = cachedElements.buttonContainer;
   if (!buttonContainer) {
     buttonContainer = DOMUtils.createElement<HTMLDivElement>('div', 'function-buttons');
-    buttonContainer.style.marginTop = '12px';
-    blockDiv.appendChild(buttonContainer);
+    // Run sits in the header row; clicks there must not toggle the card open.
+    buttonContainer.onclick = e => e.stopPropagation();
+    const headerRight = blockDiv.querySelector('.function-name-right');
+    if (headerRight) headerRight.insertBefore(buttonContainer, headerRight.querySelector('.expand-button'));
+    else blockDiv.appendChild(buttonContainer);
 
     cachedElements.buttonContainer = buttonContainer;
     elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
@@ -1433,7 +1440,7 @@ const renderCard = (
 
   if (isComplete) {
     if (!blockDiv.querySelector('.raw-toggle')) {
-      addRawXmlToggle(buttonContainer!, rawContent);
+      addRawXmlToggle(expandableContent ?? buttonContainer!, rawContent);
     }
 
     if (!blockDiv.querySelector('.execute-button')) {
@@ -1799,6 +1806,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   if (isNewRender) {
     if (block.parentNode) {
       block.parentNode.insertBefore(blockDiv, block);
+      blockDiv._mcpSource = block;
       block.style.display = 'none';
     } else {
       if (CONFIG.debug) logger.warn('Function call block has no parent element, cannot insert rendered block');
@@ -1810,8 +1818,11 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   let buttonContainer = cachedElements.buttonContainer;
   if (!buttonContainer) {
     buttonContainer = DOMUtils.createElement<HTMLDivElement>('div', 'function-buttons');
-    buttonContainer.style.marginTop = '12px';
-    blockDiv.appendChild(buttonContainer);
+    // Run sits in the header row; clicks there must not toggle the card open.
+    buttonContainer.onclick = e => e.stopPropagation();
+    const headerRight = blockDiv.querySelector('.function-name-right');
+    if (headerRight) headerRight.insertBefore(buttonContainer, headerRight.querySelector('.expand-button'));
+    else blockDiv.appendChild(buttonContainer);
 
     cachedElements.buttonContainer = buttonContainer;
     elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
@@ -1820,7 +1831,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   // Add buttons for complete functions
   if (functionInfo.isComplete) {
     if (!blockDiv.querySelector('.raw-toggle')) {
-      addRawXmlToggle(buttonContainer!, rawContent);
+      addRawXmlToggle(expandableContent ?? buttonContainer!, rawContent);
     }
 
     if (!blockDiv.querySelector('.execute-button')) {

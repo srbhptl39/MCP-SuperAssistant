@@ -2,6 +2,7 @@ import type { AdapterPlugin, ChipAnchors } from '../plugins/plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
 import { useToolStore } from '../stores/tool.store';
 import { generateBrowserPrimer } from '../components/sidebar/Instructions/instructionGeneratorCompact';
+import { telemetry } from '../utils/telemetry';
 
 const logger = createLogger('InputChips');
 
@@ -257,6 +258,7 @@ class InputChipManager {
     this.ensureUI(anchors);
     this.ensureListeners();
     this.ensureWatchdog();
+    telemetry('chip');
     return true;
   }
 

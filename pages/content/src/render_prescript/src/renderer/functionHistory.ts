@@ -99,16 +99,13 @@ export const updateHistoryPanel = (
   // Format the execution time
   const executionTime = formatExecutionTime(executionData.executedAt);
 
-  executionInfo.innerHTML = `
-    <div>Function: <strong>${executionData.functionName}</strong></div>
-    <div>Last executed: <strong>${executionTime}</strong></div>
-  `;
+  executionInfo.textContent = `Last run ${executionTime}`;
   historyPanel.appendChild(executionInfo);
 
   // Create re-execute button
   const reExecuteBtn = document.createElement('button');
   reExecuteBtn.className = 'function-reexecute-button';
-  reExecuteBtn.textContent = 'Re-execute';
+  reExecuteBtn.textContent = 'Run again';
 
   // Params were too large to persist — re-execute can't reconstruct the args.
   if (executionData.paramsOmitted) {

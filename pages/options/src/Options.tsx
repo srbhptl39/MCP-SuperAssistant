@@ -1,15 +1,17 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStorage } from '@extension/shared';
 import {
   AI_PLATFORMS,
   BROWSER_BRIDGE_DEFAULTS,
   browserBridgeStorage,
+  telemetryStorage,
   type BrowserBridgeSettings,
 } from '@extension/storage';
-import { buttonClass, Card, Field, inputClass, RadioGroup, SavedTag, Toggle } from '@src/ui';
+import { buttonClass, Card, Field, inputClass, primaryButtonClass, RadioGroup, SavedTag, Toggle } from '@src/ui';
+import { removeFullAccess, requestFullAccess, useFullAccess } from '@src/access';
 import { getConnectionStatus, getServerConfig, updateServerConfig, type ConnectionType } from '@src/mcp';
 
-const ALL_URLS: chrome.permissions.Permissions = { origins: ['<all_urls>'] };
+const caution = 'text-xs leading-relaxed text-amber-600 dark:text-amber-500';
 
 const useSavedFlash = () => {
   const [saved, setSaved] = useState(false);
@@ -22,8 +24,37 @@ const useSavedFlash = () => {
   return { saved, flash };
 };
 
+const ToggleRow = ({
+  label,
+  hint,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint?: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) => (
+  <div className="flex items-start justify-between gap-4">
+    <Field label={label} hint={hint} />
+    <Toggle label={label} checked={checked} disabled={disabled} onChange={onChange} />
+  </div>
+);
+
+const StatusDot = ({ state }: { state: boolean | null }) => (
+  <span
+    className={
+      'inline-block h-2 w-2 shrink-0 rounded-full ' +
+      (state === null ? 'bg-neutral-400' : state ? 'bg-green-500' : 'bg-amber-500')
+    }
+  />
+);
+
 const OptionsInner = () => {
   const settings = useStorage(browserBridgeStorage);
+  const telemetrySettings = useStorage(telemetryStorage);
   const { saved, flash } = useSavedFlash();
 
   const update = useCallback(
@@ -36,63 +67,39 @@ const OptionsInner = () => {
 
   const version = chrome.runtime.getManifest().version;
 
-  /* --- Capture: keyboard shortcut binding --- */
-  const [shortcut, setShortcut] = useState<string | null>(null);
-  useEffect(() => {
-    chrome.commands.getAll().then(cmds => {
-      const cmd = cmds.find(c => c.name === 'capture-page');
-      setShortcut(cmd?.shortcut || '');
-    });
-  }, []);
+  /* --- Browser access (<all_urls>) --- */
+  const hasAccess = useFullAccess();
+  const [accessNote, setAccessNote] = useState('');
 
-  /* --- Browser tools: host permission --- */
-  const [hasFullAccess, setHasFullAccess] = useState(false);
-  const [permNote, setPermNote] = useState('');
-  useEffect(() => {
-    const sync = () => chrome.permissions.contains(ALL_URLS).then(setHasFullAccess);
-    sync();
-    chrome.permissions.onAdded.addListener(sync);
-    chrome.permissions.onRemoved.addListener(sync);
-    return () => {
-      chrome.permissions.onAdded.removeListener(sync);
-      chrome.permissions.onRemoved.removeListener(sync);
-    };
-  }, []);
+  const allowAccess = async () => {
+    setAccessNote('');
+    const granted = await requestFullAccess();
+    if (!granted) setAccessNote('Access was not allowed. Click Allow access to try again.');
+    return granted;
+  };
 
-  const grantFullAccess = async () => {
-    const granted = await chrome.permissions.request(ALL_URLS);
-    if (granted) {
-      setHasFullAccess(true);
-      setPermNote('');
-    } else {
-      setPermNote('Chrome permission was declined — tab reading stays limited.');
-    }
+  const revokeAccess = async () => {
+    await removeFullAccess();
+    update({ browserToolsEnabled: false, browserControlEnabled: false });
   };
 
   const toggleBrowserTools = async (next: boolean) => {
-    if (next) {
-      const granted = await chrome.permissions.request(ALL_URLS);
-      if (!granted) {
-        setPermNote('Permission denied — browser tools stay off.');
-        setHasFullAccess(false);
-        return;
-      }
-      setPermNote('');
-      setHasFullAccess(true);
-      update({ browserToolsEnabled: true });
-    } else {
-      update({ browserToolsEnabled: false });
-    }
+    if (next && !hasAccess && !(await allowAccess())) return;
+    update({ browserToolsEnabled: next });
   };
 
-  /* --- Denylist editor --- */
+  /* --- Capture shortcut --- */
+  const [shortcut, setShortcut] = useState<string | null>(null);
+  useEffect(() => {
+    chrome.commands.getAll().then(cmds => setShortcut(cmds.find(c => c.name === 'capture-page')?.shortcut || ''));
+  }, []);
+
+  /* --- Denylist --- */
   const [denyInput, setDenyInput] = useState('');
   const addDeny = () => {
     const host = denyInput.trim().toLowerCase();
     if (!host) return;
-    if (!settings.domainDenylist.includes(host)) {
-      update({ domainDenylist: [...settings.domainDenylist, host] });
-    }
+    if (!settings.domainDenylist.includes(host)) update({ domainDenylist: [...settings.domainDenylist, host] });
     setDenyInput('');
   };
 
@@ -136,164 +143,71 @@ const OptionsInner = () => {
     }
   };
 
-  const caution = 'text-xs leading-relaxed text-amber-600 dark:text-amber-500';
-
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
-      <div className="mx-auto flex max-w-[720px] flex-col gap-6 px-5 py-10">
+      <div className="mx-auto flex max-w-[680px] flex-col gap-6 px-5 py-10">
         <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">MCP SuperAssistant</h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Settings · v{version}</p>
+          <div className="flex items-center gap-3">
+            <img src="/icon-34.png" alt="" className="h-8 w-8" />
+            <div>
+              <h1 className="text-lg font-semibold">MCP SuperAssistant</h1>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Settings · v{version}</p>
+            </div>
           </div>
           <SavedTag show={saved} />
         </header>
 
-        {/* 1. General */}
-        <Card title="General">
-          <Field label="Default AI platform" hint="Where the capture shortcut sends the current page.">
-            <select
-              className={inputClass}
-              value={settings.defaultAiPlatform}
-              onChange={e => update({ defaultAiPlatform: e.target.value as BrowserBridgeSettings['defaultAiPlatform'] })}>
-              {Object.values(AI_PLATFORMS).map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="When sending a capture">
-            <RadioGroup
-              name="openBehavior"
-              value={settings.openBehavior}
-              onChange={v => update({ openBehavior: v })}
-              options={[
-                { value: 'focus-existing', label: 'Focus an existing tab if one is open' },
-                { value: 'always-new-tab', label: 'Always open a new tab' },
-              ]}
-            />
-          </Field>
-        </Card>
-
-        {/* 2. Capture */}
-        <Card title="Capture">
-          <p className="text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-            Pressing the capture shortcut sends the current page to your default AI platform.
-          </p>
-
-          <Field label="Keyboard shortcut">
-            <div className="flex items-center gap-3">
-              <kbd className="rounded-md border border-neutral-300 bg-neutral-100 px-2.5 py-1 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
-                {shortcut === null ? '…' : shortcut || 'Not set'}
-              </kbd>
-              <button
-                type="button"
-                className={buttonClass}
-                onClick={() => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}>
-                Change shortcut
-              </button>
-            </div>
-          </Field>
-
-          <Field label="Capture mode">
-            <RadioGroup
-              name="captureMode"
-              value={settings.captureMode}
-              onChange={v => update({ captureMode: v })}
-              options={[
-                { value: 'article', label: 'Article (main content)' },
-                { value: 'full_text', label: 'Full page text' },
-              ]}
-            />
-          </Field>
-
-          <Field
-            label="Insertion template"
-            hint={
-              <>
-                Placeholders: <code>{'{title}'}</code> <code>{'{url}'}</code> <code>{'{content}'}</code>
-              </>
+        {/* 1. Browser access: the Chrome permission first, then what the AI may do with it */}
+        <Card
+          title="Browser access"
+          description="Lets SuperAssistant read your open tabs when you attach them or allow the AI to.">
+          <div
+            className={
+              'flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ' +
+              (hasAccess
+                ? 'border-green-200 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30'
+                : 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30')
             }>
-            <textarea
-              className={`${inputClass} min-h-[140px] resize-y font-mono text-xs`}
-              value={settings.captureTemplate}
-              onChange={e => update({ captureTemplate: e.target.value })}
-              spellCheck={false}
-            />
-            <div>
-              <button
-                type="button"
-                className={buttonClass}
-                onClick={() => update({ captureTemplate: BROWSER_BRIDGE_DEFAULTS.captureTemplate })}>
-                Reset to default
-              </button>
+            <div className="flex items-center gap-2.5">
+              <StatusDot state={hasAccess} />
+              <div>
+                <p className="text-sm font-medium">
+                  {hasAccess === null ? 'Checking…' : hasAccess ? 'Access allowed' : 'Access not allowed'}
+                </p>
+                <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                  {hasAccess
+                    ? 'Tabs can be read. Sites in the block list below stay off limits.'
+                    : 'Chrome will ask you to confirm. Needed to attach tabs or use browser tools.'}
+                </p>
+              </div>
             </div>
-          </Field>
-
-          <div className="flex items-start justify-between gap-4">
-            <Field
-              label="Auto-submit after inserting"
-              hint={<span className={caution}>The message sends immediately after it is inserted.</span>}
-            />
-            <Toggle
-              label="Auto-submit after inserting"
-              checked={settings.autoSubmitCapture}
-              onChange={v => update({ autoSubmitCapture: v })}
-            />
+            {hasAccess ? (
+              <button type="button" className={buttonClass} onClick={revokeAccess}>
+                Remove access
+              </button>
+            ) : (
+              <button type="button" className={primaryButtonClass} onClick={allowAccess} disabled={hasAccess === null}>
+                Allow access
+              </button>
+            )}
           </div>
-        </Card>
+          {accessNote ? <span className={caution}>{accessNote}</span> : null}
 
-        {/* 3. Browser tools */}
-        <Card title="Browser tools (AI access to your browser)">
-          <div className="flex items-start justify-between gap-4">
-            <Field
-              label="Let the AI read your tabs"
-              hint={
-                <span
-                  className={
-                    'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ' +
-                    (hasFullAccess
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                      : 'bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300')
-                  }>
-                  {hasFullAccess ? 'Full access granted' : 'Limited — capture only'}
-                </span>
-              }>
-              {settings.browserToolsEnabled && !hasFullAccess ? (
-                <button
-                  type="button"
-                  className={
-                    buttonClass + ' border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200'
-                  }
-                  onClick={grantFullAccess}>
-                  Grant full page access
-                </button>
-              ) : null}
-              {permNote ? <span className={caution}>{permNote}</span> : null}
-            </Field>
-            <Toggle
-              label="Let the AI read your tabs"
-              checked={settings.browserToolsEnabled}
-              onChange={toggleBrowserTools}
-            />
-          </div>
+          <ToggleRow
+            label="AI can read your tabs"
+            hint="Lets the AI list your tabs and read their pages using tools."
+            checked={settings.browserToolsEnabled && !!hasAccess}
+            onChange={toggleBrowserTools}
+          />
+          <ToggleRow
+            label="AI can control tabs"
+            hint={<span className={caution}>Open, close, navigate and focus tabs, not just read them.</span>}
+            checked={settings.browserControlEnabled}
+            disabled={!settings.browserToolsEnabled || !hasAccess}
+            onChange={v => update({ browserControlEnabled: v })}
+          />
 
-          <div className="flex items-start justify-between gap-4">
-            <Field
-              label="Allow tab control (open, close, navigate, focus)"
-              hint={<span className={caution}>Lets the AI act on your browser, not just read it.</span>}
-            />
-            <Toggle
-              label="Allow tab control"
-              checked={settings.browserControlEnabled}
-              disabled={!settings.browserToolsEnabled}
-              onChange={v => update({ browserControlEnabled: v })}
-            />
-          </div>
-
-          <Field label="Never allow on these domains" hint="Bare hostnames, e.g. mail.google.com. The AI can never read or touch these.">
+          <Field label="Blocked sites" hint="The AI can never read or touch these, e.g. mail.google.com.">
             <div className="flex gap-2">
               <input
                 className={inputClass}
@@ -332,32 +246,22 @@ const OptionsInner = () => {
           </Field>
         </Card>
 
-        {/* 4. MCP server */}
-        <Card title="MCP server">
+        {/* 2. MCP server */}
+        <Card title="MCP server" description="Where SuperAssistant finds your tools, usually the local proxy.">
           <Field label="Server URL">
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <input
                 className={inputClass}
                 placeholder="http://localhost:3006/sse"
                 value={uri}
                 onChange={e => setUri(e.target.value)}
               />
-              <div className="flex items-center gap-1.5 whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400">
-                <span
-                  className={
-                    'inline-block h-2.5 w-2.5 rounded-full ' +
-                    (connected === null
-                      ? 'bg-neutral-400'
-                      : connected
-                        ? 'bg-green-500'
-                        : 'bg-red-500')
-                  }
-                />
+              <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400">
+                <StatusDot state={connected} />
                 {connected === null ? 'Unknown' : connected ? 'Connected' : 'Disconnected'}
-              </div>
+              </span>
             </div>
           </Field>
-
           <Field label="Transport">
             <select className={inputClass} value={ctype} onChange={e => setCtype(e.target.value as ConnectionType)}>
               <option value="sse">SSE</option>
@@ -365,14 +269,111 @@ const OptionsInner = () => {
               <option value="streamable-http">Streamable HTTP</option>
             </select>
           </Field>
-
           <div className="flex items-center gap-3">
-            <button type="button" className={buttonClass} onClick={saveServer}>
+            <button type="button" className={primaryButtonClass} onClick={saveServer}>
               Save
             </button>
             <SavedTag show={mcpSaved} />
             {mcpErr ? <span className={caution}>{mcpErr}</span> : null}
           </div>
+        </Card>
+
+        {/* 3. Page capture */}
+        <Card title="Page capture" description="Send the page you are on to an AI chat with a keyboard shortcut.">
+          <Field label="Shortcut">
+            <div className="flex items-center gap-3">
+              <kbd className="rounded-md border border-neutral-300 bg-neutral-100 px-2.5 py-1 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+                {shortcut === null ? '…' : shortcut || 'Not set'}
+              </kbd>
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}>
+                Change
+              </button>
+            </div>
+          </Field>
+
+          <Field label="Send to">
+            <select
+              className={inputClass}
+              value={settings.defaultAiPlatform}
+              onChange={e =>
+                update({ defaultAiPlatform: e.target.value as BrowserBridgeSettings['defaultAiPlatform'] })
+              }>
+              {Object.values(AI_PLATFORMS).map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <RadioGroup
+              name="openBehavior"
+              value={settings.openBehavior}
+              onChange={v => update({ openBehavior: v })}
+              options={[
+                { value: 'focus-existing', label: 'Use an open tab if there is one' },
+                { value: 'always-new-tab', label: 'Always open a new tab' },
+              ]}
+            />
+          </Field>
+
+          <Field label="What to capture">
+            <RadioGroup
+              name="captureMode"
+              value={settings.captureMode}
+              onChange={v => update({ captureMode: v })}
+              options={[
+                { value: 'article', label: 'Main article' },
+                { value: 'full_text', label: 'All page text' },
+              ]}
+            />
+          </Field>
+
+          <ToggleRow
+            label="Send right away"
+            hint={<span className={caution}>Submits the message as soon as it is inserted.</span>}
+            checked={settings.autoSubmitCapture}
+            onChange={v => update({ autoSubmitCapture: v })}
+          />
+
+          <details className="group">
+            <summary className="cursor-pointer select-none text-sm font-medium text-neutral-800 dark:text-neutral-200">
+              Message template
+            </summary>
+            <div className="mt-3 flex flex-col gap-2">
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Placeholders: <code>{'{title}'}</code> <code>{'{url}'}</code> <code>{'{content}'}</code>
+              </span>
+              <textarea
+                className={`${inputClass} min-h-[140px] resize-y font-mono text-xs`}
+                value={settings.captureTemplate}
+                onChange={e => update({ captureTemplate: e.target.value })}
+                spellCheck={false}
+              />
+              <div>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={() => update({ captureTemplate: BROWSER_BRIDGE_DEFAULTS.captureTemplate })}>
+                  Reset to default
+                </button>
+              </div>
+            </div>
+          </details>
+        </Card>
+
+        {/* 4. Usage statistics (opt-out) */}
+        <Card title="Usage statistics" description="Anonymous counts that show which features and sites are used.">
+          <ToggleRow
+            label="Share anonymous usage statistics"
+            hint="Sends a random install id, the extension version, your browser and OS, which supported AI sites you used and how many times each feature ran. Never sends chat content, page content, URLs, tool names or arguments."
+            checked={telemetrySettings.enabled}
+            onChange={v => {
+              void telemetryStorage.set({ enabled: v });
+              flash();
+            }}
+          />
         </Card>
       </div>
     </div>

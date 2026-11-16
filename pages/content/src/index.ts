@@ -42,7 +42,7 @@ const logger = createLogger('content_script');
 
 function setupSidebarRecovery(): void {
   // Watch for the case where push mode is enabled but sidebar isn't visible
-  const recoveryInterval = setInterval(() => {
+  setInterval(() => { // lives as long as the page; no cleanup needed
     try {
       // Check if there's an active sidebar manager
       const sidebarManager = (window as any).activeSidebarManager;
@@ -89,11 +89,6 @@ function setupSidebarRecovery(): void {
     }
   }, 1000); // Check every second
 
-  // Clean up when navigating away
-  window.addEventListener('unload', () => {
-    clearInterval(recoveryInterval);
-  });
-
   logMessage('[SidebarRecovery] Sidebar recovery mechanism set up');
 }
 
@@ -108,185 +103,8 @@ function setupSidebarRecovery(): void {
 initializeLogger();
 logMessage('Content script loaded - initializing with Session 10 architecture');
 
-// Initialize URL change tracking for demographic analytics
-let lastUrl = window.location.href;
-const demographicData = collectDemographicData();
-
-// Track initial page view with demographic data
-try {
-  chrome.runtime.sendMessage({
-    command: 'trackAnalyticsEvent',
-    eventName: 'page_view',
-    eventParams: {
-      page_title: document.title,
-      page_location: document.location.href,
-      ...demographicData,
-    },
-  });
-  logMessage('[Analytics] Initial page view tracked with demographic data');
-} catch (error) {
-  logger.error(
-    '[ContentScript] Error sending page view analytics:',
-    error instanceof Error ? error.message : String(error),
-  );
-}
-
-// Set up URL change detection
-setInterval(() => {
-  const currentUrl = window.location.href;
-  if (currentUrl !== lastUrl) {
-    logMessage(`[Analytics] URL changed from ${lastUrl} to ${currentUrl}`);
-
-    // Send URL change event with demographic data
-    try {
-      chrome.runtime.sendMessage({
-        command: 'trackAnalyticsEvent',
-        eventName: 'url_change',
-        eventParams: {
-          page_title: document.title,
-          page_location: currentUrl,
-          previous_page: lastUrl,
-          ...demographicData,
-        },
-      });
-      lastUrl = currentUrl;
-    } catch (error) {
-      logger.error(
-        '[ContentScript] Error sending URL change analytics:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-}, 1000); // Check every second
-
-// Ask background script to track the event
-try {
-  chrome.runtime.sendMessage({
-    command: 'trackAnalyticsEvent',
-    eventName: 'content_script_loaded',
-    eventParams: {
-      hostname: window.location.hostname,
-      path: window.location.pathname,
-    },
-  });
-} catch (error) {
-  // This catch block is primarily for the rare case where the background script context is invalidated
-  // during the sendMessage call (e.g., extension update/reload). It won't catch errors in the background handler.
-  logger.error(
-    '[ContentScript] Error sending analytics tracking message:',
-    error instanceof Error ? error.message : String(error),
-  );
-}
-
 // Add this call right before your existing script loads
 setupSidebarRecovery();
-
-/**
- * Collects demographic data about the user's environment.
- * This includes browser info, OS, language, screen size, and device type.
- */
-function collectDemographicData(): { [key: string]: any } {
-  try {
-    const userAgent = navigator.userAgent;
-    const language = navigator.language;
-
-    // Parse browser and OS information from user agent
-    let browser = 'Unknown';
-    let browserVersion = 'Unknown';
-    let os = 'Unknown';
-    let osVersion = 'Unknown';
-
-    // Detect browser
-    if (userAgent.indexOf('Firefox') > -1) {
-      browser = 'Firefox';
-      const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Edg') > -1) {
-      browser = 'Edge';
-      const match = userAgent.match(/Edg\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Chrome') > -1) {
-      browser = 'Chrome';
-      const match = userAgent.match(/Chrome\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Safari') > -1) {
-      browser = 'Safari';
-      const match = userAgent.match(/Version\/(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
-      browser = 'Internet Explorer';
-      const match = userAgent.match(/(?:MSIE |rv:)(\d+\.\d+)/);
-      browserVersion = match && match[1] ? match[1] : 'Unknown';
-    }
-
-    // Detect OS
-    if (userAgent.indexOf('Windows') > -1) {
-      os = 'Windows';
-      const match = userAgent.match(/Windows NT (\d+\.\d+)/);
-      const ntVersion = match && match[1] ? match[1] : 'Unknown';
-      // Map Windows NT version to Windows version
-      const windowsVersions: { [key: string]: string } = {
-        '10.0': '10/11',
-        '6.3': '8.1',
-        '6.2': '8',
-        '6.1': '7',
-        '6.0': 'Vista',
-        '5.2': 'XP x64',
-        '5.1': 'XP',
-      };
-      osVersion = windowsVersions[ntVersion] || ntVersion;
-    } else if (userAgent.indexOf('Mac') > -1) {
-      os = 'macOS';
-      const match = userAgent.match(/Mac OS X ([\d_]+)/);
-      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
-    } else if (userAgent.indexOf('Linux') > -1) {
-      os = 'Linux';
-      const match = userAgent.match(/Linux ([\w\d\.]+)/);
-      osVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('Android') > -1) {
-      os = 'Android';
-      const match = userAgent.match(/Android ([\d\.]+)/);
-      osVersion = match && match[1] ? match[1] : 'Unknown';
-    } else if (userAgent.indexOf('iOS') > -1 || userAgent.indexOf('iPhone') > -1 || userAgent.indexOf('iPad') > -1) {
-      os = 'iOS';
-      const match = userAgent.match(/OS ([\d_]+)/);
-      osVersion = match && match[1] ? match[1].replace(/_/g, '.') : 'Unknown';
-    }
-
-    // Determine device type
-    let deviceType = 'desktop';
-    if (/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)) {
-      deviceType = /iPad|tablet/i.test(userAgent) ? 'tablet' : 'mobile';
-    }
-
-    // Get screen information
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-    const screenResolution = `${screenWidth}x${screenHeight}`;
-    const pixelRatio = window.devicePixelRatio || 1;
-
-    // Get country/region (this will be limited and may need server-side enrichment)
-    // For privacy reasons, we're just using the language as a proxy
-    const region = language.split('-')[1] || language;
-
-    return {
-      browser,
-      browser_version: browserVersion,
-      operating_system: os,
-      os_version: osVersion,
-      language,
-      region,
-      screen_resolution: screenResolution,
-      pixel_ratio: pixelRatio,
-      device_type: deviceType,
-    };
-  } catch (error) {
-    logger.error('[Analytics] Error collecting demographic data:', error);
-    return {
-      error: 'Failed to collect demographic data',
-    };
-  }
-}
 
 // Initialize the renderer at the earliest possible moment (styles are injected automatically)
 // This ensures function call blocks are hidden before they can be seen by the user

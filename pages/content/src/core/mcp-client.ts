@@ -400,9 +400,7 @@ class McpClient {
 
     logMessage(`[McpClient] Calling tool: ${toolName} with args: ${JSON.stringify(args)}`);
 
-    // Get active adapter name for analytics
-    const activePlugin = pluginRegistry.getActivePlugin();
-    const adapterName = activePlugin?.name || window.location.hostname || 'unknown';
+    const adapterName = pluginRegistry.getActivePlugin()?.name || 'unknown';
 
     // Generate execution ID for tracking
     const executionId = useToolStore.getState().startToolExecution(toolName, args);

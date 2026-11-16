@@ -6,6 +6,7 @@ import type { UserPreferences, SidebarState, Notification, GlobalSettings } from
 import type { RemoteNotification, NotificationAction } from './config.store';
 import { useAppStore, type AppState } from './app.store'; // Assuming AppState includes theme
 import { createLogger } from '@extension/shared/lib/logger';
+import { telemetry } from '../utils/telemetry';
 
 
 const logger = createLogger('useUIStore');
@@ -105,6 +106,10 @@ export const useUIStore = create<UIState>()(
         setSidebarVisibility: (visible: boolean, reason?: string) => {
           set(state => ({ sidebar: { ...state.sidebar, isVisible: visible } }));
           logger.debug(`Sidebar visibility set to ${visible}. Reason: ${reason || 'programmatic'}`);
+          // Usage statistics: the user opened the sidebar from the MCP popover.
+          if (visible && reason?.startsWith('mcp-popover-toggle')) {
+            telemetry('sidebar');
+          }
           eventBus.emit('ui:sidebar-toggle', { visible, reason: reason || 'programmatic' });
         },
 
@@ -196,17 +201,6 @@ export const useUIStore = create<UIState>()(
             timestamp: Date.now()
           });
           
-          // Emit analytics event
-          eventBus.emit('analytics:track', {
-            event: 'notification_shown',
-            parameters: {
-              notification_id: newNotification.id,
-              campaign_id: notification.campaignId,
-              type: notification.type,
-              source: 'remote'
-            }
-          });
-          
           logger.debug('[UIStore] Remote notification added:', newNotification);
           return newNotification.id;
         },
@@ -226,17 +220,6 @@ export const useUIStore = create<UIState>()(
                 notificationId: id,
                 reason: reason || 'user_dismissed',
                 timestamp: Date.now()
-              });
-              
-              // Emit analytics event
-              eventBus.emit('analytics:track', {
-                event: 'notification_dismissed',
-                parameters: {
-                  notification_id: id,
-                  campaign_id: (notification as any).campaignId,
-                  reason: reason || 'user_dismissed',
-                  source: 'remote'
-                }
               });
             }
           }

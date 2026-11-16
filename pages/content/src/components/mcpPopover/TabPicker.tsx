@@ -79,6 +79,14 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
     };
   }, []);
 
+  // Re-check on focus: the access window closes back onto this tab after the user allows.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    const onFocus = () => setFocusTick(t => t + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'browser-bridge:list-tabs' }, resp => {
       if (!mountedRef.current) return;
@@ -92,7 +100,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
       setHasAllUrls(!!resp.hasAllUrls);
       setLoading(false);
     });
-  }, []);
+  }, [focusTick]);
 
   const selectableTabs = tabs.filter(t => t.tabId !== senderTabId);
   const attaching = attachPhase !== 'idle' && attachPhase !== 'done';
@@ -251,15 +259,12 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
             flexDirection: 'column',
             gap: 8,
           }}>
-          <span>
-            Full page access is not granted, so tab contents can&apos;t be read. Enable &quot;Browser tools full
-            access&quot; in the options page.
-          </span>
+          <span>Allow browser access so SuperAssistant can read the tabs you attach.</span>
           <button
             style={{ ...secondaryBtnStyle, alignSelf: 'flex-start' }}
-            onClick={() => chrome.runtime.sendMessage({ type: 'browser-bridge:open-options' })}
+            onClick={() => chrome.runtime.sendMessage({ type: 'browser-bridge:request-access' })}
             type="button">
-            Open options
+            Allow access
           </button>
         </div>
       )}

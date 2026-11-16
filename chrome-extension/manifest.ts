@@ -24,6 +24,8 @@ const manifest = {
   browser_specific_settings: {
     gecko: {
       id: 'saurabh@mcpsuperassistant.ai',
+      // Firefox 140+ built-in consent; telemetry.ts honours it.
+      data_collection_permissions: { required: ['none'], optional: ['technicalAndInteraction'] },
     },
   },
   version: packageJson.version,
@@ -52,7 +54,7 @@ const manifest = {
 
   ],
 
-  permissions: ['storage', 'clipboardWrite', 'tabs', 'scripting', 'activeTab'],
+  permissions: ['storage', 'clipboardWrite', 'tabs', 'scripting', 'activeTab', 'alarms'],
   optional_host_permissions: ['<all_urls>'],
   options_page: 'options/index.html',
   commands: {

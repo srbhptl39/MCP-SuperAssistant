@@ -14,7 +14,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const DEFAULT_MAX_CHARS = 20000;
 const NEED_PERMISSION_MSG =
-  'Browser tools need full page access to read arbitrary tabs. Open the extension options page and enable "Browser tools full access" (grants <all_urls>), then try again.';
+  'Browser tools need browser access to read tabs. Ask the user to click "Allow access" under Browser access in the extension settings, then try again.';
 
 // Hostnames that block content-script injection or should never be touched.
 const EXCLUDED_HOSTS = ['chromewebstore.google.com', 'chrome.google.com', 'addons.mozilla.org'];
@@ -317,11 +317,11 @@ export async function executeBrowserTool(
   try {
     const settings = await browserBridgeStorage.get();
     if (!settings.browserToolsEnabled) {
-      return textResult('Browser tools are disabled. Enable "Browser tools" in the extension options page.');
+      return textResult('Browser tools are off. Ask the user to turn on "AI can read your tabs" in the extension settings.');
     }
     if (ACT_TOOL_NAMES.has(toolName) && !settings.browserControlEnabled) {
       return textResult(
-        'Browser control is disabled. Enable "Browser control" in the extension options page to let the AI open, navigate, focus, or close tabs.',
+        'Tab control is off. Ask the user to turn on "AI can control tabs" in the extension settings to let the AI open, navigate, focus, or close tabs.',
       );
     }
 

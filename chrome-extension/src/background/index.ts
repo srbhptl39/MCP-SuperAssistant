@@ -15,8 +15,7 @@ import {
   type TransportType,
   type ConnectionRequest
 } from '../mcpclient/index';
-import { sendAnalyticsEvent, trackError, collectDemographicData } from '../../utils/analytics';
-import { analyticsService } from '../../utils/analytics-service';
+import { telemetry, TELEMETRY_ALARM, HEARTBEAT_EVERY_MINUTES } from '../../utils/telemetry';
 import { getBrowserTools, executeBrowserTool, listTabsRaw, readTabRaw } from './browser-tools';
 import { browserBridgeStorage } from '@extension/storage';
 import { initCaptureFlow, handleContentReady } from './browser-tools/capture';
@@ -62,6 +61,9 @@ let connectionType: ConnectionType = DEFAULT_CONNECTION_TYPE;
 let isConnected: boolean = false;
 let connectionCount: number = 0;
 let isInitialized: boolean = false;
+let mcpToolCount = 0;
+let markConnectionChecked!: () => void;
+const connectionChecked = new Promise<void>(resolve => (markConnectionChecked = resolve));
 
 /**
  * Initialize server URL from Chrome storage
@@ -137,6 +139,7 @@ function getConnectionStatus(): boolean {
  * Replaces mcpInterface.updateConnectionStatus()
  */
 function updateConnectionStatus(status: boolean): void {
+  if (status && !isConnected) void telemetry.connected(connectionType);
   isConnected = status;
   logger.debug('[Background] Connection status updated to:', status);
 }
@@ -237,7 +240,6 @@ function categorizeToolError(error: Error): { isConnectionError: boolean; isTool
  * The initialization is designed to be non-blocking and resilient to failures.
  */
 async function initializeExtension() {
-  sendAnalyticsEvent('extension_loaded', {});
   logger.debug('Extension initializing...');
 
   // Initialize theme
@@ -307,8 +309,8 @@ async function initializeExtension() {
     }
   };
   
-  // Run the initial connection attempt immediately
-  checkInitialConnectionStatus();
+  // Run the initial connection attempt immediately; the telemetry heartbeat waits for it
+  checkInitialConnectionStatus().finally(markConnectionChecked);
 }
 
 /**
@@ -359,6 +361,7 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
     const errorCategory = categorizeToolError(error instanceof Error ? error : new Error(String(error)));
 
     logger.warn(`MCP server connection failed (${errorCategory.category}): ${error.message || String(error)}`);
+    void telemetry.connectFailed();
     logger.debug('Extension will continue to function with limited capabilities');
 
     // Only update connection status for actual connection errors
@@ -458,35 +461,22 @@ setInterval(() => {
 // --- Error Handling ---
 // Listen for unhandled errors in the service worker
 // Note: This may not catch all async errors perfectly depending on how they propagate
+// Telemetry gets a code only, never the message or stack.
 self.addEventListener('unhandledrejection', event => {
   logger.error('Unhandled rejection in service worker:', event.reason);
-  if (event.reason instanceof Error) {
-    trackError(event.reason, 'background_unhandled_rejection');
-  } else {
-    // Handle non-Error rejections if necessary
-    sendAnalyticsEvent('extension_error', {
-      error_message: `Unhandled rejection: ${JSON.stringify(event.reason)}`,
-      error_context: 'background_unhandled_rejection_non_error',
-    });
-  }
+  void telemetry.error('sw_unhandled');
 });
 
 self.addEventListener('error', event => {
   logger.error('Uncaught error in service worker:', event.error);
-  if (event.error instanceof Error) {
-    trackError(event.error, 'background_uncaught_error');
-  } else {
-    sendAnalyticsEvent('extension_error', {
-      error_message: `Uncaught error: ${event.message}`,
-      error_context: 'background_uncaught_error_non_error',
-    });
-  }
+  void telemetry.error('sw_unhandled');
 });
 
 // --- Lifecycle Events ---
 
 chrome.runtime.onInstalled.addListener(async details => {
   logger.debug('Extension installed or updated:', details.reason);
+  void telemetry.installed(details.reason, details.previousVersion);
 
   const currentVersion = chrome.runtime.getManifest().version;
   const installDate = new Date().toISOString();
@@ -495,33 +485,7 @@ chrome.runtime.onInstalled.addListener(async details => {
   if (details.reason === 'install') {
     logger.debug('Performing first-time installation setup.');
 
-    // Collect demographic data for user properties
-    const demographicData = collectDemographicData();
-
-    // Set install date and user properties for Remote Config targeting
-    await chrome.storage.local.set({
-      installDate,
-      version: currentVersion,
-      userProperties: {
-        extension_version: currentVersion,
-        install_date: installDate,
-        ...demographicData,
-      }
-    });
-
-    // Initialize analytics user properties
-    await analyticsService.updateUserProperties({
-      extension_version: currentVersion,
-      install_date: installDate,
-      ...demographicData,
-    });
-
-    // Track installation with enhanced data
-    sendAnalyticsEvent('extension_installed', {
-      reason: details.reason,
-      extension_version: currentVersion,
-      ...demographicData,
-    });
+    await chrome.storage.local.set({ installDate, version: currentVersion });
 
     // Initialize Remote Config after installation
     if (remoteConfigManager && remoteConfigManager.initialized) {
@@ -532,28 +496,11 @@ chrome.runtime.onInstalled.addListener(async details => {
     const previousVersion = details.previousVersion || 'unknown';
     logger.debug(`Extension updated from ${previousVersion} to ${currentVersion}`);
 
-    const demographicData = collectDemographicData();
-
     // Store version information
     await chrome.storage.local.set({
       version: currentVersion,
       previousVersion: previousVersion,
       lastUpdateDate: new Date().toISOString()
-    });
-
-    // Update analytics user properties
-    await analyticsService.updateUserProperties({
-      extension_version: currentVersion,
-      previous_version: previousVersion,
-      ...demographicData,
-    });
-
-    // Track update with enhanced data
-    sendAnalyticsEvent('extension_installed', {
-      reason: details.reason,
-      extension_version: currentVersion,
-      previous_version: previousVersion,
-      ...demographicData,
     });
 
     // Notify Remote Config about version update
@@ -588,7 +535,6 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.runtime.onStartup.addListener(() => {
   logger.debug('Browser startup detected.');
-  sendAnalyticsEvent('browser_startup', {});
   // Re-check connection on startup
   initializeExtension().catch(err => logger.error('Error initializing on startup:', err));
 });
@@ -601,7 +547,20 @@ initializeExtension()
   .catch(error => {
     logger.error('Error during extension initialization:', error);
     logger.debug('Extension will continue running with limited functionality');
+    markConnectionChecked();
   });
+
+// --- Telemetry: daily heartbeat + rollup, once the initial connection check has settled ---
+const telemetryTick = () =>
+  connectionChecked.then(() => telemetry.tick({ connected: isConnected, transport: connectionType, tools: mcpToolCount }));
+void telemetryTick();
+chrome.alarms.get(TELEMETRY_ALARM).then(a => {
+  // Re-creating on every worker start would reset the period, so only create it once.
+  if (!a) void chrome.alarms.create(TELEMETRY_ALARM, { periodInMinutes: HEARTBEAT_EVERY_MINUTES });
+});
+chrome.alarms.onAlarm.addListener(a => {
+  if (a.name === TELEMETRY_ALARM) void telemetryTick();
+});
 
 logger.debug('Background script loaded');
 logger.debug("Edit 'chrome-extension/src/background/index.ts' and save to reload.");
@@ -626,6 +585,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     broadcastToolsUpdateToContentScripts(mcpTools);
   })().catch(err => logger.error('[Background] Error broadcasting tools on settings change:', err));
 });
+
+// Granting browser access (from Settings or the access window) turns the AI browser tools on;
+// the user can still switch either toggle off afterwards.
+chrome.permissions.onAdded.addListener(p => {
+  if (!p.origins?.includes('<all_urls>')) return;
+  void browserBridgeStorage.set(s => ({ ...s, browserToolsEnabled: true, browserControlEnabled: true }));
+});
+
+let grantWindowId: number | undefined;
 
 // --- Enhanced Message Handling ---
 
@@ -662,19 +630,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'browser-bridge:get-tab-content') {
     const { tabId, maxChars } = message.payload ?? {};
     readTabRaw(Number(tabId), { maxChars })
-      .then(r =>
+      .then(r => {
+        if (r.ok) void telemetry.record('tab_attach', sender.url ?? sender.tab?.url);
         sendResponse(
           r.ok
             ? { success: true, title: r.title, url: r.url, content: r.content, truncated: r.truncated }
             : { success: false, error: r.error, needsPermission: r.needsPermission },
-        ),
-      )
+        );
+      })
       .catch(e => sendResponse({ success: false, error: String(e) }));
     return true; // Async response
   }
 
-  if (message.type === 'browser-bridge:open-options') {
-    chrome.runtime.openOptionsPage();
+  // Content scripts can't call chrome.permissions.request, so open a small extension window
+  // centered over the sender's window; one click there brings up Chrome's own prompt.
+  if (message.type === 'browser-bridge:request-access') {
+    (async () => {
+      // Re-clicking "Allow access" focuses the open window instead of stacking another.
+      if (grantWindowId !== undefined) {
+        try {
+          await chrome.windows.update(grantWindowId, { focused: true });
+          return;
+        } catch {
+          grantWindowId = undefined; // closed since
+        }
+      }
+      const width = 420;
+      const height = 280;
+      const parent = sender.tab ? await chrome.windows.get(sender.tab.windowId) : undefined;
+      const left = parent?.left !== undefined ? Math.round(parent.left + ((parent.width ?? width) - width) / 2) : undefined;
+      const top = parent?.top !== undefined ? Math.round(parent.top + ((parent.height ?? height) - height) / 3) : undefined;
+      const win = await chrome.windows.create({
+        url: chrome.runtime.getURL('options/index.html#grant'),
+        type: 'popup',
+        width,
+        height,
+        left,
+        top,
+        focused: true,
+      });
+      grantWindowId = win?.id;
+    })().catch(e => logger.warn('[Background] Could not open access window:', e));
     return false;
   }
 
@@ -693,21 +689,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  /* ------------------------------------------------------------------ */
-  /* Legacy analytics bridge                                             */
-  /* ------------------------------------------------------------------ */
-  if (message.command === 'trackAnalyticsEvent') {
-    if (message.eventName && message.eventParams) {
-      sendAnalyticsEvent(message.eventName, message.eventParams)
-        .then(() => sendResponse({ success: true }))
-        .catch(error => {
-          logger.error('[Background] Error tracking analytics event from message:', error);
-          sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
-        });
-      return true; // Async response
+  // Usage statistics from content scripts: only these features; the site comes from the sender URL.
+  if (message.type === 'telemetry') {
+    if (sender.tab && ['auto_execute', 'chip', 'sidebar'].includes(message.feature)) {
+      void telemetry.record(message.feature, sender.url ?? sender.tab.url);
     }
-    logger.warn('[Background] Invalid trackAnalyticsEvent message received:', message);
-    sendResponse({ success: false, error: 'Invalid eventName or eventParams' });
     return false;
   }
 
@@ -763,16 +749,22 @@ async function handleMcpMessage(
         }
 
         // Virtual browser tools execute locally in the background, not over MCP.
-        if (toolName.startsWith('browser_')) {
-          logger.debug(`Executing local browser tool: ${toolName}`);
-          result = await executeBrowserTool(toolName, args || {}, sender);
-          logger.debug(`Browser tool completed: ${toolName}`);
-          break;
+        const isBrowserTool = toolName.startsWith('browser_');
+        const where = sender.url ?? sender.tab?.url;
+        try {
+          if (isBrowserTool) {
+            logger.debug(`Executing local browser tool: ${toolName}`);
+            result = await executeBrowserTool(toolName, args || {}, sender);
+          } else {
+            logger.debug(`Calling tool: ${toolName} from adapter: ${adapterName || 'unknown'}`);
+            result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {}, adapterName);
+          }
+          logger.debug(`Tool call completed: ${toolName}`);
+        } catch (error) {
+          void telemetry.toolRun(isBrowserTool, false, where).then(() => telemetry.error('tool_failed', where));
+          throw error;
         }
-
-        logger.debug(`Calling tool: ${toolName} from adapter: ${adapterName || 'unknown'}`);
-        result = await callToolWithBackwardsCompatibility(getServerUrl(), toolName, args || {}, adapterName);
-        logger.debug(`Tool call completed: ${toolName}`);
+        void telemetry.toolRun(isBrowserTool, result?.isError !== true, where);
         break;
       }
 
@@ -1076,6 +1068,7 @@ function broadcastConnectionStatusToContentScripts(isConnected: boolean, error?:
  * @param tools - Array of available MCP tools
  */
 async function broadcastToolsUpdateToContentScripts(mcpTools: any[]) {
+  mcpToolCount = mcpTools.length;
   // Always fold in the virtual browser tools (gated internally on settings).
   const browserTools = await getBrowserTools();
   const tools = [...mcpTools, ...browserTools];

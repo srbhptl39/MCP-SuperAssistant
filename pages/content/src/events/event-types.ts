@@ -82,10 +82,6 @@ export interface EventMap {
   'user:segment-changed': { oldSegment: string; newSegment: string; timestamp: number };
   'user:properties-updated': { properties: Record<string, any>; timestamp: number };
   
-  // Analytics events
-  'analytics:track': { event: string; parameters: Record<string, any> };
-  'analytics:user-property': { property: string; value: any };
-  
   // App version events
   'app:version-updated': { oldVersion: string; newVersion: string; timestamp: number };
   'app:changelog-requested': { version: string; timestamp: number };

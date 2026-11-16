@@ -14,7 +14,6 @@ import type { TransportType, ITransportPlugin, PluginConfig } from '../types/plu
 import type { Primitive, NormalizedTool, PrimitivesResponse } from '../types/primitives.js';
 import type { AllEvents } from '../types/events.js';
 import { createLogger } from '@extension/shared/lib/logger';
-import { analyticsService } from '../../../utils/analytics-service.js';
 
 
 const logger = createLogger('McpClient');
@@ -229,15 +228,6 @@ export class McpClient extends EventEmitter<AllEvents> {
         type,
         error: undefined,
       });
-
-      // Track successful connection
-      analyticsService.trackConnectionChange({
-        connection_status: 'connected',
-        transport_type: type,
-        tools_discovered: 0, // Will be updated after getPrimitives
-      }).catch((error: unknown) => {
-        logger.warn('[McpClient] Analytics tracking failed:', error);
-      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Connection failed:`, error);
@@ -253,15 +243,6 @@ export class McpClient extends EventEmitter<AllEvents> {
         isConnected: false,
         type,
         error: errorMessage,
-      });
-
-      // Track connection failure
-      analyticsService.trackConnectionChange({
-        connection_status: 'error',
-        transport_type: type,
-        error_type: error instanceof Error ? error.name : 'UnknownError',
-      }).catch((analyticsError: unknown) => {
-        logger.warn('[McpClient] Analytics tracking failed:', analyticsError);
       });
 
       throw error;
@@ -345,37 +326,12 @@ export class McpClient extends EventEmitter<AllEvents> {
       const duration = Date.now() - startTime;
       this.emit('tool:call-completed', { toolName, result, duration });
 
-      // Track tool execution analytics with enhanced context
-      analyticsService.trackToolExecution({
-        tool_name: toolName,
-        execution_status: 'success',
-        execution_duration_ms: duration,
-        transport_type: this.activePlugin?.metadata.transportType || 'unknown',
-        adapter_name: adapterName, // Pass adapter name from content script
-      }).catch((error: unknown) => {
-        // Don't fail tool execution if analytics fails
-        logger.warn('[McpClient] Analytics tracking failed:', error);
-      });
-
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
       const toolError = error instanceof Error ? error : new Error(String(error));
 
       this.emit('tool:call-failed', { toolName, error: toolError, duration });
-
-      // Track failed tool execution analytics with enhanced context
-      analyticsService.trackToolExecution({
-        tool_name: toolName,
-        execution_status: 'error',
-        execution_duration_ms: duration,
-        transport_type: this.activePlugin?.metadata.transportType || 'unknown',
-        error_type: toolError.name || 'UnknownError',
-        adapter_name: adapterName, // Pass adapter name from content script
-      }).catch((analyticsError: unknown) => {
-        // Don't fail tool execution if analytics fails
-        logger.warn('[McpClient] Analytics tracking failed:', analyticsError);
-      });
 
       // Check if connection is still healthy after error
       if (!(await this.isHealthy())) {
@@ -427,18 +383,6 @@ export class McpClient extends EventEmitter<AllEvents> {
         tools,
         type: this.activePlugin.metadata.transportType,
       });
-
-      // Update connection tracking with tools count (only if this is the first time discovering tools)
-      // This prevents duplicate connection events when tools are refreshed
-      if (this.primitivesCache === null || this.primitivesCache.tools.length === 0) {
-        analyticsService.trackConnectionChange({
-          connection_status: 'connected',
-          transport_type: this.activePlugin.metadata.transportType,
-          tools_discovered: tools.length,
-        }).catch((error: unknown) => {
-          logger.warn('[McpClient] Analytics tracking failed:', error);
-        });
-      }
 
       logger.debug(`Retrieved ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
       );

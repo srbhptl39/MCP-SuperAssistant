@@ -183,10 +183,9 @@ const handleFallbackSelector = (selector: string, elements: HTMLElement[]): void
 /**
  * Handle DOM changes by checking for new function results
  */
+// Runs inside the MutationObserver callback (before paint) so raw text is never shown.
 const handleDomChanges = (): void => {
-  setTimeout(() => {
-    processFunctionResults();
-  }, 0);
+  processFunctionResults();
 };
 
 /**
@@ -223,33 +222,21 @@ export const startFunctionResultMonitoring = (): void => {
           if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node as Element;
 
-            // Check if the element matches any function result selector
-            const isTargetElement = CONFIG.function_result_selector?.some(selector => {
+            // Short-circuit; querySelector stops at the first match and textContent is read once.
+            const matchesOrContains = (selector: string): boolean => {
               try {
-                return element.matches(selector);
-              } catch (e) {
+                return element.matches(selector) || element.querySelector(selector) !== null;
+              } catch {
                 return false;
               }
-            });
-
-            // Check if the element contains any elements matching the function result selectors
-            const hasTargetElements = CONFIG.function_result_selector?.some(selector => {
-              try {
-                return element.querySelectorAll(selector).length > 0;
-              } catch (e) {
-                return false;
-              }
-            });
-
-            // Also check if the content of any text nodes might contain function result patterns
+            };
+            const text = element.textContent || '';
             if (
-              element.textContent &&
-              (element.textContent.includes('<function_result') || element.textContent.includes('</function_result>'))
+              CONFIG.function_result_selector?.some(matchesOrContains) ||
+              text.includes('<function_result') ||
+              text.includes('</function_result>')
             ) {
               potentialFunctionResult = true;
-            }
-
-            if (isTargetElement || hasTargetElements || potentialFunctionResult) {
               shouldProcess = true;
               break;
             }
@@ -288,7 +275,6 @@ export const startFunctionResultMonitoring = (): void => {
     childList: true,
     subtree: true,
     characterData: true,
-    characterDataOldValue: true,
   });
 
   if (CONFIG.debug) {

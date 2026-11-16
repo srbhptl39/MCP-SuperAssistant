@@ -278,6 +278,14 @@ pnpm build
 pnpm zip
 ```
 
+Usage statistics are sent only when `CEB_POSTHOG_KEY` (PostHog) and/or `CEB_GA_MEASUREMENT_ID` + `CEB_GA_API_SECRET` (Google Analytics 4) are set in `.env`, so local builds and forks send nothing by default. Unpacked installs also stay silent unless you run `chrome.storage.local.set({ telemetryDebug: true })` in the service worker console.
+
+## Privacy
+
+**Usage statistics.** MCP SuperAssistant sends anonymous usage statistics to PostHog (EU region) and/or Google Analytics 4, depending on the release. Each install has a random id that is not linked to you, your accounts or your device. We send: the extension version, browser and operating system; which supported AI site was used; daily counts of feature use (tool runs, auto-execute, browser tools, tab attach, page capture, input chips, sidebar); whether the local MCP proxy connected; and coded error types. We never send chat content, page content, URLs, page titles, tool names, tool arguments or results. PostHog events are sent with IP-based geolocation disabled. You can turn this off in the extension's options under "Usage statistics". Firefox users can also turn it off under Permissions and data in about:addons.
+
+**Remote configuration.** The extension fetches feature flags and notices from Firebase Remote Config, which uses its own random installation id to do so.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

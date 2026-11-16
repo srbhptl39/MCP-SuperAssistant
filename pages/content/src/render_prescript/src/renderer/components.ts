@@ -243,7 +243,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
   // Create toggle button with optimized element creation
   const toggleBtn = createOptimizedElement('button', {
     className: 'raw-toggle',
-    innerHTML: `${ICONS.CODE}<span>Show Raw Info</span>`,
+    innerHTML: `${ICONS.CODE}<span>View raw</span>`,
     styles: {
       display: 'flex',
       alignItems: 'center',
@@ -263,7 +263,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
     // Use requestAnimationFrame for smooth visual updates
     requestAnimationFrame(() => {
       rawXmlContainer.style.display = isVisible ? 'block' : 'none';
-      textSpan.textContent = isVisible ? 'Hide Raw Info' : 'Show Raw Info';
+      textSpan.textContent = isVisible ? 'Hide raw' : 'View raw';
     });
   };
 
@@ -1071,7 +1071,7 @@ export const displayResult = (
     const left = createOptimizedElement('span', { className: 'result-header-left' });
     left.appendChild(createOptimizedElement('span', { className: `result-status-dot ${ok ? 'ok' : 'err'}` }));
     // Label: function name (or Result/Error), plus #callId when present.
-    const label = ok ? (functionName || 'Result') : 'Error';
+    const label = ok ? 'Result' : 'Error'; // the card header already names the tool
     left.appendChild(createOptimizedElement('span', { className: 'result-label', textContent: label }));
     if (callId) {
       left.appendChild(createOptimizedElement('span', { className: 'result-callid', textContent: `#${callId}` }));
