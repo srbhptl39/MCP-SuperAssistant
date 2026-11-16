@@ -23,7 +23,7 @@ const manifest = {
   name: 'MCP SuperAssistant',
   browser_specific_settings: {
     gecko: {
-      id: 'saurabh@mcpsuperassistant.ai',
+      id: 'admin@mcpsuperassistant.ai', // must match the published AMO listing
       // Firefox 140+ built-in consent; telemetry.ts honours it.
       data_collection_permissions: { required: ['none'], optional: ['technicalAndInteraction'] },
     },
