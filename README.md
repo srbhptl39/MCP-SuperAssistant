@@ -39,21 +39,22 @@ Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, K
 
 ## Overview
 
-MCP SuperAssistant is a Chrome extension that integrates the Model Context Protocol (MCP) tools with AI platforms like Perplexity, ChatGPT, Google Gemini, Google AI Studio, Grokand more. It allows users to execute MCP tools directly from these platforms enhancing the capabilities of web-based AI assistants.
+MCP SuperAssistant is a Chrome and Firefox extension that brings Model Context Protocol (MCP) tools to the AI chat sites you already use, such as ChatGPT, Claude, Gemini, Perplexity and Grok. Tool calls written by the AI show up as compact cards you can run with one click, and the results go back into the conversation.
 
 ## Currently Supported Platforms
 
-- [ChatGPT](https://chatgpt.com/)
+- [ChatGPT](https://chatgpt.com/) (signed in or signed out)
+- [Claude](https://claude.ai/)
 - [Google Gemini](https://gemini.google.com/)
 - [Perplexity](https://perplexity.ai/)
-- [Grok](https://grok.com/)
+- [Grok](https://grok.com/) and [Grok on X](https://x.com/i/grok)
 - [Google AI Studio](https://aistudio.google.com/)
 - [OpenRouter Chat](https://openrouter.ai/chat)
 - [DeepSeek](https://chat.deepseek.com/)
 - [T3 Chat](https://t3.chat/)
 - [GitHub Copilot](https://github.com/copilot)
 - [Mistral AI](https://chat.mistral.ai/)
-- [Kimi](https://kimi.com/)
+- [Kimi](https://kimi.com/) ([kimi.ai](https://www.kimi.ai/))
 - [Qwen Chat](https://chat.qwen.ai/)
 - [Z Chat](https://chat.z.ai/)
 
@@ -86,11 +87,14 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 
 ## Key Features
 
-- **Multiple AI Platform Support**: Works with ChatGPT, Perplexity, Google Gemini, Grok, Google AI Studio, OpenRouter Chat, DeepSeek, Kagi, T3 Chat, GitHub Copilot, Mistral AI, Kimi, Qwen Chat, Z Chat and more
-- **Tool Detection**: Automatically detects MCP tool calls in AI responses
+- **Multiple AI Platform Support**: Works with every site in the list above, in Chrome and Firefox
+- **Compact tool cards**: Each tool call renders as one quiet row (name, description, Run). Parameters, the raw call, run history and results stay folded until you open them
+- **Instruction chips**: The MCP instructions sit in a small chip in the chat bar instead of filling your message; your own text stays readable in the sent message
+- **Flicker-free rendering**: Cards replace the raw tool-call text before the page paints, so reloading a chat shows no raw JSON
 - **Tool Execution**: Execute MCP tools with a single click
 - **Tool Result Integration**: Seamlessly insert tool execution results back into the AI conversation
-- **Render Mode**: Renders Function call and Function results. 
+- **Tab & page context**: Attach open tabs or capture the current page into the chat (optional; asks for browser access in a small window first)
+- **Browser tools** (optional): Let the AI read and, if you allow it, control your tabs, with a block list for sensitive sites
 - **Auto-Execute Mode**: Automatically execute detected tools
 - **Auto-Submit Mode**: Automatically submit chat input after result insertion
 - **Push Content Mode**: Option to push page content instead of overlaying
@@ -185,9 +189,9 @@ Example Workflow:
 2. The MCP SuperAssistant sidebar will appear on the right side of the page
 3. Configure your MCP Tools to enable and disable the tools you want to use.
 4. In the message prompt area, hover the 'MCP' button to see the available tools and their descriptions.
-5. MCP SuperAssistant requires to add an MCP working instructions prompt to the chat, to give details of its new capabilities and how to use the tools. Use the 'Insert' or attach button to add the instructions prompt.
+5. MCP SuperAssistant requires to add an MCP working instructions prompt to the chat, to give details of its new capabilities and how to use the tools. Use the 'Insert' or attach button to add the instructions prompt. It appears as a small "MCP Instructions" chip in the chat bar and is sent along with your next message.
 6. Once the instructions prompt is added, Now you can ask it to read files or any related MCP tool operations.
-7. When AI wants to use any tool it will show a custom tool call card with the tool name and parameters.
+7. When AI wants to use any tool it will show a compact tool call card with the tool name; open it with the chevron to see the parameters.
 8. User can manually execute the tool call by clicking on the "RUN" button on the tool call card, or if Auto-Execute mode is enabled, it will execute automatically.
 9. Automation can be achieved by enabling Auto-Execute and Auto-Submit modes, by clicking on the 'MCP' button and configuring the Auto modes.
 
@@ -259,8 +263,8 @@ In such cases, use better models which are meant for tool calling or have better
 
 ### Prerequisites
 
-- Node.js (v16+)
-- pnpm
+- Node.js 22.12+
+- pnpm 9.15.1 (`corepack enable`)
 
 ### Setup
 
@@ -276,7 +280,13 @@ pnpm build
 
 # Create zip package for distribution
 pnpm zip
+
+# Firefox build and package
+pnpm build:firefox
+pnpm zip:firefox
 ```
+
+Settings (MCP server, browser access, page capture and usage statistics) live on the extension's options page.
 
 Usage statistics are sent only when `CEB_POSTHOG_KEY` (PostHog) and/or `CEB_GA_MEASUREMENT_ID` + `CEB_GA_API_SECRET` (Google Analytics 4) are set in `.env`, so local builds and forks send nothing by default. Unpacked installs also stay silent unless you run `chrome.storage.local.set({ telemetryDebug: true })` in the service worker console.
 
