@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 import { watchRebuildPlugin } from '@extension/hmr';
 import react from '@vitejs/plugin-react-swc';
 import deepmerge from 'deepmerge';
-import env, { IS_DEV, IS_PROD } from '@extension/env';
+import { IS_DEV, IS_PROD } from '@extension/env';
 
 export const watchOption = IS_DEV
   ? {
@@ -20,7 +20,9 @@ export const withPageConfig = (config: UserConfig) =>
     deepmerge(
       {
         define: {
-          'process.env': env,
+          // Only NODE_ENV: defining the whole env object inlined every .env value (API secrets
+          // included) into every page bundle, the content script that runs on AI sites among them.
+          'process.env': JSON.stringify({ NODE_ENV: IS_DEV ? 'development' : 'production' }),
         },
         base: '',
         plugins: [react(), IS_DEV && watchRebuildPlugin({ refresh: true })],
