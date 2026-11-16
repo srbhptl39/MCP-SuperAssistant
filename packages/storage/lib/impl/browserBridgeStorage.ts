@@ -147,13 +147,24 @@ export const browserBridgeStorage: BaseStorage<BrowserBridgeSettings> = createSt
 );
 
 /** True when the hostname (or a parent domain of it) is on the user's denylist. */
-export const isDeniedHostname = (hostname: string, denylist: string[]): boolean =>
-  denylist.some(entry => {
-    const d = entry.trim().toLowerCase();
-    if (!d) return false;
-    const h = hostname.toLowerCase();
-    return h === d || h.endsWith(`.${d}`);
+/** Lowercase, IDNA (punycode) and trailing-dot normalized hostname, so "EXAMPLE.com." and "exämple.com" match their denylist entries. */
+export const normalizeHostname = (host: string): string => {
+  const h = host.trim().toLowerCase().replace(/\.+$/, '');
+  if (!h) return '';
+  try {
+    return new URL(`http://${h}`).hostname.replace(/\.+$/, '');
+  } catch {
+    return h;
+  }
+};
+
+export const isDeniedHostname = (hostname: string, denylist: string[]): boolean => {
+  const h = normalizeHostname(hostname);
+  return denylist.some(entry => {
+    const d = normalizeHostname(entry);
+    return !!d && (h === d || h.endsWith(`.${d}`));
   });
+};
 
 /** Resolve which AI platform (if any) a URL belongs to. */
 export const platformForUrl = (url: string): AiPlatformDef | undefined => {

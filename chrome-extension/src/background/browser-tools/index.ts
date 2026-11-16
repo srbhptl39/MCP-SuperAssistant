@@ -4,7 +4,7 @@
  * background service worker. All permission enforcement lives here — never trust
  * the prompt.
  */
-import { browserBridgeStorage, isDeniedHostname } from '@extension/storage';
+import { browserBridgeStorage, isDeniedHostname, normalizeHostname } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
 import { extractReadableContent, extractSelection, snapshotInteractive, doInteract, waitInPage } from './extractor';
 
@@ -239,7 +239,7 @@ const tabExclusionReason = (tab: chrome.tabs.Tab, denylist: string[]): string | 
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
       return 'That tab is a browser or extension page and cannot be accessed.';
     }
-    host = u.hostname;
+    host = normalizeHostname(u.hostname);
   } catch {
     return 'That tab has an invalid URL.';
   }
@@ -507,7 +507,11 @@ async function interactTab(args: Record<string, unknown>, denylist: string[], ca
   if (!(await hasAllUrls())) return textResult(NEED_PERMISSION_MSG);
 
   // Re-checked before every step: a click or Enter can navigate the tab onto a blocked site.
-  const blocked = async () => tabExclusionReason(await chrome.tabs.get(tabId), denylist);
+  // Also checks pendingUrl, so a navigation still in flight to a blocked site stops the batch.
+  const blocked = async () => {
+    const t = await chrome.tabs.get(tabId);
+    return tabExclusionReason(t, denylist) ?? (t.pendingUrl ? tabExclusionReason({ ...t, url: t.pendingUrl }, denylist) : null);
+  };
   const reason = await blocked();
   if (reason) return textResult(reason);
 
@@ -633,7 +637,7 @@ async function openTab(args: Record<string, unknown>, denylist: string[]) {
     return textResult('browser_open_tab requires a valid absolute URL.');
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return textResult('Only http(s) URLs can be opened.');
-  const host = u.hostname;
+  const host = normalizeHostname(u.hostname);
   if (EXCLUDED_HOSTS.some(h => host === h || host.endsWith(`.${h}`))) return textResult('Browser store pages cannot be opened.');
   if (isDeniedHostname(host, denylist)) return textResult('That destination is on your denylist.');
   const tab = await chrome.tabs.create({ url: raw, active: !args.background });
@@ -676,7 +680,9 @@ async function navigate(args: Record<string, unknown>, denylist: string[], calle
     return textResult('browser_navigate requires a valid absolute URL (or action: back/forward/reload).');
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return textResult('Only http(s) URLs are allowed.');
-  if (isDeniedHostname(u.hostname, denylist)) return textResult('That destination is on your denylist.');
+  const host = normalizeHostname(u.hostname);
+  if (EXCLUDED_HOSTS.some(h => host === h || host.endsWith(`.${h}`))) return textResult('Browser store pages cannot be opened.');
+  if (isDeniedHostname(host, denylist)) return textResult('That destination is on your denylist.');
 
   await chrome.tabs.update(tabId, { url: raw });
   return textResult(`Navigated tab ${tabId} to ${raw}.`);
