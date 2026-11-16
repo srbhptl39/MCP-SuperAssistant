@@ -131,12 +131,12 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
       .sort()
       .join('|');
     return enabledToolNames;
-  }, [tools, isToolEnabled]);
+  }, [tools, isToolEnabled, enabledToolsSet]);
 
   // Filter tools to only include enabled ones for instruction generation
   const enabledTools = useMemo(() => {
     return tools.filter(tool => isToolEnabled(tool.name));
-  }, [tools, isToolEnabled]);
+  }, [tools, isToolEnabled, enabledToolsSet]);
 
   // Memoize custom instructions key to prevent unnecessary updates
   const customInstructionsKey = useMemo(() => {
@@ -169,13 +169,11 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   // Update instructions when tools or tool enablement changes or custom instructions change
   useEffect(() => {
-    if (tools.length > 0) {
-      // Always update when dependencies change, let the state comparison happen later
-      logMessage(`[InstructionManager] Regenerating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
-      setInstructions(currentInstructions);
-      // Force update global state to ensure sync
-      instructionsState.setInstructions(currentInstructions);
-    }
+    // Also runs with zero tools so the popover gets the "No tools available" text instead of loading forever
+    logMessage(`[InstructionManager] Regenerating instructions based on ${enabledTools.length}/${tools.length} enabled tools`);
+    setInstructions(currentInstructions);
+    // Force update global state to ensure sync
+    instructionsState.setInstructions(currentInstructions);
 
     return () => {
       logMessage('[InstructionManager] Cleaning up instruction generator effect');

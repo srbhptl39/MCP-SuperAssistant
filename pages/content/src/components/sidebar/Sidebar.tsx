@@ -72,7 +72,10 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   } = useSidebarState();
   const { preferences, updatePreferences } = useUserPreferences();
   const { status: connectionStatus } = useConnectionStatus();
-  const enabledToolsCount = useToolStore(state => state.enabledTools.size);
+  // Count only listed tools; the stored set may hold names from a disconnected server.
+  const enabledToolsCount = useToolStore(
+    state => state.availableTools.filter(tool => state.enabledTools.has(tool.name)).length,
+  );
   const totalToolsCount = useToolStore(state => state.availableTools.length);
 
   // Error states that could block rendering

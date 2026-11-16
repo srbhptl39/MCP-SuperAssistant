@@ -262,6 +262,13 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     () => Object.values(groupedTools).reduce((acc, tools) => acc + tools.length, 0),
     [groupedTools],
   );
+  const enabledCount = useMemo(
+    () =>
+      Object.values(groupedTools)
+        .flat()
+        .filter(tool => enabledTools.has(tool.originalName || tool.name)).length,
+    [groupedTools, enabledTools],
+  );
 
   const isGroupEnabled = (tools: ExtendedTool[]) => {
     return tools.every(tool => isToolEnabled(tool.originalName || tool.name));
@@ -303,7 +310,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
 
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 tabular-nums">
           <span>
-            {enabledTools.size} of {totalToolsCount} enabled
+            {enabledCount} of {totalToolsCount} enabled
           </span>
           <div className="flex items-center gap-3">
             <button

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { eventBus } from '../events';
-import { getToolEnablementState, saveToolEnablementState } from '../utils/storage';
+import { getKnownTools, getToolEnablementState, saveKnownTools, saveToolEnablementState } from '../utils/storage';
+import { resolveEnablement } from './toolEnablement';
 import type { Tool, DetectedTool, ToolExecution } from '../types/stores';
 import { createLogger } from '@extension/shared/lib/logger';
 
@@ -191,20 +192,17 @@ export const useToolStore = create<ToolState>()(
       loadToolEnablementState: async () => {
         set({ isLoadingEnablement: true });
         try {
-          const storedEnabledTools = await getToolEnablementState();
-          const state = get();
-          
-          // If no stored state and we have available tools, enable all by default
-          if (storedEnabledTools.size === 0 && state.availableTools.length > 0) {
-            const allToolsEnabled = new Set(state.availableTools.map(tool => tool.name));
-            set({ enabledTools: allToolsEnabled, isLoadingEnablement: false });
-            // Save the default state
-            await saveToolEnablementState(allToolsEnabled);
-            logger.debug('[ToolStore] No stored state found, enabled all tools by default');
-          } else {
-            set({ enabledTools: storedEnabledTools, isLoadingEnablement: false });
-            logger.debug(`Tool enablement state loaded: ${storedEnabledTools.size} tools enabled`);
+          const [stored, known] = await Promise.all([getToolEnablementState(), getKnownTools()]);
+          const current = get().availableTools.map(tool => tool.name);
+          if (!current.length) {
+            set({ enabledTools: stored, isLoadingEnablement: false });
+            return;
           }
+          const { enabled, known: nextKnown } = resolveEnablement(stored, known, current);
+          set({ enabledTools: enabled, isLoadingEnablement: false });
+          if (enabled.size !== stored.size) await saveToolEnablementState(enabled);
+          if (!known || nextKnown.size !== known.size) await saveKnownTools(nextKnown);
+          logger.debug(`Tool enablement state loaded: ${enabled.size} names enabled`);
         } catch (error) {
           logger.error('[ToolStore] Failed to load tool enablement state:', error);
           set({ isLoadingEnablement: false });

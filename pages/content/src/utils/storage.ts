@@ -251,6 +251,26 @@ export const saveToolEnablementState = async (enabledTools: Set<string>): Promis
   }
 };
 
+const KNOWN_TOOLS_KEY = 'mcp_tool_known';
+
+/** Tool names seen before (null until first recorded), so never-seen tools can default to enabled. */
+export const getKnownTools = async (): Promise<Set<string> | null> => {
+  try {
+    const value = (await chrome.storage.local.get(KNOWN_TOOLS_KEY))?.[KNOWN_TOOLS_KEY];
+    return Array.isArray(value) ? new Set(value as string[]) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveKnownTools = async (known: Set<string>): Promise<void> => {
+  try {
+    await chrome.storage.local.set({ [KNOWN_TOOLS_KEY]: Array.from(known) });
+  } catch (error) {
+    logMessage(`[Storage] Error saving known tools: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
 /**
  * Clear all tool enablement state from storage
  */
