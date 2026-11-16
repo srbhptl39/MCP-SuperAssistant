@@ -30,7 +30,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   // Updated selectors based on current ChatGPT interface
   private readonly selectors = {
     // Primary chat input selector (ProseMirror contenteditable)
-    CHAT_INPUT: '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"]',
+    // Logged-out chatgpt.com renders a plain <textarea id="mobile-composer-prompt"> instead of ProseMirror.
+    CHAT_INPUT: '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"], textarea#mobile-composer-prompt',
     // Submit button selectors (multiple fallbacks). Verified live Jan 2026: the send button only
     // renders once the composer has text (an empty composer shows a dictation button instead).
     // Kept selectors are combinator-free so they're safe inside inputChips' target.closest() interceptor.
@@ -218,6 +219,18 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     }
 
     try {
+      if (targetElement instanceof HTMLTextAreaElement) {
+        // Logged-out composer: set the value through the native setter so the page's input
+        // binding sees it, then notify it.
+        const before = targetElement.value;
+        const next = before ? `${before}\n\n${text}` : text;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(targetElement, next);
+        targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        targetElement.focus();
+        this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'textarea' });
+        return true;
+      }
+
       const before = targetElement.textContent || '';
 
       // ChatGPT's composer is a ProseMirror contenteditable. A synthetic InputEvent or direct
@@ -285,7 +298,10 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     if (!input) return null;
     // The <form> wraps both the ProseMirror input and the action buttons (plus/send) and has
     // overflow: visible, so prepending the chip bar sits it above the input without being clipped.
-    const container = (input.closest('form') ?? input.parentElement) as HTMLElement | null;
+    const form = input.closest('form');
+    // The logged-out composer form is a grid with named areas; an extra child reflows it, so
+    // put the chip bar just above the form instead.
+    const container = (form?.matches('[data-logged-out]') ? form.parentElement : form ?? input.parentElement) as HTMLElement | null;
     if (!container) return null;
     return { input, container, submitButtonSelector: this.selectors.SUBMIT_BUTTON };
   }
@@ -993,12 +1009,18 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     }
   }
 
-  private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
+  private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null; insertBefore?: Element } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover next to plus button');
 
     // Try to find the plus button first
     // Nov 2026 UI dropped the data-testid; the button is now labelled "Add files and more".
     const plusButton = document.querySelector('[data-testid="composer-plus-btn"], button[aria-label^="Add files"]');
+    // The logged-out composer overlays its "+" cell on the text box, so there is no room
+    // beside it; sit before the dictation button on the right instead.
+    const dictation = plusButton?.closest('form[data-logged-out]')?.querySelector('button[aria-label="Start dictation"]');
+    if (dictation?.parentElement) {
+      return { container: dictation.parentElement, insertAfter: dictation.previousElementSibling, insertBefore: dictation };
+    }
     if (plusButton && plusButton.parentElement) {
       this.context.logger.debug('Found plus button, inserting MCP button after it');
       return { container: plusButton.parentElement, insertAfter: plusButton };
@@ -1039,7 +1061,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     return null;
   }
 
-  private injectMCPPopover(insertionPoint: { container: Element; insertAfter: Element | null }): void {
+  private injectMCPPopover(insertionPoint: { container: Element; insertAfter: Element | null; insertBefore?: Element }): void {
     this.context.logger.debug('Injecting MCP popover into ChatGPT interface');
 
     try {
@@ -1055,7 +1077,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       reactContainer.style.display = 'inline-block';
       
       // Adjust margin based on container type
-      const { container, insertAfter } = insertionPoint;
+      const { container, insertAfter, insertBefore } = insertionPoint;
       if (container.matches('[grid-area="leading"]') || container.closest('[grid-area="leading"]')) {
         reactContainer.style.margin = '0 0 0 8px'; // More space from plus button
       } else {
@@ -1063,7 +1085,9 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       }
 
       // Insert at appropriate location
-      if (insertAfter && insertAfter.parentNode === container) {
+      if (insertBefore && insertBefore.parentNode === container) {
+        container.insertBefore(reactContainer, insertBefore);
+      } else if (insertAfter && insertAfter.parentNode === container) {
         container.insertBefore(reactContainer, insertAfter.nextSibling);
         this.context.logger.debug('Inserted popover container after specified element');
       } else {
