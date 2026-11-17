@@ -183,6 +183,23 @@ To connect the Chrome extension to a local server for proxying connections:
 5. Click "Connect" to establish the connection
 6. The status indicator should change to "Connected" if successful
 
+#### Public documentation search with Parallel
+
+To look up public documentation from a chat and inspect the source URLs before sharing the results with the AI, you can connect the existing MCP client to Parallel's Unified MCP server. See [Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart) for availability and rate limits; `web_search` can be used without an API key at lower limits.
+
+1. Record your current server URL and transport so you can restore them after trying this example. The extension connects to one configured MCP endpoint at a time.
+2. Open the extension's options page. Under **MCP server**, set **Server URL** to `https://mcp.parallel.ai/mcp`, choose **Streamable HTTP** under **Transport**, and click **Save**. Selecting the transport explicitly is necessary; HTTP URLs otherwise default to SSE.
+3. Open or reload a supported chat site and check that the sidebar shows **Connected**. If the sidebar is hidden, hover over the **MCP** button and choose **Show Sidebar**. In the tools list, enable `web_search` and disable the other tools for this example. Leave **Auto Execute**, **Auto Insert**, and **Auto Submit** off in the MCP controls. Browser access, page capture, and browser control are not needed for this search.
+4. Attach or insert the MCP instructions, then send a prompt such as:
+
+   > Use `web_search` to find the official MDN documentation for JavaScript `Array.prototype.map`. Search only for this public documentation; do not include conversation history, page content, or private information in the search arguments. After I run the tool and insert its result, explain what `map` returns and cite the original MDN URL from that result.
+
+5. Expand the generated `web_search` card and inspect its parameters before clicking **Run**. A suitable `objective` is `Find the official MDN documentation explaining the return value of JavaScript Array.prototype.map`, with `search_queries` set to `["site:developer.mozilla.org JavaScript Array map"]`. Only run it if the arguments match the public search you authorized.
+6. After execution, expand **Result** and check that it contains an original source URL on `developer.mozilla.org`, alongside the relevant excerpt. Results are displayed as text, so copy the URL to open the source. If the result is long, use **Show all** to inspect the full output.
+7. Click **Insert** when you are ready to add the result to the chat, then send it. Check that the AI's answer cites a source URL that actually appears in the tool result. A successful connection alone does not verify a source.
+
+If the search fails or returns no useful sources, inspect the result or error in the card and do not treat it as evidence. Check the server status and URL, and consult [Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart) for service limits before retrying. To return to your previous tools, restore the server URL and transport you recorded and save; this example does not require changing the extension's default transport or granting browser access.
+
 ## Usage
 Example Workflow:
 1. Navigate to a supported AI platform example chatgpt.
