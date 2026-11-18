@@ -1,4 +1,5 @@
 import type { ConnectionType } from '../../../types/stores';
+import SetupHelp from './SetupHelp';
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
@@ -661,6 +662,10 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             </p>
           )}
         </div>
+      )}
+
+      {status === 'disconnected' && !hasBackgroundError && (
+        <SetupHelp connectionType={connectionType} serverUri={serverUri} />
       )}
 
       {/* Background communication issue indicator */}

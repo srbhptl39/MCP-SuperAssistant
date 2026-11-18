@@ -134,3 +134,20 @@ test('GA4 body flattens objects to a short JSON string', () => {
   const body = t.gaBody('id', { event: 'usage_day', props: { cards_by_site: { gemini: 2 } } }, {}, Date.now())!;
   assert.equal(body.events[0].params.cards_by_site, '{"gemini":2}');
 });
+
+test('installRecord: cohort and date', () => {
+  const r = t.installRecord('install', undefined, '0.7.2', undefined, undefined, false);
+  assert.equal(r.installCohort, 'new');
+  assert.ok(r.installDate && r.installDate !== 'unknown');
+  assert.deepEqual(t.installRecord('update', '0.6.0', '0.7.2', undefined, undefined, false), {
+    installCohort: 'existing',
+    installDate: 'unknown',
+  });
+  assert.deepEqual(t.installRecord('update', '0.7.1', '0.7.2', undefined, undefined, true), { installCohort: 'new' });
+  assert.deepEqual(t.installRecord('update', '0.7.2', '0.7.2', undefined, undefined, false), {}); // reload
+  assert.deepEqual(t.installRecord('update', '0.7.1', '0.7.2', undefined, '2026-11-17T00:00:00Z', false), {
+    installCohort: 'existing',
+    installDate: 'unknown',
+  }); // 0.6 -> 0.7.0 updater whose date was faked
+  assert.deepEqual(t.installRecord('update', '0.6.0', '0.7.2', 'new', '2026-01-01', false), {}); // already recorded
+});

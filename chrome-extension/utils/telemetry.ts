@@ -180,29 +180,45 @@ export const telemetry = {
       return [...evs, ...core.milestone(s, 'first_card', { site, ...(await daysSinceInstall()) })];
     }),
 
+  /** A setup step was copied from the sidebar's setup help (proxy not running). */
+  setupCopied: (where?: string) =>
+    update(async (s, day) => [
+      ...core.oncePerDay(s, day, 'setup_help_day', { site: core.site(where) }),
+      ...core.milestone(s, 'setup_help_used', { site: core.site(where), ...(await daysSinceInstall()) }),
+    ]),
+
   error: (code: ErrorCode, where?: string, reason?: FailReason) =>
     update((s, day) => core.error(s, day, code, core.site(where), reason)),
 
-  installed: (reason: string, previousVersion?: string) =>
-    update(async s => {
-      const { installCohort, installDate } = await chrome.storage.local.get<{
+  /** Install/update. Cohort and install date are recorded even with statistics off, so they stay right if turned on later. */
+  installed: async (reason: string, previousVersion?: string) => {
+    try {
+      const version = chrome.runtime.getManifest().version;
+      const stored = await chrome.storage.local.get<{
         installCohort?: string;
         installDate?: string;
-      }>(['installCohort', 'installDate']);
-      if (!installCohort) {
-        // Fresh 0.7.x installs already have the ext_installed milestone; anything else predates telemetry.
-        const cohort = reason === 'install' || s.milestones.ext_installed ? 'new' : 'existing';
-        await chrome.storage.local.set({ installCohort: cohort });
-      }
-      if (reason === 'install' && !installDate)
-        await chrome.storage.local.set({ installDate: new Date().toISOString() });
-      if (reason === 'update' && !installDate) await chrome.storage.local.set({ installDate: 'unknown' });
+        [STATE_KEY]?: State;
+      }>(['installCohort', 'installDate', STATE_KEY]);
+      const patch = core.installRecord(
+        reason,
+        previousVersion,
+        version,
+        stored.installCohort,
+        stored.installDate,
+        !!stored[STATE_KEY]?.milestones?.ext_installed,
+      );
+      if (Object.keys(patch).length) await chrome.storage.local.set(patch);
+    } catch (e) {
+      logger.debug('[Telemetry] install record failed:', e);
+    }
+    return update(s => {
       if (reason === 'install') return core.milestone(s, 'ext_installed', {});
       // Reloading an unpacked build fires `update` with the same version.
       if (reason === 'update' && previousVersion !== chrome.runtime.getManifest().version)
         return [{ event: 'ext_updated', props: { from_version: previousVersion ?? 'unknown' } }];
       return [];
-    }),
+    });
+  },
 
   /** Daily heartbeat, yesterday's usage_day, and retry of queued sends. Safe to call often. */
   async tick(mcp: { connected: boolean; transport: string; tools: number }) {

@@ -168,6 +168,31 @@ export function tick(s: State, day: string, heartbeat: () => Props): Ev[] {
   return out;
 }
 
+/**
+ * What to store on install/update: installCohort ('new' installed with telemetry, 'existing' came from
+ * a version before it) and installDate (ISO, or 'unknown' for those older installs). Runs once per install.
+ */
+export function installRecord(
+  reason: string,
+  previousVersion: string | undefined,
+  version: string,
+  cohort: string | undefined,
+  installDate: string | undefined,
+  hadInstallMilestone: boolean,
+): { installCohort?: string; installDate?: string } {
+  if (reason === 'install') {
+    const out: { installCohort?: string; installDate?: string } = {};
+    if (!cohort) out.installCohort = 'new';
+    if (!installDate) out.installDate = new Date().toISOString();
+    return out;
+  }
+  if (reason !== 'update' || previousVersion === version || cohort) return {}; // reload, or already recorded
+  // A fresh 0.7+ install with statistics on has the ext_installed milestone. Without it, assume the install
+  // predates telemetry: 0.7.0/0.7.1 stored "today" as its install date on first use, so that date is wrong too.
+  if (hadInstallMilestone) return { installCohort: 'new' };
+  return { installCohort: 'existing', installDate: 'unknown' };
+}
+
 /** A tool card rendered on a site (also from chat history). Counts only; not an engagement. */
 export function card(s: State, day: string, siteId: string): Ev[] {
   const out = bump(s, day, 'cards_rendered');

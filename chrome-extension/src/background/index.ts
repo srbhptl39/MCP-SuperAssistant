@@ -723,6 +723,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       void telemetry.instructions(where);
     } else if (sender.tab && message.feature === 'card') {
       void telemetry.card(where);
+    } else if (sender.tab && message.feature === 'setup_copy') {
+      void telemetry.setupCopied(where);
     }
     return false;
   }
