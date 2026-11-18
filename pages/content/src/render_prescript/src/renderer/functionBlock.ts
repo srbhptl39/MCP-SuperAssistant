@@ -1419,6 +1419,7 @@ const renderCard = (
       // insertBefore(card, block) in segment order stacks card0..cardN above the hidden pre.
       block.parentNode.insertBefore(blockDiv, block);
       blockDiv._mcpSource = block;
+      telemetry('card');
       block.style.display = 'none';
     } else {
       return;
@@ -1807,6 +1808,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     if (block.parentNode) {
       block.parentNode.insertBefore(blockDiv, block);
       blockDiv._mcpSource = block;
+      telemetry('card');
       block.style.display = 'none';
     } else {
       if (CONFIG.debug) logger.warn('Function call block has no parent element, cannot insert rendered block');

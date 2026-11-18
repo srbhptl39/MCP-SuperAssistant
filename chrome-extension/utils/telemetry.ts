@@ -7,7 +7,7 @@
 import { browserBridgeStorage, telemetryStorage } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
 import * as core from './telemetry-core';
-import type { ErrorCode, Ev, Feature, Props, State } from './telemetry-core';
+import type { ErrorCode, Ev, FailReason, Feature, Props, State } from './telemetry-core';
 
 const logger = createLogger('Telemetry');
 
@@ -17,9 +17,8 @@ const GA_ID: string | undefined = import.meta.env.CEB_GA_MEASUREMENT_ID;
 const GA_SECRET: string | undefined = import.meta.env.CEB_GA_API_SECRET;
 const GA_ON = !!(GA_ID && GA_SECRET);
 
-// TODO(uninstall): once https://mcpsuperassistant.ai/uninstalled exists, call
-// chrome.runtime.setUninstallURL(`${UNINSTALL_URL}?v=<version>&d=<days installed>&a=<activated 0|1>`)
-// at worker start. Not called yet: a 404 on uninstall is worse than nothing.
+// Opened by the browser after an uninstall. With usage statistics on, the page records one anonymous
+// ext_uninstalled event for this install id; with them off it gets no parameters and records nothing.
 export const UNINSTALL_URL = 'https://mcpsuperassistant.ai/uninstalled';
 export const TELEMETRY_ALARM = 'telemetry';
 export const HEARTBEAT_EVERY_MINUTES = 180;
@@ -62,13 +61,21 @@ async function common(): Promise<Props> {
     browser: ua.includes('Firefox/') ? 'firefox' : ua.includes('Edg/') ? 'edge' : 'chrome',
     os: (await chrome.runtime.getPlatformInfo()).os,
     env: (await isDev()) ? 'dev' : 'prod',
+    // 'new' = installed with this telemetry; 'existing' = updated from a version without it.
+    cohort: (await chrome.storage.local.get<{ installCohort?: string }>('installCohort')).installCohort ?? 'unknown',
   };
 }
 
-async function daysSinceInstall(): Promise<number> {
-  let { installDate } = await chrome.storage.local.get<{ installDate?: string }>('installDate');
-  if (!installDate) await chrome.storage.local.set({ installDate: (installDate = new Date().toISOString()) });
-  return Math.max(0, Math.floor((Date.now() - Date.parse(installDate)) / 86_400_000));
+async function uninstallParams(): Promise<Record<string, string>> {
+  const c = await common();
+  return { i: await installId(), v: String(c.ext_version), b: String(c.browser), e: String(c.env) };
+}
+
+/** Whole days since install, or {} when the install date is unknown (installs from before 0.7). */
+async function daysSinceInstall(): Promise<Props> {
+  const { installDate } = await chrome.storage.local.get<{ installDate?: string }>('installDate');
+  const t = installDate ? Date.parse(installDate) : NaN;
+  return Number.isNaN(t) ? {} : { days_since_install: Math.max(0, Math.floor((Date.now() - t) / 86_400_000)) };
 }
 
 const load = async (): Promise<State> => ({
@@ -139,26 +146,57 @@ export const telemetry = {
       const evs = core.record(s, day, browserTool ? 'browser_tool' : 'tool_run', site);
       if (!ok) return [...evs, ...core.bump(s, day, 'tool_errors')];
       if (s.milestones.activated) return evs;
-      return [...evs, ...core.milestone(s, 'activated', { site, days_since_install: await daysSinceInstall() })];
+      return [...evs, ...core.milestone(s, 'activated', { site, ...(await daysSinceInstall()) })];
     }),
 
+  /** Proxy connected. First ever connection is a milestone; tools_listed sends the daily signal. */
   connected: (transport: string) =>
+    update(async s =>
+      s.milestones.mcp_first_connected
+        ? []
+        : core.milestone(s, 'mcp_first_connected', { transport, ...(await daysSinceInstall()) }),
+    ),
+
+  /** Tools fetched from a connected proxy: one proxy_connected_day per UTC day. */
+  toolsListed: (transport: string, tools: number) =>
+    update((s, day) => core.oncePerDay(s, day, 'proxy_connected_day', { transport, tools_count: core.bucket(tools) })),
+
+  /** Instructions inserted into a chat (chip or plain text). */
+  instructions: (where?: string) =>
     update(async (s, day) => {
-      const evs = core.bump(s, day, 'mcp_connect_ok');
-      if (s.milestones.mcp_first_connected) return evs;
+      const site = core.site(where);
       return [
-        ...evs,
-        ...core.milestone(s, 'mcp_first_connected', { transport, days_since_install: await daysSinceInstall() }),
+        ...core.oncePerDay(s, day, 'instructions_day', { site }),
+        ...core.milestone(s, 'first_instructions', { site, ...(await daysSinceInstall()) }),
       ];
     }),
 
-  /** Proxy connection attempt failed: a counter only, so the reconnect loop costs nothing. */
-  connectFailed: () => update((s, day) => core.bump(s, day, 'mcp_connect_fail')),
+  /** A tool card rendered in a chat: per-site counts in usage_day, plus a first-time milestone. */
+  card: (where?: string) =>
+    update(async (s, day) => {
+      const site = core.site(where);
+      const evs = core.card(s, day, site);
+      if (s.milestones.first_card) return evs;
+      return [...evs, ...core.milestone(s, 'first_card', { site, ...(await daysSinceInstall()) })];
+    }),
 
-  error: (code: ErrorCode, where?: string) => update((s, day) => core.error(s, day, code, core.site(where))),
+  error: (code: ErrorCode, where?: string, reason?: FailReason) =>
+    update((s, day) => core.error(s, day, code, core.site(where), reason)),
 
   installed: (reason: string, previousVersion?: string) =>
-    update(s => {
+    update(async s => {
+      const { installCohort, installDate } = await chrome.storage.local.get<{
+        installCohort?: string;
+        installDate?: string;
+      }>(['installCohort', 'installDate']);
+      if (!installCohort) {
+        // Fresh 0.7.x installs already have the ext_installed milestone; anything else predates telemetry.
+        const cohort = reason === 'install' || s.milestones.ext_installed ? 'new' : 'existing';
+        await chrome.storage.local.set({ installCohort: cohort });
+      }
+      if (reason === 'install' && !installDate)
+        await chrome.storage.local.set({ installDate: new Date().toISOString() });
+      if (reason === 'update' && !installDate) await chrome.storage.local.set({ installDate: 'unknown' });
       if (reason === 'install') return core.milestone(s, 'ext_installed', {});
       // Reloading an unpacked build fires `update` with the same version.
       if (reason === 'update' && previousVersion !== chrome.runtime.getManifest().version)
@@ -170,19 +208,32 @@ export const telemetry = {
   async tick(mcp: { connected: boolean; transport: string; tools: number }) {
     const hb = async (): Promise<Props> => {
       const bb = await browserBridgeStorage.get();
+      const fullAccess = await chrome.permissions.contains({ origins: ['<all_urls>'] });
       return {
         mcp_connected: mcp.connected,
         transport: mcp.transport,
         tools_count: core.bucket(mcp.tools),
         browser_tools_enabled: bb.browserToolsEnabled,
         browser_control_enabled: bb.browserControlEnabled,
-        full_access: await chrome.permissions.contains({ origins: ['<all_urls>'] }),
-        days_since_install: await daysSinceInstall(),
+        full_access: fullAccess,
+        // What actually matters: the toggle is on AND the user granted access to all sites.
+        browser_tools_usable: bb.browserToolsEnabled && fullAccess,
+        ...(await daysSinceInstall()),
       };
     };
     return update(async (s, day) => {
       const props = s.hbDay === day ? {} : await hb();
       return [...s.queue.splice(0), ...core.tick(s, day, () => props)];
     });
+  },
+
+  /** Point the browser's uninstall page at our site; with statistics on, it carries the anonymous id. */
+  async setUninstallUrl() {
+    try {
+      const params = (await enabled()) ? `?${new URLSearchParams({ ...(await uninstallParams()) })}` : '';
+      await chrome.runtime.setUninstallURL(UNINSTALL_URL + params);
+    } catch (e) {
+      logger.debug('[Telemetry] uninstall URL not set:', e);
+    }
   },
 };

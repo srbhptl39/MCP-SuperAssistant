@@ -16,6 +16,8 @@ import {
   type ConnectionRequest
 } from '../mcpclient/index';
 import { telemetry, TELEMETRY_ALARM, HEARTBEAT_EVERY_MINUTES } from '../../utils/telemetry';
+import { failReason } from '../../utils/telemetry-core';
+import { telemetryStorage } from '@extension/storage';
 import { getBrowserTools, executeBrowserTool, listTabsRaw, readTabRaw } from './browser-tools';
 import { browserBridgeStorage } from '@extension/storage';
 import { initCaptureFlow, handleContentReady } from './browser-tools/capture';
@@ -361,7 +363,6 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
     const errorCategory = categorizeToolError(error instanceof Error ? error : new Error(String(error)));
 
     logger.warn(`MCP server connection failed (${errorCategory.category}): ${error.message || String(error)}`);
-    void telemetry.connectFailed();
     logger.debug('Extension will continue to function with limited capabilities');
 
     // Only update connection status for actual connection errors
@@ -554,12 +555,16 @@ initializeExtension()
 const telemetryTick = () =>
   connectionChecked.then(() => telemetry.tick({ connected: isConnected, transport: connectionType, tools: mcpToolCount }));
 void telemetryTick();
+void telemetry.setUninstallUrl();
+telemetryStorage.subscribe(() => void telemetry.setUninstallUrl());
 chrome.alarms.get(TELEMETRY_ALARM).then(a => {
   // Re-creating on every worker start would reset the period, so only create it once.
   if (!a) void chrome.alarms.create(TELEMETRY_ALARM, { periodInMinutes: HEARTBEAT_EVERY_MINUTES });
 });
 chrome.alarms.onAlarm.addListener(a => {
   if (a.name === TELEMETRY_ALARM) void telemetryTick();
+void telemetry.setUninstallUrl();
+telemetryStorage.subscribe(() => void telemetry.setUninstallUrl());
 });
 
 logger.debug('Background script loaded');
@@ -644,7 +649,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Content scripts can't call chrome.permissions.request, so open a small extension window
   // centered over the sender's window; one click there brings up Chrome's own prompt.
-  if (message.type === 'browser-bridge:request-access') {
+  // Firefox only: usage statistics need the browser's data consent, which updaters were never asked for.
+  if (message.type === 'telemetry:consent-needed') {
+    (async () => {
+      const perms = (await chrome.permissions.getAll()) as { data_collection?: string[] };
+      const { consentPromptDismissed } = await chrome.storage.local.get('consentPromptDismissed');
+      const needed =
+        !!perms.data_collection &&
+        !perms.data_collection.includes('technicalAndInteraction') &&
+        (await telemetryStorage.get()).enabled &&
+        !consentPromptDismissed;
+      sendResponse({ needed });
+    })().catch(() => sendResponse({ needed: false }));
+    return true;
+  }
+  if (message.type === 'telemetry:consent-dismiss') {
+    void chrome.storage.local.set({ consentPromptDismissed: true });
+    return false;
+  }
+
+  if (message.type === 'browser-bridge:request-access' || message.type === 'telemetry:request-consent') {
+    const page = message.type === 'telemetry:request-consent' ? '#consent' : '#grant';
     (async () => {
       // Re-clicking "Allow access" focuses the open window instead of stacking another.
       if (grantWindowId !== undefined) {
@@ -661,7 +686,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const left = parent?.left !== undefined ? Math.round(parent.left + ((parent.width ?? width) - width) / 2) : undefined;
       const top = parent?.top !== undefined ? Math.round(parent.top + ((parent.height ?? height) - height) / 3) : undefined;
       const win = await chrome.windows.create({
-        url: chrome.runtime.getURL('options/index.html#grant'),
+        url: chrome.runtime.getURL(`options/index.html${page}`),
         type: 'popup',
         width,
         height,
@@ -691,8 +716,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Usage statistics from content scripts: only these features; the site comes from the sender URL.
   if (message.type === 'telemetry') {
+    const where = sender.url ?? sender.tab?.url;
     if (sender.tab && ['auto_execute', 'chip', 'sidebar'].includes(message.feature)) {
-      void telemetry.record(message.feature, sender.url ?? sender.tab.url);
+      void telemetry.record(message.feature, where);
+    } else if (sender.tab && message.feature === 'instructions') {
+      void telemetry.instructions(where);
+    } else if (sender.tab && message.feature === 'card') {
+      void telemetry.card(where);
     }
     return false;
   }
@@ -761,10 +791,14 @@ async function handleMcpMessage(
           }
           logger.debug(`Tool call completed: ${toolName}`);
         } catch (error) {
-          void telemetry.toolRun(isBrowserTool, false, where).then(() => telemetry.error('tool_failed', where));
+          const reason = failReason(error instanceof Error ? error.message : String(error));
+          void telemetry.toolRun(isBrowserTool, false, where).then(() => telemetry.error('tool_failed', where, reason));
           throw error;
         }
-        void telemetry.toolRun(isBrowserTool, result?.isError !== true, where);
+        const toolOk = result?.isError !== true;
+        void telemetry
+          .toolRun(isBrowserTool, toolOk, where)
+          .then(() => (toolOk ? undefined : telemetry.error('tool_failed', where, 'tool_error')));
         break;
       }
 
@@ -1069,6 +1103,7 @@ function broadcastConnectionStatusToContentScripts(isConnected: boolean, error?:
  */
 async function broadcastToolsUpdateToContentScripts(mcpTools: any[]) {
   mcpToolCount = mcpTools.length;
+  if (isConnected) void telemetry.toolsListed(connectionType, mcpTools.length);
   // Always fold in the virtual browser tools (gated internally on settings).
   const browserTools = await getBrowserTools();
   const tools = [...mcpTools, ...browserTools];

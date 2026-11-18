@@ -1,5 +1,5 @@
 /** Tell the background a usage-statistics feature fired. The background maps the tab URL to a site enum and applies opt-out/caps. */
-export function telemetry(feature: 'auto_execute' | 'chip' | 'sidebar'): void {
+export function telemetry(feature: 'auto_execute' | 'chip' | 'sidebar' | 'instructions' | 'card'): void {
   try {
     chrome.runtime.sendMessage({ type: 'telemetry', feature }).catch(() => {});
   } catch {

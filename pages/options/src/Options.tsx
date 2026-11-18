@@ -8,7 +8,7 @@ import {
   type BrowserBridgeSettings,
 } from '@extension/storage';
 import { buttonClass, Card, Field, inputClass, primaryButtonClass, RadioGroup, SavedTag, Toggle } from '@src/ui';
-import { removeFullAccess, requestFullAccess, useFullAccess } from '@src/access';
+import { removeFullAccess, requestDataConsent, requestFullAccess, useDataConsent, useFullAccess } from '@src/access';
 import { getConnectionStatus, getServerConfig, updateServerConfig, type ConnectionType } from '@src/mcp';
 
 const caution = 'text-xs leading-relaxed text-amber-600 dark:text-amber-500';
@@ -69,6 +69,7 @@ const OptionsInner = () => {
 
   /* --- Browser access (<all_urls>) --- */
   const hasAccess = useFullAccess();
+  const dataConsent = useDataConsent();
   const [accessNote, setAccessNote] = useState('');
 
   const allowAccess = async () => {
@@ -177,7 +178,7 @@ const OptionsInner = () => {
                 <p className="text-xs text-neutral-600 dark:text-neutral-400">
                   {hasAccess
                     ? 'Tabs can be read. Sites in the block list below stay off limits.'
-                    : 'Chrome will ask you to confirm. Needed to attach tabs or use browser tools.'}
+                    : 'Your browser will ask you to confirm. Needed to attach tabs or use browser tools.'}
                 </p>
               </div>
             </div>
@@ -374,6 +375,16 @@ const OptionsInner = () => {
               flash();
             }}
           />
+          {dataConsent === false && telemetrySettings.enabled ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+              <span className="text-neutral-600 dark:text-neutral-300">
+                Firefox has not been given permission to share these statistics, so nothing is sent.
+              </span>
+              <button type="button" className={primaryButtonClass} onClick={() => void requestDataConsent()}>
+                Allow
+              </button>
+            </div>
+          ) : null}
         </Card>
       </div>
     </div>

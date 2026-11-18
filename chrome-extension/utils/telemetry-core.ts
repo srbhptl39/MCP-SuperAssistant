@@ -29,7 +29,7 @@ export const FEATURES = [
   'sidebar',
 ] as const;
 export type Feature = (typeof FEATURES)[number];
-export type Props = Record<string, string | number | boolean | string[]>;
+export type Props = Record<string, string | number | boolean | string[] | Record<string, number>>;
 export interface Ev {
   event: string;
   props: Props;
@@ -70,6 +70,18 @@ const HOSTS: [string, string][] = [
 export const MAX_ERRORS_PER_DAY = 5;
 export const MAX_QUEUE = 50;
 export type ErrorCode = 'tool_failed' | 'sw_unhandled';
+/** Why a tool call failed, as a fixed code. Never the message itself. */
+export type FailReason = 'timeout' | 'not_found' | 'invalid_args' | 'disconnected' | 'tool_error' | 'other';
+
+export function failReason(message: string | undefined, toolReportedError = false): FailReason {
+  if (toolReportedError) return 'tool_error';
+  const m = (message ?? '').toLowerCase();
+  if (/timed? ?out|etimedout/.test(m)) return 'timeout';
+  if (/not found|not available|-32601/.test(m)) return 'not_found';
+  if (/invalid (arguments|params|parameters)|-32602|-32600|validation/.test(m)) return 'invalid_args';
+  if (/econnrefused|connection|network|fetch failed|not connected|transport|disconnect/.test(m)) return 'disconnected';
+  return 'other';
+}
 
 export const today = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
@@ -102,6 +114,8 @@ export interface State {
   errors: number;
   milestones: Record<string, boolean>;
   queue: Ev[]; // PostHog sends that failed; retried on tick
+  cards?: Record<string, number>; // tool cards rendered today, per site
+  once?: Record<string, string>; // once-per-day event name -> last day sent
 }
 
 export const emptyState = (): State => ({ counts: {}, sites: [], features: [], errors: 0, milestones: {}, queue: [] });
@@ -109,16 +123,18 @@ export const emptyState = (): State => ({ counts: {}, sites: [], features: [], e
 /** Close out a finished day: one usage_day (only if it had engagement), timestamped to that day. */
 function rollover(s: State, day: string): Ev[] {
   if (!s.day || s.day >= day) return [];
-  const out: Ev[] = s.features.length
-    ? [
-        {
-          event: 'usage_day',
-          ts: Date.parse(`${s.day}T23:59:59Z`),
-          props: { day: s.day, sites: s.sites, features: s.features, ...s.counts },
-        },
-      ]
-    : [];
-  Object.assign(s, { day, counts: {}, sites: [], features: [] });
+  const cards = s.cards ?? {};
+  const out: Ev[] =
+    s.features.length || Object.keys(cards).length
+      ? [
+          {
+            event: 'usage_day',
+            ts: Date.parse(`${s.day}T23:59:59Z`),
+            props: { day: s.day, sites: s.sites, features: s.features, ...s.counts, cards_by_site: cards },
+          },
+        ]
+      : [];
+  Object.assign(s, { day, counts: {}, sites: [], features: [], cards: {} });
   return out;
 }
 
@@ -152,17 +168,33 @@ export function tick(s: State, day: string, heartbeat: () => Props): Ev[] {
   return out;
 }
 
+/** A tool card rendered on a site (also from chat history). Counts only; not an engagement. */
+export function card(s: State, day: string, siteId: string): Ev[] {
+  const out = bump(s, day, 'cards_rendered');
+  s.cards = { ...s.cards, [siteId]: (s.cards?.[siteId] ?? 0) + 1 };
+  return out;
+}
+
+/** An event sent at most once per UTC day. */
+export function oncePerDay(s: State, day: string, event: string, props: Props): Ev[] {
+  if (s.once?.[event] === day) return [];
+  s.once = { ...s.once, [event]: day };
+  return [{ event, props }];
+}
+
 export function milestone(s: State, name: string, props: Props): Ev[] {
   if (s.milestones[name]) return [];
   s.milestones[name] = true;
   return [{ event: name, props }];
 }
 
-export function error(s: State, day: string, code: ErrorCode, siteId: string): Ev[] {
+export function error(s: State, day: string, code: ErrorCode, siteId: string, reason?: FailReason): Ev[] {
   if (s.errDay !== day) Object.assign(s, { errDay: day, errors: 0 });
   if (s.errors >= MAX_ERRORS_PER_DAY) return [];
   s.errors++;
-  return [{ event: 'ext_error', props: { code, site: siteId } }]; // `error` is reserved in GA4
+  const props: Props = { code, site: siteId };
+  if (reason) props.reason = reason;
+  return [{ event: 'ext_error', props }]; // `error` is reserved in GA4
 }
 
 /** Serialize async read-modify-write sections so concurrent messages can't lose increments. */
@@ -195,7 +227,13 @@ export function gaBody(id: string, e: Ev, common: Props, now = Date.now()) {
   if (now - ts > GA_MAX_AGE_MS) return null;
   const params: Record<string, string | number> = {};
   for (const [k, v] of Object.entries({ ...common, ...e.props }))
-    params[k] = Array.isArray(v) ? v.join(',').slice(0, 100) : typeof v === 'boolean' ? String(v) : v;
+    params[k] = Array.isArray(v)
+      ? v.join(',').slice(0, 100)
+      : typeof v === 'boolean'
+        ? String(v)
+        : typeof v === 'object'
+          ? JSON.stringify(v).slice(0, 100)
+          : v;
   if (GA_ENGAGED.has(e.event))
     Object.assign(params, { session_id: String(Math.floor(ts / 1000)), engagement_time_msec: 100 });
   return { client_id: id, timestamp_micros: ts * 1000, events: [{ name: e.event, params }] };

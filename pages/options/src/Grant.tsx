@@ -36,8 +36,8 @@ const Grant = () => {
         ) : (
           <>
             <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-              MCP SuperAssistant needs permission to read pages so it can attach your open tabs to a chat. Chrome will
-              ask you to confirm. You can remove access any time in Settings.
+              MCP SuperAssistant needs permission to read pages so it can attach your open tabs to a chat. Your browser
+              will ask you to confirm. You can remove access any time in Settings.
             </p>
             {declined ? (
               <p className="text-xs text-amber-600 dark:text-amber-500">Access was not allowed. Try again or close.</p>

@@ -7,6 +7,7 @@ import TabPickerPanel from './TabPickerPanel';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 import { AutomationService } from '../../services/automation.service';
 import { createLogger } from '@extension/shared/lib/logger';
+import { telemetry } from '../../utils/telemetry';
 
 
 const logger = createLogger('mcpPopover');
@@ -947,6 +948,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
         logger.debug(`Attempting to insert text using ${activePlugin.name} adapter`);
         const success = await insertText(instructions, { source: 'instructions' });
         if (success) {
+          telemetry('instructions');
           setInsertStatus('Inserted!');
           logger.debug(`Text inserted successfully using ${activePlugin.name} adapter`);
         } else {

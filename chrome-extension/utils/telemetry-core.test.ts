@@ -101,3 +101,36 @@ test('serial(): 20 concurrent read-modify-writes lose nothing', async () => {
   await assert.rejects(locked(async () => Promise.reject(new Error('x'))));
   assert.equal(await locked(async () => 1), 1);
 });
+
+test('failReason buckets messages into fixed codes', () => {
+  assert.equal(t.failReason('Request timed out after 30s'), 'timeout');
+  assert.equal(t.failReason("Tool 'x' not found on server"), 'not_found');
+  assert.equal(t.failReason('MCP error -32602: Invalid params'), 'invalid_args');
+  assert.equal(t.failReason('fetch failed: ECONNREFUSED'), 'disconnected');
+  assert.equal(t.failReason('boom'), 'other');
+  assert.equal(t.failReason(undefined, true), 'tool_error');
+});
+
+test('cards: per-site counts land in usage_day even without engagement', () => {
+  const s = t.emptyState();
+  t.card(s, D1, 'gemini');
+  t.card(s, D1, 'gemini');
+  t.card(s, D1, 'claude');
+  const [u] = t.tick(s, D2, () => ({}));
+  assert.equal(u.event, 'usage_day');
+  assert.deepEqual(u.props.cards_by_site, { gemini: 2, claude: 1 });
+  assert.equal(u.props.cards_rendered, 3);
+  assert.deepEqual(s.cards, {});
+});
+
+test('oncePerDay sends once per UTC day', () => {
+  const s = t.emptyState();
+  assert.equal(t.oncePerDay(s, D1, 'proxy_connected_day', {}).length, 1);
+  assert.equal(t.oncePerDay(s, D1, 'proxy_connected_day', {}).length, 0);
+  assert.equal(t.oncePerDay(s, D2, 'proxy_connected_day', {}).length, 1);
+});
+
+test('GA4 body flattens objects to a short JSON string', () => {
+  const body = t.gaBody('id', { event: 'usage_day', props: { cards_by_site: { gemini: 2 } } }, {}, Date.now())!;
+  assert.equal(body.events[0].params.cards_by_site, '{"gemini":2}');
+});

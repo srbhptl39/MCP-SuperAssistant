@@ -4,6 +4,7 @@ import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } fr
 import { useUIStore } from '@src/stores/ui.store';
 import { useToolStore } from '@src/stores';
 import ServerStatus from './ServerStatus/ServerStatus';
+import ConsentBanner from './ConsentBanner';
 import AvailableTools from './AvailableTools/AvailableTools';
 import InstructionManager from './Instructions/InstructionManager';
 import Settings from './Settings/Settings';
@@ -766,6 +767,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             {/* Status and Settings section */}
             <div className="py-3 px-3 space-y-3 overflow-y-auto flex-shrink-0">
               <ServerStatus status={serverStatus} />
+              <ConsentBanner />
 
               {/* Tabs for Tools/Instructions */}
               <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
