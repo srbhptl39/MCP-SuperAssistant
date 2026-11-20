@@ -136,7 +136,7 @@ To connect the Chrome extension to a local server for proxying connections:
    }
    ```
    config.json also support other MCP server configurations like remote MCP server URLs.
-   Try composio mcp, zappier mcp, or smithery or any other remote MCP server.
+   Try composio mcp, zappier mcp, smithery, or [Lantern Works](https://lantern-works-mcp.lantern-works.workers.dev/mcp?ref=mcp-superassistant) (hosted, free, no-key GPU rental prices), or any other remote MCP server.
 
    **Or use existing config file location from Cursor or other tools:**
    ```
