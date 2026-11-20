@@ -21,6 +21,9 @@ export interface ConnectionEvents {
     isConnected: boolean; 
     type: TransportType | null;
     error?: string;
+    /** The link went away on its own (not a user disconnect or failed connect); `detail` says why. */
+    dropped?: boolean;
+    detail?: string;
   };
   'connection:health-check': { 
     healthy: boolean; 

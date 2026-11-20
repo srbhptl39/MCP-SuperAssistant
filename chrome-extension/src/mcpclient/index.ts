@@ -9,6 +9,7 @@ import { WebSocketPlugin } from './plugins/websocket/WebSocketPlugin.js';
 import { WebSocketTransport } from './plugins/websocket/WebSocketTransport.js';
 
 // Configuration
+import type { AllEvents } from './types/events.js';
 import { DEFAULT_CLIENT_CONFIG } from './types/config.js';
 import { createLogger } from '@extension/shared/lib/logger';
 
@@ -75,6 +76,13 @@ async function getGlobalClient(): Promise<McpClient> {
   return globalClient;
 }
 
+const statusListeners = new Set<(event: AllEvents['connection:status-changed']) => void>();
+
+/** Subscribe to connection status changes of the global client (same context, no message passing). */
+export function onMcpConnectionStatusChange(listener: (event: AllEvents['connection:status-changed']) => void): void {
+  statusListeners.add(listener);
+}
+
 /**
  * Set up event listeners on the global client to handle connection events
  */
@@ -83,23 +91,7 @@ function setupGlobalClientEventListeners(client: McpClient): void {
   client.on('connection:status-changed', (event) => {
     logger.debug('[Global Client] Connection status changed:', event);
     
-    // Emit a global event that can be caught by the background script
-    if (typeof window !== 'undefined' && window.dispatchEvent) {
-      window.dispatchEvent(new CustomEvent('mcp:connection-status-changed', { 
-        detail: event 
-      }));
-    }
-    
-    // Also try to broadcast via chrome runtime if available
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({
-        type: 'mcp:connection-status-changed',
-        payload: event,
-        origin: 'mcpclient'
-      }).catch(() => {
-        // Ignore errors if background script isn't listening
-      });
-    }
+    statusListeners.forEach(listener => listener(event));
   });
 
   client.on('client:connected', (event) => {
@@ -148,6 +140,22 @@ function detectTransportType(uri: string): import('./types/plugin.js').Transport
 export function isMcpServerConnected(): boolean {
   if (!globalClient) return false;
   return globalClient.isConnected();
+}
+
+/** For telemetry: server name/version, calls in flight, and why the last health check failed. */
+export function getMcpDiagnostics(): {
+  serverName?: string;
+  serverVersion?: string;
+  inFlight: number;
+  lastHealthFailure: 'timeout' | 'unreachable' | null;
+} {
+  const info = globalClient?.getServerInfo();
+  return {
+    serverName: info?.name,
+    serverVersion: info?.version,
+    inFlight: globalClient?.toolCallsInFlight ?? 0,
+    lastHealthFailure: globalClient?.lastHealthFailure ?? null,
+  };
 }
 
 export async function checkMcpServerConnection(): Promise<boolean> {

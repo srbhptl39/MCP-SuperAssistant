@@ -83,6 +83,33 @@ export function failReason(message: string | undefined, toolReportedError = fals
   return 'other';
 }
 
+/** Why the link to the proxy dropped while it was connected. */
+export type DropCause = 'health_timeout' | 'health_unreachable' | 'socket_closed' | 'call_lost' | 'other';
+/** Why a connect attempt failed, as a fixed code. Never the message itself. */
+export type ConnectFail = 'unreachable' | 'timeout' | 'session' | 'bad_config' | 'other';
+
+export function connectFail(message: string | undefined): ConnectFail {
+  const m = (message ?? '').toLowerCase();
+  if (/timed? ?out|etimedout/.test(m)) return 'timeout';
+  if (/session|\b404\b/.test(m)) return 'session';
+  if (/invalid|protocol|url|not support/.test(m)) return 'bad_config';
+  if (/refused|failed to fetch|fetch failed|connection failed|network|unavailable|not connected|err_connection|sse error|websocket/.test(m))
+    return 'unreachable';
+  return 'other';
+}
+
+/** Durations as coarse buckets, so no exact timings are sent. */
+export const msBucket = (ms: number) =>
+  ms < 1000 ? '<1s' : ms < 5000 ? '1-5s' : ms < 15000 ? '5-15s' : ms < 60000 ? '15-60s' : ms < 300000 ? '1-5m' : '5m+';
+
+/** Our proxy reports its version; any other MCP server is just "other" (no names sent). */
+export const proxyVersion = (name?: string, version?: string) =>
+  !name ? 'unknown' : /superassistant/i.test(name) ? (version || 'unknown').slice(0, 20) : 'other';
+
+/** Distinct MCP servers behind the proxy, from "server.tool" names (browser_* tools are ours, not counted). */
+export const serverCount = (toolNames: string[]) =>
+  new Set(toolNames.filter(n => !n.startsWith('browser_') && n.includes('.')).map(n => n.split('.')[0])).size;
+
 export const today = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 /** Map a site id, URL or hostname to the fixed site enum. Never returns anything else. */
@@ -116,7 +143,19 @@ export interface State {
   queue: Ev[]; // PostHog sends that failed; retried on tick
   cards?: Record<string, number>; // tool cards rendered today, per site
   once?: Record<string, string>; // once-per-day event name -> last day sent
+  conn?: ConnState; // connection health for connection_day
 }
+
+/** Connection health for one UTC day, sent as connection_day; kept apart from usage_day so it is sent even without engagement. */
+export interface ConnState {
+  day?: string;
+  counts: Record<string, number>;
+  info: Record<string, string>; // last transport / proxy_version / tools_count / servers_count seen that day
+  capped: Record<string, number>; // event name -> sent today (MAX_CONN_EVENTS_PER_DAY)
+  downSince?: number; // epoch ms the link dropped, until it recovers
+  downAttempts?: number;
+}
+export const MAX_CONN_EVENTS_PER_DAY = 5;
 
 export const emptyState = (): State => ({ counts: {}, sites: [], features: [], errors: 0, milestones: {}, queue: [] });
 
@@ -136,6 +175,41 @@ function rollover(s: State, day: string): Ev[] {
       : [];
   Object.assign(s, { day, counts: {}, sites: [], features: [], cards: {} });
   return out;
+}
+
+const conn = (s: State): ConnState => (s.conn ??= { counts: {}, info: {}, capped: {} });
+
+/** Close out a finished day of connection health: one connection_day if anything happened. */
+function connRollover(s: State, day: string): Ev[] {
+  const c = conn(s);
+  if (c.day && c.day < day) {
+    const out: Ev[] = Object.keys(c.counts).length
+      ? [{ event: 'connection_day', ts: Date.parse(`${c.day}T23:59:59Z`), props: { day: c.day, ...c.info, ...c.counts } }]
+      : [];
+    Object.assign(c, { counts: {}, capped: {} });
+    c.day = day;
+    return out;
+  }
+  c.day = day;
+  return [];
+}
+
+/** Add to connection_day counters (`max_*` keys keep the day's maximum) and remember context. */
+export function connCount(s: State, day: string, add: Record<string, number>, info: Record<string, string> = {}): Ev[] {
+  const out = connRollover(s, day);
+  const c = conn(s);
+  for (const [k, v] of Object.entries(add)) c.counts[k] = k.startsWith('max_') ? Math.max(c.counts[k] ?? 0, v) : (c.counts[k] ?? 0) + v;
+  Object.assign(c.info, info);
+  return out;
+}
+
+/** A diagnostic event, at most MAX_CONN_EVENTS_PER_DAY of each name per UTC day. */
+export function connEvent(s: State, day: string, event: string, props: Props): Ev[] {
+  const out = connRollover(s, day);
+  const c = conn(s);
+  if ((c.capped[event] ?? 0) >= MAX_CONN_EVENTS_PER_DAY) return out;
+  c.capped[event] = (c.capped[event] ?? 0) + 1;
+  return [...out, { event, props }];
 }
 
 /** Count a non-engagement counter (mcp_connect_ok, mcp_connect_fail, tool_errors). */
@@ -160,7 +234,7 @@ export function record(s: State, day: string, feature: Feature, siteId: string):
 
 /** Alarm / startup tick: daily heartbeat and yesterday's usage_day. */
 export function tick(s: State, day: string, heartbeat: () => Props): Ev[] {
-  const out = rollover(s, day);
+  const out = [...rollover(s, day), ...connRollover(s, day)];
   if (s.hbDay !== day) {
     s.hbDay = day;
     out.push({ event: 'heartbeat', props: heartbeat() });
@@ -213,11 +287,11 @@ export function milestone(s: State, name: string, props: Props): Ev[] {
   return [{ event: name, props }];
 }
 
-export function error(s: State, day: string, code: ErrorCode, siteId: string, reason?: FailReason): Ev[] {
+export function error(s: State, day: string, code: ErrorCode, siteId: string, reason?: FailReason, extra: Props = {}): Ev[] {
   if (s.errDay !== day) Object.assign(s, { errDay: day, errors: 0 });
   if (s.errors >= MAX_ERRORS_PER_DAY) return [];
   s.errors++;
-  const props: Props = { code, site: siteId };
+  const props: Props = { code, site: siteId, ...extra };
   if (reason) props.reason = reason;
   return [{ event: 'ext_error', props }]; // `error` is reserved in GA4
 }

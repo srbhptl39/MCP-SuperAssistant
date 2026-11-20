@@ -7,7 +7,7 @@
 import { browserBridgeStorage, telemetryStorage } from '@extension/storage';
 import { createLogger } from '@extension/shared/lib/logger';
 import * as core from './telemetry-core';
-import type { ErrorCode, Ev, FailReason, Feature, Props, State } from './telemetry-core';
+import type { DropCause, ErrorCode, Ev, FailReason, Feature, Props, State } from './telemetry-core';
 
 const logger = createLogger('Telemetry');
 
@@ -187,8 +187,96 @@ export const telemetry = {
       ...core.milestone(s, 'setup_help_used', { site: core.site(where), ...(await daysSinceInstall()) }),
     ]),
 
-  error: (code: ErrorCode, where?: string, reason?: FailReason) =>
-    update((s, day) => core.error(s, day, code, core.site(where), reason)),
+  error: (code: ErrorCode, where?: string, reason?: FailReason, extra?: Props) =>
+    update((s, day) => core.error(s, day, code, core.site(where), reason, extra)),
+
+  /**
+   * Connection health. Counters go into a daily connection_day; drops, recoveries and connect failures
+   * also send a capped event. Only enums, counts and coarse buckets: no URLs, tool/server names or messages.
+   */
+  conn: {
+    /** Connected to the proxy (first connect, reconnect or recovery after a drop). */
+    connected: (info: { transport: string; proxyVersion: string; tools: number; servers: number }) =>
+      update((s, day) => {
+        const ctx = {
+          transport: info.transport,
+          proxy_version: info.proxyVersion,
+          tools_count: core.bucket(info.tools),
+          servers_count: core.bucket(info.servers),
+        };
+        const out = core.connCount(s, day, { connects_ok: 1 }, ctx);
+        const c = s.conn!;
+        if (c.downSince) {
+          const down = Date.now() - c.downSince;
+          out.push(
+            ...core.connCount(s, day, { recoveries: 1, max_recovery_ms: down }),
+            ...core.connEvent(s, day, 'mcp_recovered', {
+              transport: info.transport,
+              proxy_version: info.proxyVersion,
+              downtime: core.msBucket(down),
+              attempts: c.downAttempts ?? 0,
+            }),
+          );
+          delete c.downSince;
+          delete c.downAttempts;
+        }
+        return out;
+      }),
+
+    /** The link to a connected proxy dropped. */
+    dropped: (info: { transport: string; proxyVersion: string; cause: DropCause; connectedMs: number; inFlight: number }) =>
+      update((s, day) => {
+        const out = core.connCount(s, day, { drops: 1, [`drop_${info.cause}`]: 1 });
+        s.conn!.downSince ??= Date.now();
+        s.conn!.downAttempts = 0;
+        return [
+          ...out,
+          ...core.connEvent(s, day, 'mcp_drop', {
+            transport: info.transport,
+            proxy_version: info.proxyVersion,
+            cause: info.cause,
+            connected_for: core.msBucket(info.connectedMs),
+            in_flight_calls: Math.min(info.inFlight, 10),
+          }),
+        ];
+      }),
+
+    /**
+     * A connect attempt failed. Installs that never connected (no proxy set up) are just "not set up",
+     * so for them only unusual failures are reported, not "unreachable".
+     */
+    connectFailed: (info: { transport: string; message?: string; attempt: number }) =>
+      update((s, day) => {
+        const reason = core.connectFail(info.message);
+        const everConnected = !!s.milestones.mcp_first_connected;
+        if (!everConnected && reason === 'unreachable') return [];
+        if (s.conn?.downSince) s.conn.downAttempts = (s.conn.downAttempts ?? 0) + 1;
+        return [
+          ...core.connCount(s, day, { connect_failures: 1, [`connect_fail_${reason}`]: 1 }),
+          ...core.connEvent(s, day, 'mcp_connect_failed', {
+            transport: info.transport,
+            reason,
+            attempt: Math.min(info.attempt, 10),
+            ever_connected: everConnected,
+          }),
+        ];
+      }),
+
+    /** An MCP tool call finished (browser_* tools are not MCP and are not counted here). */
+    toolCall: (info: { ok: boolean; reason?: FailReason; ms: number }) =>
+      update((s, day) =>
+        core.connCount(s, day, {
+          calls: 1,
+          ...(info.ok ? {} : { calls_failed: 1, [`call_fail_${info.reason ?? 'other'}`]: 1 }),
+          ...(info.ms > 30000 ? { calls_over_30s: 1 } : {}),
+          ...(info.ms > 60000 ? { calls_over_60s: 1 } : {}),
+          max_call_ms: info.ms,
+        }),
+      ),
+
+    /** The user pressed Reconnect or saved new server settings. */
+    manualReconnect: () => update((s, day) => core.connCount(s, day, { manual_reconnects: 1 })),
+  },
 
   /** Install/update. Cohort and install date are recorded even with statistics off, so they stay right if turned on later. */
   installed: async (reason: string, previousVersion?: string) => {

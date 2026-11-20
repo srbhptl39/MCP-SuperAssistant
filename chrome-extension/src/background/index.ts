@@ -6,6 +6,8 @@ import {
   isMcpServerConnected,
   forceReconnectToMcpServer,
   checkMcpServerConnection,
+  onMcpConnectionStatusChange,
+  getMcpDiagnostics,
   callToolWithBackwardsCompatibility,
   getPrimitivesWithBackwardsCompatibility,
   resetMcpConnectionState,
@@ -16,7 +18,8 @@ import {
   type ConnectionRequest
 } from '../mcpclient/index';
 import { telemetry, TELEMETRY_ALARM, HEARTBEAT_EVERY_MINUTES } from '../../utils/telemetry';
-import { failReason } from '../../utils/telemetry-core';
+import { failReason, msBucket, proxyVersion, serverCount } from '../../utils/telemetry-core';
+import type { DropCause } from '../../utils/telemetry-core';
 import { telemetryStorage } from '@extension/storage';
 import { getBrowserTools, executeBrowserTool, listTabsRaw, readTabRaw } from './browser-tools';
 import { browserBridgeStorage } from '@extension/storage';
@@ -140,8 +143,28 @@ function getConnectionStatus(): boolean {
  * Update connection status
  * Replaces mcpInterface.updateConnectionStatus()
  */
+// Connection-health telemetry (in memory; a restarted worker simply records a fresh connect).
+let connectedAt = 0;
+let pendingConnectReport = false; // sent with the tool list, once it is known
+let nextDropCause: DropCause | undefined;
+let lastProxyVersion = 'unknown';
+
 function updateConnectionStatus(status: boolean): void {
-  if (status && !isConnected) void telemetry.connected(connectionType);
+  if (status && !isConnected) {
+    void telemetry.connected(connectionType);
+    connectedAt = Date.now();
+    pendingConnectReport = true;
+  }
+  if (!status && isConnected) {
+    void telemetry.conn.dropped({
+      transport: connectionType,
+      proxyVersion: lastProxyVersion,
+      cause: nextDropCause ?? 'other',
+      connectedMs: Date.now() - connectedAt,
+      inFlight: getMcpDiagnostics().inFlight,
+    });
+  }
+  nextDropCause = undefined;
   isConnected = status;
   logger.debug('[Background] Connection status updated to:', status);
 }
@@ -359,16 +382,19 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
     }
     
     connectionAttemptCount = 0; // Reset counter on success
+    isConnecting = false; // Left true, the periodic check skipped forever and never noticed a lost server.
   } catch (error: any) {
     const errorCategory = categorizeToolError(error instanceof Error ? error : new Error(String(error)));
 
     logger.warn(`MCP server connection failed (${errorCategory.category}): ${error.message || String(error)}`);
+    void telemetry.conn.connectFailed({ transport: type, message: error?.message, attempt: connectionAttemptCount });
     logger.debug('Extension will continue to function with limited capabilities');
 
     // Only update connection status for actual connection errors
     if (errorCategory.isConnectionError) {
+      // An unreachable server is "disconnected", not an error (WebSocket said "Error" while SSE said "Disconnected").
       updateConnectionStatus(false);
-      broadcastConnectionStatusToContentScripts(false, error.message || String(error));
+      broadcastConnectionStatusToContentScripts(false);
     } else {
       logger.debug('Error categorized as tool-related, not updating connection status');
     }
@@ -394,40 +420,77 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
   }
 }
 
+/** Applies a health result: on a change, store it, tell the pages, and on a drop start reconnecting. */
+function applyStatus(ok: boolean, cause?: DropCause): void {
+  if (ok === getConnectionStatus()) return;
+  if (!ok) nextDropCause = cause;
+  logger.debug(`Connection status changed: ${!ok} -> ${ok}`);
+  updateConnectionStatus(ok);
+  broadcastConnectionStatusToContentScripts(ok);
+  if (!ok && !isConnecting) {
+    connectionAttemptCount = 0;
+    tryConnectToServer(getServerUrl(), connectionType).catch(() => {});
+  }
+}
+
+// The client reports drops it noticed itself (WebSocket close, failed call): show them now, not at the next check.
+// Connects and deliberate disconnects are handled by their callers, so only drops are acted on.
+onMcpConnectionStatusChange(event => {
+  if (!event.dropped) return;
+  logger.debug('[Background] Connection dropped:', event.detail);
+  applyStatus(false, /websocket/i.test(event.detail ?? '') ? 'socket_closed' : 'call_lost');
+});
+
+// One health check at a time; everyone asking while it runs shares it.
+let lastHealthCheckAt = 0;
+let healthCheckInFlight: Promise<boolean> | null = null;
+function checkHealth(): Promise<boolean> {
+  healthCheckInFlight ??= checkMcpServerConnection()
+    .then(ok => {
+      lastHealthCheckAt = Date.now();
+      // also covers a check that finishes after the caller stopped waiting
+      applyStatus(ok, getMcpDiagnostics().lastHealthFailure === 'timeout' ? 'health_timeout' : 'health_unreachable');
+      return ok;
+    })
+    .finally(() => {
+      healthCheckInFlight = null;
+    });
+  return healthCheckInFlight;
+}
+
+/**
+ * Status for content scripts. Timers do not run while the worker is asleep, so the cached flag can lag:
+ * if the last real check is old, run one now (bounded, so heartbeats stay inside their 5s timeout).
+ */
+const STATUS_MAX_AGE = 10000;
+const STATUS_WAIT = 4000;
+async function getFreshConnectionStatus(): Promise<boolean> {
+  if (isConnecting || Date.now() - lastHealthCheckAt < STATUS_MAX_AGE) return getConnectionStatus();
+  const wait = new Promise<boolean>(resolve => setTimeout(() => resolve(getConnectionStatus()), STATUS_WAIT));
+  return Promise.race([checkHealth(), wait]);
+}
+
 // Set up a periodic connection check with enhanced recovery logic
-const PERIODIC_CHECK_INTERVAL = 60000; // 1 minute
+const PERIODIC_CHECK_INTERVAL = 15000; // real ping each time, so a stopped proxy shows within ~15s
 setInterval(async () => {
   if (isConnecting) {
     return; // Skip if already connecting
   }
 
-  // Check current connection status with enhanced validation
+  // checkHealth applies a change (store, broadcast, start reconnect) itself.
   const wasConnected = getConnectionStatus();
-  const isConnected = await checkMcpServerConnection();
-  updateConnectionStatus(isConnected);
+  const isConnected = await checkHealth();
 
-  // Broadcast status change if it changed
-  if (wasConnected !== isConnected) {
-    logger.debug(`Connection status changed: ${wasConnected} -> ${isConnected}`);
-    broadcastConnectionStatusToContentScripts(isConnected);
-    
-    // If connected, also broadcast available tools
-    if (isConnected) {
-      try {
-        logger.debug('[Background] Periodic check: Connection established, fetching and broadcasting tools...');
-        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true, connectionType);
-        logger.debug(`Periodic check: Retrieved ${primitives.length} primitives`);
-        
-        const tools = normalizeTools(primitives);
-        logger.debug(`Periodic check: Broadcasting ${tools.length} normalized tools`);
-        
-        broadcastToolsUpdateToContentScripts(tools);
-      } catch (error) {
-        logger.warn('[Background] Error broadcasting tools after status change:', error);
-      }
+  if (isConnected && !wasConnected) {
+    // Came back without tryConnectToServer: also hand the pages the tools.
+    try {
+      const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true, connectionType);
+      broadcastToolsUpdateToContentScripts(normalizeTools(primitives));
+    } catch (error) {
+      logger.warn('[Background] Error broadcasting tools after status change:', error);
     }
-  } else {
-    // Even if status didn't change, periodically broadcast to ensure content scripts are in sync
+  } else if (wasConnected === isConnected) {
+    // Keep content scripts in sync even when nothing changed.
     broadcastConnectionStatusToContentScripts(isConnected);
   }
 
@@ -699,21 +762,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  // Handle MCP client connection status changes
-  if (message.type === 'mcp:connection-status-changed' && message.origin === 'mcpclient') {
-    logger.debug('[Background] Received connection status change from MCP client:', message.payload);
-    
-    // Update internal connection status
-    const { isConnected, error } = message.payload;
-    updateConnectionStatus(isConnected);
-    
-    // Broadcast the status change to all content scripts
-    broadcastConnectionStatusToContentScripts(isConnected, error);
-    
-    // No response needed
-    return false;
-  }
-
   // Usage statistics from content scripts: only these features; the site comes from the sender URL.
   if (message.type === 'telemetry') {
     const where = sender.url ?? sender.tab?.url;
@@ -783,6 +831,8 @@ async function handleMcpMessage(
         // Virtual browser tools execute locally in the background, not over MCP.
         const isBrowserTool = toolName.startsWith('browser_');
         const where = sender.url ?? sender.tab?.url;
+        const callStart = Date.now();
+        const callCtx = () => ({ transport: connectionType, proxy_version: lastProxyVersion, duration: msBucket(Date.now() - callStart) });
         try {
           if (isBrowserTool) {
             logger.debug(`Executing local browser tool: ${toolName}`);
@@ -794,13 +844,18 @@ async function handleMcpMessage(
           logger.debug(`Tool call completed: ${toolName}`);
         } catch (error) {
           const reason = failReason(error instanceof Error ? error.message : String(error));
-          void telemetry.toolRun(isBrowserTool, false, where).then(() => telemetry.error('tool_failed', where, reason));
+          if (!isBrowserTool) void telemetry.conn.toolCall({ ok: false, reason, ms: Date.now() - callStart });
+          void telemetry
+            .toolRun(isBrowserTool, false, where)
+            .then(() => telemetry.error('tool_failed', where, reason, isBrowserTool ? {} : callCtx()));
           throw error;
         }
         const toolOk = result?.isError !== true;
+        if (!isBrowserTool)
+          void telemetry.conn.toolCall({ ok: toolOk, reason: toolOk ? undefined : 'tool_error', ms: Date.now() - callStart });
         void telemetry
           .toolRun(isBrowserTool, toolOk, where)
-          .then(() => (toolOk ? undefined : telemetry.error('tool_failed', where, 'tool_error')));
+          .then(() => (toolOk ? undefined : telemetry.error('tool_failed', where, 'tool_error', isBrowserTool ? {} : callCtx())));
         break;
       }
 
@@ -808,17 +863,7 @@ async function handleMcpMessage(
         logger.debug('[Background] Getting current connection status');
         
         // Double-check the connection status to ensure accuracy
-        const storedStatus = getConnectionStatus();
-        const actualStatus = await checkMcpServerConnection();
-        
-        logger.debug(`Stored status: ${storedStatus}, Actual status: ${actualStatus}`);
-        
-        // Update stored status if they don't match
-        if (storedStatus !== actualStatus) {
-          logger.debug('[Background] Status mismatch detected, updating and broadcasting...');
-          updateConnectionStatus(actualStatus);
-          broadcastConnectionStatusToContentScripts(actualStatus);
-        }
+        const actualStatus = await getFreshConnectionStatus(); // applies and broadcasts a change itself
         
         result = { 
           status: actualStatus ? 'connected' : 'disconnected',
@@ -854,6 +899,7 @@ async function handleMcpMessage(
 
       case 'mcp:force-reconnect': {
         logger.debug('[Background] Force reconnect requested via context bridge');
+        void telemetry.conn.manualReconnect();
         
         try {
           // Broadcast reconnection started status
@@ -877,7 +923,8 @@ async function handleMcpMessage(
           // Update connection status
           const isConnected = await checkMcpServerConnection();
           updateConnectionStatus(isConnected);
-          
+          pendingConnectReport ||= isConnected; // report the (possibly new) proxy version and tool count
+
           // Broadcast the new status to all content scripts
           broadcastConnectionStatusToContentScripts(isConnected);
           
@@ -900,6 +947,11 @@ async function handleMcpMessage(
           result = { isConnected, message: 'Reconnection completed' };
         } catch (error) {
           logger.error('[Background] Force reconnect failed:', error);
+          void telemetry.conn.connectFailed({
+            transport: connectionType,
+            message: error instanceof Error ? error.message : String(error),
+            attempt: 1,
+          });
           
           // Update connection status
           const isConnected = await checkMcpServerConnection();
@@ -957,9 +1009,11 @@ async function handleMcpMessage(
         const reconnectPromise = (async () => {
           try {
             logger.debug('[Background] Starting async reconnection after config update...');
+            void telemetry.conn.manualReconnect();
             await forceReconnectToMcpServer(config.uri, newType);
             const isConnected = await checkMcpServerConnection();
             updateConnectionStatus(isConnected);
+            pendingConnectReport ||= isConnected;
             broadcastConnectionStatusToContentScripts(isConnected);
             logger.debug(`Async reconnection completed, connected: ${isConnected}`);
             
@@ -976,6 +1030,11 @@ async function handleMcpMessage(
             }
           } catch (error) {
             logger.warn('[Background] Async reconnect after config update failed:', error);
+            void telemetry.conn.connectFailed({
+              transport: newType,
+              message: error instanceof Error ? error.message : String(error),
+              attempt: 1,
+            });
             const isConnected = await checkMcpServerConnection();
             updateConnectionStatus(isConnected);
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -995,7 +1054,7 @@ async function handleMcpMessage(
       case 'mcp:heartbeat': {
         // Handle heartbeat from content script
         const { timestamp } = payload;
-        const isConnected = isMcpServerConnected();
+        const isConnected = await getFreshConnectionStatus();
         
         result = {
           timestamp: Date.now(),
@@ -1106,6 +1165,17 @@ function broadcastConnectionStatusToContentScripts(isConnected: boolean, error?:
 async function broadcastToolsUpdateToContentScripts(mcpTools: any[]) {
   mcpToolCount = mcpTools.length;
   if (isConnected) void telemetry.toolsListed(connectionType, mcpTools.length);
+  if (isConnected && pendingConnectReport) {
+    pendingConnectReport = false;
+    const d = getMcpDiagnostics();
+    lastProxyVersion = proxyVersion(d.serverName, d.serverVersion);
+    void telemetry.conn.connected({
+      transport: connectionType,
+      proxyVersion: lastProxyVersion,
+      tools: mcpTools.length,
+      servers: serverCount(mcpTools.map(t => String(t?.name ?? ''))),
+    });
+  }
   // Always fold in the virtual browser tools (gated internally on settings).
   const browserTools = await getBrowserTools();
   const tools = [...mcpTools, ...browserTools];

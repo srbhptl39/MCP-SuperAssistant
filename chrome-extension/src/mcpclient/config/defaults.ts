@@ -30,7 +30,6 @@ export const CONNECTION_DEFAULTS = {
 export const GLOBAL_DEFAULTS = {
   timeout: 30000,
   maxRetries: 3,
-  healthCheckInterval: 60000,
   reconnectDelay: 2000,
   logLevel: 'info' as const
 };

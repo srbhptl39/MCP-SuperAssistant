@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, LoggingMessageNotificationSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import { EventEmitter } from './EventEmitter.js';
 import { PluginRegistry } from './PluginRegistry.js';
@@ -26,7 +26,9 @@ export class McpClient extends EventEmitter<AllEvents> {
   private activeTransport: Transport | null = null;
   private isConnectedFlag: boolean = false;
   private connectionPromise: Promise<void> | null = null;
-  private healthCheckTimer: NodeJS.Timeout | null = null;
+  private inflightToolCalls = 0;
+  /** Why the last health check failed (for telemetry): no reply in time, or the server could not be reached. */
+  lastHealthFailure: 'timeout' | 'unreachable' | null = null;
   private primitivesCache: PrimitivesResponse | null = null;
   private primitivesCacheTime: number = 0;
   private readonly CACHE_TTL = 300000; // 5 minutes
@@ -170,7 +172,8 @@ export class McpClient extends EventEmitter<AllEvents> {
           this.emit('connection:status-changed', {
             isConnected: false,
             type: 'websocket',
-            error: `WebSocket disconnected: ${reason}${code ? ` (code: ${code})` : ''}${details ? ` - ${details}` : ''}`
+            dropped: true,
+            detail: `WebSocket disconnected: ${reason}${code ? ` (code: ${code})` : ''}${details ? ` - ${details}` : ''}`,
           });
 
           // Clean up connection state
@@ -217,9 +220,6 @@ export class McpClient extends EventEmitter<AllEvents> {
 
       // Clear cache on new connection
       this.clearPrimitivesCache();
-
-      // Start health monitoring
-      this.startHealthMonitoring();
 
       logger.debug(`Successfully connected via ${type}`);
       this.emit('client:connected', { uri, type });
@@ -283,9 +283,6 @@ export class McpClient extends EventEmitter<AllEvents> {
   }
 
   private async cleanup(): Promise<void> {
-    // Stop health monitoring
-    this.stopHealthMonitoring();
-
     // Close client connection
     if (this.client) {
       try {
@@ -318,6 +315,7 @@ export class McpClient extends EventEmitter<AllEvents> {
 
     const startTime = Date.now();
     this.emit('tool:call-started', { toolName, args });
+    this.inflightToolCalls++;
 
     try {
       logger.debug(`Calling tool: ${toolName}`);
@@ -339,11 +337,14 @@ export class McpClient extends EventEmitter<AllEvents> {
         this.emit('connection:status-changed', {
           isConnected: false,
           type: this.activePlugin?.metadata.transportType || null,
-          error: 'Connection lost during tool call',
+          dropped: true,
+          detail: 'Connection lost during tool call',
         });
       }
 
       throw toolError;
+    } finally {
+      this.inflightToolCalls--;
     }
   }
 
@@ -396,7 +397,8 @@ export class McpClient extends EventEmitter<AllEvents> {
         this.emit('connection:status-changed', {
           isConnected: false,
           type: this.activePlugin?.metadata.transportType || null,
-          error: 'Connection lost while getting primitives',
+          dropped: true,
+          detail: 'Connection lost while getting primitives',
         });
       }
 
@@ -437,15 +439,40 @@ export class McpClient extends EventEmitter<AllEvents> {
     }
 
     try {
-      return await this.activePlugin.isHealthy();
+      if (!(await this.activePlugin.isHealthy()) || !this.client) return false;
+      // A real round trip: SSE and HTTP transports cannot tell on their own that the server went away.
+      await this.client.ping({ timeout: 8000 });
+      this.lastHealthFailure = null;
+      return true;
     } catch (error) {
-      logger.warn('[McpClient] Health check failed:', error);
+      // The server answered with a JSON-RPC error (older proxies reply "Method not found" to ping): it is alive.
+      if (error instanceof McpError && error.code !== ErrorCode.RequestTimeout && error.code !== ErrorCode.ConnectionClosed) {
+        return true;
+      }
+      // A server busy inside a long tool call may answer late; the call itself fails if the link really died.
+      if (error instanceof McpError && error.code === ErrorCode.RequestTimeout && this.inflightToolCalls > 0) {
+        return true;
+      }
+      this.lastHealthFailure =
+        error instanceof McpError && error.code === ErrorCode.RequestTimeout ? 'timeout' : 'unreachable';
+      logger.warn('[McpClient] Health check failed, dropping the stale connection:', error);
+      // Drop the dead client so the next connect() builds a fresh one instead of skipping as "already connected".
+      await this.cleanup();
       return false;
     }
   }
 
   isConnected(): boolean {
     return this.isConnectedFlag && this.activePlugin?.isConnected() === true;
+  }
+
+  /** Name/version the server reported at initialize (the proxy reports its own version). */
+  getServerInfo(): { name?: string; version?: string } | undefined {
+    return this.client?.getServerVersion();
+  }
+
+  get toolCallsInFlight(): number {
+    return this.inflightToolCalls;
   }
 
   getConnectionInfo(): {
@@ -477,50 +504,6 @@ export class McpClient extends EventEmitter<AllEvents> {
     }
 
     await this.connect(request);
-  }
-
-  private startHealthMonitoring(): void {
-    const interval = this.config.global.healthCheckInterval;
-    if (interval <= 0) return;
-
-    this.healthCheckTimer = setInterval(async () => {
-      if (!this.isConnectedFlag) {
-        this.stopHealthMonitoring();
-        return;
-      }
-
-      try {
-        const healthy = await this.isHealthy();
-        const type = this.activePlugin?.metadata.transportType || null;
-
-        if (type) {
-          this.emit('connection:health-check', {
-            healthy,
-            type,
-            timestamp: Date.now(),
-          });
-        }
-
-        if (!healthy) {
-          logger.warn(`Health check failed for ${type}`);
-          this.isConnectedFlag = false;
-          this.emit('connection:status-changed', {
-            isConnected: false,
-            type,
-            error: 'Health check failed',
-          });
-        }
-      } catch (error) {
-        logger.error('[McpClient] Health check error:', error);
-      }
-    }, interval);
-  }
-
-  private stopHealthMonitoring(): void {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
   }
 
   getConfig(): ClientConfig {

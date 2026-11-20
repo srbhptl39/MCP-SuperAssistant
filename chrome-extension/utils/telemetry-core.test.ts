@@ -151,3 +151,40 @@ test('installRecord: cohort and date', () => {
   }); // 0.6 -> 0.7.0 updater whose date was faked
   assert.deepEqual(t.installRecord('update', '0.6.0', '0.7.2', 'new', '2026-01-01', false), {}); // already recorded
 });
+
+test('connectFail maps messages to fixed codes', () => {
+  assert.equal(t.connectFail('TypeError: Failed to fetch'), 'unreachable');
+  assert.equal(t.connectFail('WebSocket connection failed'), 'unreachable');
+  assert.equal(t.connectFail('MCP client connection timeout after 30000ms'), 'timeout');
+  assert.equal(t.connectFail('Session not found (404)'), 'session');
+  assert.equal(t.connectFail('Invalid WebSocket protocol: http:'), 'bad_config');
+  assert.equal(t.connectFail('weird'), 'other');
+});
+
+test('proxyVersion only names our proxy; serverCount ignores browser tools', () => {
+  assert.equal(t.proxyVersion('mcp-superassistant-proxy-unified', '0.1.9'), '0.1.9');
+  assert.equal(t.proxyVersion('my-secret-server', '2.0'), 'other');
+  assert.equal(t.proxyVersion(undefined, undefined), 'unknown');
+  assert.equal(t.serverCount(['github.create_issue', 'github.list', 'fs.read', 'browser_click', 'plain']), 2);
+});
+
+test('connection_day: counts and maxes per day, sent on rollover even without engagement', () => {
+  const s = t.emptyState();
+  t.connCount(s, '2026-11-20', { drops: 1, max_call_ms: 500 }, { transport: 'sse' });
+  t.connCount(s, '2026-11-20', { drops: 1, max_call_ms: 200 });
+  const out = t.tick(s, '2026-11-21', () => ({}));
+  const day = out.find(e => e.event === 'connection_day');
+  assert.ok(day);
+  assert.deepEqual(
+    { drops: day.props.drops, max: day.props.max_call_ms, t: day.props.transport },
+    { drops: 2, max: 500, t: 'sse' },
+  );
+  assert.equal(t.tick(s, '2026-11-22', () => ({})).filter(e => e.event === 'connection_day').length, 0);
+});
+
+test('connEvent is capped per event per day', () => {
+  const s = t.emptyState();
+  const sent = Array.from({ length: 8 }, () => t.connEvent(s, '2026-11-20', 'mcp_drop', {})).flat();
+  assert.equal(sent.length, t.MAX_CONN_EVENTS_PER_DAY);
+  assert.equal(t.connEvent(s, '2026-11-21', 'mcp_drop', {}).filter(e => e.event === 'mcp_drop').length, 1);
+});

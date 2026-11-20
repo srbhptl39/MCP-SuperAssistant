@@ -3,7 +3,6 @@ import type { TransportType, PluginConfig } from './plugin.js';
 export interface GlobalConfig {
   timeout: number;
   maxRetries: number;
-  healthCheckInterval: number;
   reconnectDelay: number;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
@@ -76,7 +75,6 @@ export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
   global: {
     timeout: 30000,
     maxRetries: 3,
-    healthCheckInterval: 60000,
     reconnectDelay: 2000,
     logLevel: 'info',
   },

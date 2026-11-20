@@ -75,8 +75,12 @@ export class WebSocketPlugin implements ITransportPlugin {
       });
 
       // Set up event listeners for monitoring
+      // Events from a replaced socket (its close lands after a reconnect) must not tear down the new one.
+      const isCurrent = () => this.transport === (transport as unknown as WebSocketTransport);
+
       transport.on('close', (event: any) => {
         logger.debug(`Transport closed: ${event.code} ${event.reason}`);
+        if (!isCurrent()) return;
         this.isConnectedFlag = false;
         
         // Notify the main client about disconnection
@@ -85,6 +89,7 @@ export class WebSocketPlugin implements ITransportPlugin {
 
       transport.on('error', (error: any) => {
         logger.error('[WebSocketPlugin] Transport error:', error);
+        if (!isCurrent()) return;
         // Don't immediately mark as disconnected for ping/pong errors
         // Let MCP protocol handle connection management
         if (!error.message.includes('Pong timeout')) {
@@ -118,15 +123,16 @@ export class WebSocketPlugin implements ITransportPlugin {
   async disconnect(): Promise<void> {
     logger.debug('[WebSocketPlugin] Disconnecting...');
 
-    if (this.transport) {
+    const closing = this.transport;
+    this.transport = null; // before close(), so its close event is treated as stale
+    if (closing) {
       try {
-        await this.transport.close();
+        await closing.close();
       } catch (error) {
         logger.warn('[WebSocketPlugin] Error during transport cleanup:', error);
       }
     }
 
-    this.transport = null;
     this.isConnectedFlag = false;
     this.connectionPromise = null;
 
