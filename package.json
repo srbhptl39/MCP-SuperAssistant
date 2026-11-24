@@ -28,6 +28,7 @@
     "zip:firefox": "pnpm build:firefox && pnpm -F zipper zip",
     "e2e": "pnpm zip && turbo e2e",
     "e2e:firefox": "pnpm zip:firefox && turbo e2e",
+    "test:json-parser": "node tests/run-json-function-parser-multiline.mjs",
     "lint": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:fix": "turbo lint:fix --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
     "prettier": "turbo prettier --continue -- --cache --cache-location node_modules/.cache/.prettiercache",
