@@ -270,6 +270,8 @@ In such cases, use better models which are meant for tool calling or have better
 
 ```bash
 # Install dependencies
+
+[![Protodex Verified](https://img.shields.io/badge/Protodex-Verified_MCP-2DD9E0?style=flat-square&logo=github)](https://protodex.io/servers/srbhptl39-MCP-SuperAssistant.html)
 pnpm install
 
 # Start development server
