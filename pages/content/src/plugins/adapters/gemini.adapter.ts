@@ -33,8 +33,8 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   // Legacy selectors as fallbacks (will be removed once config system is stable)
   private readonly fallbackSelectors = {
     CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
-    SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-testid="send-button"]',
-    FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"], button[aria-label*="attach"]',
+    SUBMIT_BUTTON: 'button.send-button, button.mat-mdc-icon-button.send-button, button.submit, .send-button-container button, button[aria-label*="Send"], button[aria-label*="发送"], button[aria-label*="傳送"], button[aria-label*="提交"], button[aria-label*="Submit"], button[data-testid="send-button"], button:has(mat-icon[fonticon="send"]), button:has(mat-icon[data-mat-icon-name="send"])',
+    FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"], button[aria-label*="attach"], button[aria-label*="添加文件"], button[aria-label*="上传"], button[aria-label*="附加"]',
     FILE_INPUT: 'input[type="file"]',
     MAIN_PANEL: '.chat-web, .main-content, .conversation-container',
     DROP_ZONE: 'div[xapfileselectordropzone], .text-input-field, .input-area, .ql-editor, .chat-input-container',
@@ -226,10 +226,17 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       // Append the text to the original value on a new line if there's existing content
       const newContent = originalValue ? originalValue + '\n' + text : text;
       targetElement.textContent = newContent;
+      const qlEditor = targetElement.closest('.ql-editor') as HTMLElement | null;
+      if (qlEditor) {
+        qlEditor.classList.remove('ql-blank');
+      }
 
       // Dispatch events to simulate user typing for better compatibility
-      targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+      targetElement.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
       targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+      if (qlEditor && qlEditor !== targetElement) {
+        qlEditor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      }
       targetElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
       targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
 
@@ -274,40 +281,70 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
     this.context.logger.debug('Attempting to submit Gemini chat input');
 
-    let submitButton: HTMLButtonElement | null = null;
+    const selectors = this.getSelector('submitButton').split(',').map(s => s.trim()).filter(Boolean);
+    const findClickableSubmitButton = (): { button: HTMLButtonElement; selector: string } | null => {
+      for (const selector of selectors) {
+        let candidates: NodeListOf<Element>;
+        try {
+          candidates = document.querySelectorAll(selector);
+        } catch {
+          continue;
+        }
+        for (const el of Array.from(candidates)) {
+          const btn = el as HTMLButtonElement;
+          const rect = btn.getBoundingClientRect();
+          const ariaDisabled = btn.getAttribute('aria-disabled') === 'true';
+          if (!btn.disabled && !ariaDisabled && rect.width > 0 && rect.height > 0) {
+            return { button: btn, selector };
+          }
+        }
+      }
+      return null;
+    };
 
-    // Try multiple selectors for better compatibility
-    const selectors = this.getSelector('submitButton').split(', ');
-    for (const selector of selectors) {
-      submitButton = document.querySelector(selector.trim()) as HTMLButtonElement;
-      if (submitButton) {
-        this.context.logger.debug(`Found submit button using selector: ${selector.trim()}`);
-        break;
+    // Wait briefly for Gemini UI to swap microphone -> send button after chip flush
+    let matched = findClickableSubmitButton();
+    if (!matched) {
+      for (let attempt = 0; attempt < 8 && !matched; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        matched = findClickableSubmitButton();
       }
     }
 
-    if (!submitButton) {
-      this.context.logger.error('Could not find Gemini submit button');
+    if (!matched) {
+      // Fallback: dispatch Enter key on the Gemini editor if no send button selector matched
+      const inputEl = (document.querySelector('.ql-editor[contenteditable="true"]')
+        ?? document.querySelector('div[contenteditable="true"]')) as HTMLElement | null;
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        this.emitExecutionCompleted('submitForm', {
+          formElement: options?.formElement?.tagName || 'unknown'
+        }, {
+          success: true,
+          method: 'keyboard-enter-fallback'
+        });
+        this.context.logger.debug('Gemini chat input submitted via Enter fallback');
+        return true;
+      }
+
+      this.context.logger.error('Could not find clickable Gemini submit button');
       this.emitExecutionFailed('submitForm', 'Submit button not found');
       return false;
     }
 
+    const { button: submitButton, selector: matchedSelector } = matched;
+
     try {
-      // Check if the button is disabled
-      if (submitButton.disabled) {
-        this.context.logger.warn('Gemini submit button is disabled');
-        this.emitExecutionFailed('submitForm', 'Submit button is disabled');
-        return false;
-      }
-
-      // Check if the button is visible and clickable
-      const rect = submitButton.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) {
-        this.context.logger.warn('Gemini submit button is not visible');
-        this.emitExecutionFailed('submitForm', 'Submit button is not visible');
-        return false;
-      }
-
       // Click the submit button to send the message
       submitButton.click();
 
@@ -317,10 +354,10 @@ export class GeminiAdapter extends BaseAdapterPlugin {
       }, {
         success: true,
         method: 'submitButton.click',
-        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
+        buttonSelector: matchedSelector
       });
 
-      this.context.logger.debug('Gemini chat input submitted successfully');
+      this.context.logger.debug(`Gemini chat input submitted successfully via ${matchedSelector}`);
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
