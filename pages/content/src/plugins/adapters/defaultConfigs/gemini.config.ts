@@ -9,8 +9,8 @@ export const GEMINI_DEFAULT_CONFIG: AdapterConfig = {
   selectors: {
     // Core selectors - essential for basic functionality
     chatInput: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
-    submitButton: 'button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-testid="send-button"]',
-    fileUploadButton: 'button[aria-label="Add files"], button[aria-label*="attach"]',
+    submitButton: 'button.send-button, button.mat-mdc-icon-button.send-button, button.submit, .send-button-container button, button[aria-label*="Send"], button[aria-label*="发送"], button[aria-label*="傳送"], button[aria-label*="提交"], button[aria-label*="Submit"], button[data-testid="send-button"], button:has(mat-icon[fonticon="send"]), button:has(mat-icon[data-mat-icon-name="send"])',
+    fileUploadButton: 'button[aria-label="Add files"], button[aria-label*="attach"], button[aria-label*="添加文件"], button[aria-label*="上传"], button[aria-label*="附加"]',
     fileInput: 'input[type="file"]',
     mainPanel: '.chat-web, .main-content, .conversation-container',
     dropZone: 'div[xapfileselectordropzone], .text-input-field, .input-area, .ql-editor, .chat-input-container',

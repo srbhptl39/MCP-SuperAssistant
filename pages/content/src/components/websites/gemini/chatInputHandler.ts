@@ -12,9 +12,9 @@ import { createLogger } from '@extension/shared/lib/logger';
 const logger = createLogger('GeminiChatInputHandler');
 
 const SELECTORS = {
-  CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p',
-  SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button',
-  FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"]',
+  CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
+  SUBMIT_BUTTON: 'button.send-button, button.mat-mdc-icon-button.send-button, button.submit, .send-button-container button, button[aria-label*="Send"], button[aria-label*="发送"], button[aria-label*="傳送"], button[aria-label*="提交"], button[aria-label*="Submit"], button[data-testid="send-button"], button:has(mat-icon[fonticon="send"]), button:has(mat-icon[data-mat-icon-name="send"])',
+  FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"], button[aria-label*="添加文件"], button[aria-label*="上传"]',
   FILE_INPUT: 'input[type="file"]',
   MAIN_PANEL: '.chat-web',
   DROP_ZONE: 'div[xapfileselectordropzone], .text-input-field, .input-area, .ql-editor',
